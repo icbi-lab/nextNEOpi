@@ -575,8 +575,8 @@ process 'IndelRealignerTumor' {
   set TumorReplicateId, file(bam), file(bai), file(list) from MarkDuplicatesTumor2
   set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
     [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-  set file(KnownIndels), file(KnownIndelsIdx), file(MilesGold), file(MilesGoldIdx) from
-   Channel.value([database.KnownIndels, database.KnownIndelsIdx,
+  set file(KnownIndels), file(KnownIndelsIdx), file(MilesGold),
+   file(MilesGoldIdx) from Channel.value([database.KnownIndels, database.KnownIndelsIdx,
       database.MilesGold, database.MilesGoldIdx])
 
   output:
