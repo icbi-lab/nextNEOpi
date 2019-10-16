@@ -14,10 +14,14 @@ if (params.readsTumor != "NO_FILE") {
 
 control_ch = Channel.fromFilePairs(params.readsControl, flat:true)
 
-scatter_count = Channel.from(params.scatter_count)
+if (params.help) exit 0, helpMessage()
+if
+
 
 reference = defineReference()
 database = defineDatabases()
+
+scatter_count = Channel.from(params.scatter_count)
 
 BWA           = file(params.BWA)
 VARSCAN       = file(params.VARSCAN)
@@ -43,6 +47,7 @@ ________________________________________________________________________________
 *********************************************
 */
 process 'SplitIntervals' {
+// Splitting interval file in 20(default) files for scattering Mutect2
 
   tag "SplitIntervals"
   publishDir "$params.outputDir/SplitIntervals/", mode: params.publishDirMode
@@ -68,6 +73,8 @@ process 'SplitIntervals' {
 }
 
 process 'BwaTumor' {
+// Aligning tumor reads to reference, sort and index; create BAMs
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/preprocessing/",
    mode: params.publishDirMode
@@ -98,6 +105,8 @@ process 'BwaTumor' {
 }
 
 process 'MarkDuplicatesTumor' {
+// Mark duplicates with Picard
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/preprocessing/",
    mode: params.publishDirMode
@@ -124,6 +133,8 @@ process 'MarkDuplicatesTumor' {
 
 if (params.readsControl != "NO_FILE") {
   process 'BwaControl' {
+  // Aligning control reads to reference, sort and index; create BAMs
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/preprocessing/",
      mode: params.publishDirMode
@@ -154,6 +165,8 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'MarkDuplicatesControl' {
+  // Mark duplicates with Picard
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/preprocessing/",
      mode: params.publishDirMode
@@ -186,6 +199,10 @@ if (params.readsControl != "NO_FILE") {
 */
 
 process 'BaseRecalApplyTumor' {
+/* BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
+                             Recalibration (BQSR)
+   ApplyBQSR (GATK4): apply BQSR table to reads */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/processing/",
    mode: params.publishDirMode
@@ -227,6 +244,8 @@ process 'BaseRecalApplyTumor' {
 }
 
 process 'GetPileupTumor' {
+// GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/processing/",
    mode: params.publishDirMode
@@ -249,6 +268,9 @@ process 'GetPileupTumor' {
 }
 
 process 'AnalyzeCovariates' {
+/* 2nd BaseRecalibrator (GATK4)
+   AnalyzeCovariates (GATK4): creates plots to visulaize base recalibration results */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/QC/", mode: params.publishDirMode
 
@@ -282,6 +304,9 @@ process 'AnalyzeCovariates' {
 }
 
 process 'CollectSequencingArtifactMetrics' {
+/* CollectSequencingArtifactMetrics (Picard): collect metrics to quantify single-base
+                                              sequencing artifacts */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/QC/", mode: params.publishDirMode
 
@@ -301,6 +326,7 @@ process 'CollectSequencingArtifactMetrics' {
 }
 
 process 'Mutect2Tumor' {
+// Call somatic SNPs and indels via local re-assembly of haplotypes; only tumor sample
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/processing/",
    mode: params.publishDirMode
@@ -327,6 +353,8 @@ process 'Mutect2Tumor' {
 }
 
 process 'MergeTumor' {
+// Merge scattered Mutect2 vcfs
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/", mode: params.publishDirMode
 
@@ -353,6 +381,13 @@ process 'MergeTumor' {
 }
 
 process 'FilterMutec2Tumor' {
+/* CalculateContamination (GATK4): calculate fraction of reads coming from
+                                   cross-sample contamination
+   FilterMutectCalls (GATK4): filter somatic SNVs and indels
+   FilterByOrientationBias (GATK4): filter variant calls using orientation bias
+   SelectVariants (GATK4): select subset of variants from a larger callset
+   VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/", mode: params.publishDirMode
 
@@ -394,6 +429,10 @@ process 'FilterMutec2Tumor' {
 
 if (params.readsControl != 'NO_FILE') {
   process 'BaseRecalApplyControl' {
+  /* BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
+                               Recalibration (BQSR)
+     ApplyBQSR (GATK4): apply BQSR table to reads */
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/mutect2/processing/",
      mode: params.publishDirMode
@@ -434,6 +473,8 @@ if (params.readsControl != 'NO_FILE') {
   }
 
   process 'GetPileupControl' {
+  // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/mutect2/processing/",
      mode: params.publishDirMode
@@ -455,6 +496,9 @@ if (params.readsControl != 'NO_FILE') {
     """
   }
   process 'Mutect2' {
+  /* Call somatic SNPs and indels via local re-assembly of haplotypes; tumor sample
+     and matched normal sample */
+
     tag "$TumorreplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/mutect2/processing/",
      mode: params.publishDirMode
@@ -484,6 +528,8 @@ if (params.readsControl != 'NO_FILE') {
   }
 
   process 'Merge' {
+  // Merge scattered Mutect2 vcfs
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/mutect2/",
      mode: params.publishDirMode
@@ -514,6 +560,13 @@ if (params.readsControl != 'NO_FILE') {
   }
 
   process 'FilterMutec2' {
+  /* CalculateContamination (GATK4): calculate fraction of reads coming from
+                                     cross-sample contamination
+  FilterMutectCalls (GATK4): filter somatic SNVs and indels
+  FilterByOrientationBias (GATK4): filter variant calls using orientation bias
+  SelectVariants (GATK4): select subset of variants from a larger callset
+  VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations */
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/mutect2/",
      mode: params.publishDirMode
@@ -567,6 +620,9 @@ if (params.readsControl != 'NO_FILE') {
 */
 
 process 'IndelRealignerTumor' {
+/* RealignerTargetCreator (GATK3): define intervals to target for local realignment
+   IndelRealigner (GATK3): perform local realignment of reads around indels */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/varscan/processing/",
    mode: params.publishDirMode
@@ -580,8 +636,8 @@ process 'IndelRealignerTumor' {
       database.MilesGold, database.MilesGoldIdx])
 
   output:
-  set TumorReplicateId, file("${TumorReplicateId}_mkdp_realign.bam"),
-   file("${TumorReplicateId}_mkdp_realign.bai") into IndelRealignerTumor
+  set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp_realign.bam"),
+   file("${TumorReplicateId}_aligned_sort_mkdp_realign.bai") into IndelRealignerTumor
 
   script:
   """
@@ -608,6 +664,9 @@ process 'IndelRealignerTumor' {
 }
 
 process 'FixMateBaseRecalTumor' {
+/* FixMateInformation (Picard): verify mate-pair information between mates; ensure that
+   all mate-pair information is in sync between reads and its pairs */
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/varscan/processing/",
    mode: params.publishDirMode
@@ -623,7 +682,7 @@ process 'FixMateBaseRecalTumor' {
 
   output:
   set TumorReplicateId, file("${TumorReplicateId}_fixmate.bam"),
-   file("${TumorReplicateId}_fixmate_baserecal3.bai"),
+   file("${TumorReplicateId}_fixmate.bai"),
    file("${TumorReplicateId}_bqsr3.table") into FixMateBaseRecalTumor
 
   script:
@@ -646,6 +705,8 @@ process 'FixMateBaseRecalTumor' {
 }
 
 process 'PrintReadsTumor' {
+// PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/varscan/processing",
    mode: params.publishDirMode
@@ -653,8 +714,7 @@ process 'PrintReadsTumor' {
   input:
   set TumorReplicateId, file(bam), file(bai), file(bqsr3) from FixMateBaseRecalTumor
   set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-    [reference.RefFasta, reference.RefIdx, reference.RefIdx,
-     reference.IntervalsList, reference.IntervalsList])
+    [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
 
   output:
   set TumorReplicateId, file("${TumorReplicateId}_printreads.bam"),
@@ -676,6 +736,9 @@ process 'PrintReadsTumor' {
 if (params.readsControl != "NO_FILE") {
 
   process 'IndelRealignerControl' {
+  /* RealignerTargetCreator (GATK3): define intervals to target for local realignment
+     IndelRealigner (GATK3): perform local realignment of reads around indels */
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/varscan/processing/",
      mode: params.publishDirMode
@@ -690,8 +753,8 @@ if (params.readsControl != "NO_FILE") {
       database.MilesGold, database.MilesGoldIdx])
 
     output:
-    set ControlReplicateId, file("${ControlReplicateId}_mkdp_realign.bam"),
-     file("${ControlReplicateId}_mkdp_realign.bai") into IndelRealignerControl
+    set ControlReplicateId, file("${ControlReplicateId}_aligned_sort_mkdp_realign.bam"),
+     file("${ControlReplicateId}_aligned_sort_mkdp_realign.bai") into IndelRealignerControl
 
     script:
     """
@@ -718,6 +781,9 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'FixMateBaseRecalControl' {
+  /* FixMateInformation (Picard): verify mate-pair information beteen mates; ensure that
+     all mate-pair information is in sync between reads and its pairs */
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/varscan/processing/",
      mode: params.publishDirMode
@@ -756,6 +822,8 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'PrintReadsControl' {
+  // PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
+
     tag "$ControlReplicateId"
     publishDir "$params.outputDir/$ControlReplicateId/varscan/processing/",
      mode: params.publishDirMode
@@ -783,6 +851,8 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'ReorderSam' {
+  // ReorderSam (Picard): reorders reads to match the contig order in a reference file
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/processing/",
      mode: params.publishDirMode
@@ -815,6 +885,8 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'VarscanSomatic' {
+  // somatic (Varscan): calls somatic variants (SNPS and indels)
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/", mode: params.publishDirMode
 
@@ -855,6 +927,7 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'ProcessSomatic' {
+  // Filter variants by somatic status and confidences
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/processing",
      mode: params.publishDirMode
@@ -894,6 +967,10 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'FilterVarscan' {
+  /* AWK-script: calcualtes start-end position of varint
+     Bamreadcount: generate metrics at single nucleotide positions for filtering
+     fpfilter (Varscan): apply false-positive filter to varaints */
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/",
      mode: params.publishDirMode
@@ -942,6 +1019,8 @@ if (params.readsControl != "NO_FILE") {
 
 if (params.readsControl != "NO_FILE") {
   process 'MutectTumorNormal' {
+  // Mutect1: calls SNPS from tumor and matched normal sample
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/mutect1/",
      mode: params.publishDirMode
@@ -991,6 +1070,8 @@ if (params.readsControl != "NO_FILE") {
   }
 }else {
   process 'MutectTumor' {
+  // Mutect1: calls SNPS from tumor sample
+
     tag "$TumorReplicateId"
     publishDir "$params.publishDir/$TumorReplicateId/mutect1/", mode: params.publishDirMode
 
