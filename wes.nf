@@ -1,12 +1,35 @@
 #!/usr/bin/env nextflow
 
+log.info ""
+log.info " NEXTFLOW ~  version ${workflow.nextflow.version} ${workflow.nextflow.build}"
+log.info "-------------------------------------------------------------------------"
+log.info "         W H O L E - E X O M E   P I P E L I N E             "
+log.info "-------------------------------------------------------------------------"
+log.info ""
+log.info " Finding SNPs and Indels in tumor only or tumor + matched control samples"
+log.info " using three different caller: \n \t * MuTect1 \n \t * MuTect2 \n \t * VarScan2 (only with matched control samples)"
+log.info ""
+log.info "-------------------------------------------------------------------------"
+log.info "C O N F I G U R A T I O N"
+log.info ""
+log.info "Command Line: \t\t " + workflow.commandLine
+log.info "Working Directory: \t " + params.workDir
+log.info "Output Directory: \t " + params.outputDir
+log.info ""
+log.info "I N P U T"
+log.info ""
+if  (params.readsControl != "NO_FILE") log.info " Reads Tumor: \t\t " + params.readsTumor
+if  (params.readsControl != "NO_FILE") log.info "Reads Control: \t " + params.readsControl
+log.info ""
+log.info "Please check --help for further instruction"
+log.info "-------------------------------------------------------------------------"
+
 /*
 ________________________________________________________________________________
 
                            C O N F I G U R A T I O N
 ________________________________________________________________________________
 */
-
 
 if (params.readsTumor != "NO_FILE") {
   tumor_ch = Channel.fromFilePairs(params.readsTumor, flat:true)
@@ -15,8 +38,6 @@ if (params.readsTumor != "NO_FILE") {
 control_ch = Channel.fromFilePairs(params.readsControl, flat:true)
 
 if (params.help) exit 0, helpMessage()
-if
-
 
 reference = defineReference()
 database = defineDatabases()
@@ -33,6 +54,7 @@ VEP           = file(params.VEP)
 PICARD        = file(params.PICARD)
 BAMREADCOUNT  = file(params.BAMREADCOUNT)
 JAVA8         = file(params.JAVA8)
+JAVA7         = file(params.JAVA7)
 
 /*
 ________________________________________________________________________________
@@ -59,7 +81,7 @@ process 'SplitIntervals' {
   val x from scatter_count
 
   output:
-  file "${IntervalName}/*-scattered.interval_list" into interval_ch
+  file "${IntervalName}/*-scattered.interval_list" into interval_ch1, interval_ch2
 
   script:
   IntervalName = IntervalsList.baseName
@@ -221,7 +243,7 @@ process 'BaseRecalApplyTumor' {
   set TumorReplicateId, file("${TumorReplicateId}_bqsr.table") into BaseRecalibratorTumor
   set TumorReplicateId, file("${TumorReplicateId}_recal4.bam"),
    file("${TumorReplicateId}_recal4.bai") into ApplyTumor1, ApplyTumor2,
-    ApplyTumor3, ApplyTumor4
+    ApplyTumor3, ApplyTumor4, ApplyTumor5
 
 
   script:
@@ -269,7 +291,7 @@ process 'GetPileupTumor' {
 
 process 'AnalyzeCovariates' {
 /* 2nd BaseRecalibrator (GATK4)
-   AnalyzeCovariates (GATK4): creates plots to visulaize base recalibration results */
+   AnalyzeCovariates (GATK4): creates plots to visualize base recalibration results */
 
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/QC/", mode: params.publishDirMode
@@ -327,6 +349,7 @@ process 'CollectSequencingArtifactMetrics' {
 
 process 'Mutect2Tumor' {
 // Call somatic SNPs and indels via local re-assembly of haplotypes; only tumor sample
+
   tag "$TumorReplicateId"
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/processing/",
    mode: params.publishDirMode
@@ -335,12 +358,12 @@ process 'Mutect2Tumor' {
   set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
     [reference.RefFasta, reference.RefIdx, reference.RefDict])
   set TumorReplicateId, file(Tumorbam), file(Tumorbai),
-    file(IntervalsList) from ApplyTumor4.combine(interval_ch.flatten())
+    file(IntervalsList) from ApplyTumor4.combine(interval_ch1.flatten())
 
   output:
-  file("${IntervalsList}.vcf.gz") into Mutect2Vcf
-  file("${IntervalsList}.vcf.gz.stats") into Mutect2Stats
-  set TumorReplicateId, file("${IntervalsList}.vcf.gz.tbi") into Mutect2Idx
+  file("${IntervalsList}.vcf.gz") into Mutect2VcfTumor
+  file("${IntervalsList}.vcf.gz.stats") into Mutect2StatsTumor
+  set TumorReplicateId, file("${IntervalsList}.vcf.gz.tbi") into Mutect2IdxTumor
 
   script:
   """
@@ -359,9 +382,9 @@ process 'MergeTumor' {
   publishDir "$params.outputDir/$TumorReplicateId/mutect2/", mode: params.publishDirMode
 
   input:
-  file(vcf) from Mutect2Vcf.collect()
-  file (stats) from Mutect2Stats.collect()
-  set TumorReplicateId, file(idx) from Mutect2Idx.groupTuple()
+  file(vcf) from Mutect2VcfTumor.collect()
+  file (stats) from Mutect2StatsTumor.collect()
+  set TumorReplicateId, file(idx) from Mutect2IdxTumor.groupTuple()
 
   output:
   set TumorReplicateId, file("${TumorReplicateId}_mutect2_raw.vcf.gz"),
@@ -400,7 +423,7 @@ process 'FilterMutec2Tumor' {
 
   output:
   set file("${TumorReplicateId}_mutect2_final.vcf.gz"),
-    file("${TumorReplicateId}_mutect2_final.vcf.gz.tbi") into FilterMutect2
+    file("${TumorReplicateId}_mutect2_final.vcf.gz.tbi") into FilterMutect2Tumor
 
   script:
   """
@@ -451,7 +474,7 @@ if (params.readsControl != 'NO_FILE') {
     set ControlReplicateId,
      file("${ControlReplicateId}_bqsr.table") into BaseRecalibratorControl
     set ControlReplicateId, file("${ControlReplicateId}_recal4.bam"),
-     file("${ControlReplicateId}_recal4.bai") into ApplyControl
+     file("${ControlReplicateId}_recal4.bai") into ApplyControl1, ApplyControl2
 
     script:
     """
@@ -483,7 +506,7 @@ if (params.readsControl != 'NO_FILE') {
     set file(GnomAD), file(GnomADIdx) from Channel.value(
       [database.GnomAD, database.GnomADIdx])
     file(intervals) from Channel.value([reference.IntervalsList])
-    file ControlReplicateId, file(bam), file(bai) from ApplyControl
+    set ControlReplicateId, file(bam), file(bai) from ApplyControl1
 
     output:
     set ControlReplicateId, file("${ControlReplicateId}_pileup.table") into PileupControl
@@ -507,8 +530,8 @@ if (params.readsControl != 'NO_FILE') {
     set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
       [reference.RefFasta, reference.RefIdx, reference.RefDict])
     set TumorReplicateId, file(Tumorbam), file(Tumorbai),
-      file(intervals) from ApplyTumor4.combine(interval_ch.flatten())
-    set ControlReplicateId, file(Controlbam), file(Controlbai) from ApplyControl
+      file(intervals) from ApplyTumor5.combine(interval_ch2.flatten())
+    set ControlReplicateId, file(Controlbam), file(Controlbai) from ApplyControl2
 
     output:
     file("${intervals}.vcf.gz") into Mutect2Vcf
@@ -718,7 +741,8 @@ process 'PrintReadsTumor' {
 
   output:
   set TumorReplicateId, file("${TumorReplicateId}_printreads.bam"),
-   file("${TumorReplicateId}_printreads.bai") into PrintReadsTumor
+   file("${TumorReplicateId}_printreads.bai") into PrintReadsTumor1, PrintReadsTumor2,
+    PrintReadsTumor3
 
   script:
   """
@@ -835,7 +859,8 @@ if (params.readsControl != "NO_FILE") {
 
     output:
     set ControlReplicateId, file("${ControlReplicateId}_printreads.bam"),
-     file("${ControlReplicateId}_printreads.bai") into PrintReadsControl
+     file("${ControlReplicateId}_printreads.bai") into PrintReadsControl1,
+      PrintReadsControl2
 
     script:
     """
@@ -858,8 +883,8 @@ if (params.readsControl != "NO_FILE") {
      mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor
-    set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl
+    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor1
+    set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl1
     set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
       [reference.RefFasta, reference.RefIdx, reference.RefDict])
 
@@ -928,6 +953,7 @@ if (params.readsControl != "NO_FILE") {
 
   process 'ProcessSomatic' {
   // Filter variants by somatic status and confidences
+
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/processing",
      mode: params.publishDirMode
@@ -967,9 +993,9 @@ if (params.readsControl != "NO_FILE") {
   }
 
   process 'FilterVarscan' {
-  /* AWK-script: calcualtes start-end position of varint
+  /* AWK-script: calcualtes start-end position of variant
      Bamreadcount: generate metrics at single nucleotide positions for filtering
-     fpfilter (Varscan): apply false-positive filter to varaints */
+     fpfilter (Varscan): apply false-positive filter to variants */
 
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/varscan/",
@@ -989,7 +1015,7 @@ if (params.readsControl != "NO_FILE") {
     set TumorReplicateId, ControlReplicateId,
      file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf")
     set TumorReplicateId, ControlReplicateId,
-     file("${TumorReplicateId}_${ControlReplicateId_varscan.indel.Somatic.hc.filtered.vcf}")
+     file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf")
 
     script:
     """
@@ -1026,8 +1052,8 @@ if (params.readsControl != "NO_FILE") {
      mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor
-    set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl
+    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor2
+    set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl2
     set file(RefFasta), file(RefIdx), file(RefDict) file(IntervalsList) from Channel.value(
       [refernce.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
     set file(DBSNP), file(DBSNPIdx), file(Cosmic), file(CosmicIdx) from Channel.value(
@@ -1035,17 +1061,17 @@ if (params.readsControl != "NO_FILE") {
 
     output:
     set TumorReplicateId, ControlReplicateId,
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_raw.vcf.gz"),
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_raw.vcf.gz.idx")
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_raw.stats.txt") into Mutect1raw
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz"),
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz.idx")
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt") into Mutect1raw
     set TumorReplicateId, ControlReplicateId,
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.final.vcf.gz"),
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.final.vcf.gz.idx")
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz"),
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz.idx")
       file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.stats.txt") into Mutect1filter
 
     script:
     """
-    $JAVA8 -jar $MUTECT1 \
+    $JAVA7 -jar $MUTECT1 \
     --analysis_type MuTect \
     --reference_sequence ${RefFasta} \
     --cosmic ${Cosmic} \
@@ -1053,7 +1079,7 @@ if (params.readsControl != "NO_FILE") {
     -L ${IntervalsList} \
     --input_file:normal ${bamControl} \
     --input_file:tumor ${bamTumor} \
-    --out ${TumorReplicateId}_${ControlReplicateId}_mutect1.stats.txt \
+    --out ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt \
     --vcf ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz && \
     $GATK4 SelectVariants \
     --variant ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz \
@@ -1076,7 +1102,7 @@ if (params.readsControl != "NO_FILE") {
     publishDir "$params.publishDir/$TumorReplicateId/mutect1/", mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor
+    set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor3
     set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
       [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
     set file(DBSNP), file(DBSNPIdx), file(Cosmic), file(CosmicIdx) from Channel.value(
@@ -1084,9 +1110,9 @@ if (params.readsControl != "NO_FILE") {
 
     output:
     set TumorReplicateId,
-      file("${TumorReplicateId}mutect1_raw.vcf.gz"),
-      file("${TumorReplicateId}_mutect1_raw.vcf.gz.idx")
-      file("${TumorReplicateId}_mutect1_raw.stats.txt") into Mutect1raw
+      file("${TumorReplicateId}_mutect1.raw.vcf.gz"),
+      file("${TumorReplicateId}_mutect1.raw.vcf.gz.idx")
+      file("${TumorReplicateId}_mutect1.raw.stats.txt") into Mutect1raw
     set TumorReplicateId,
       file("${TumorReplicateId}_mutect1.final.vcf.gz"),
       file("${TumorReplicateId}_mutect1.final.vcf.gz.idx")
@@ -1094,14 +1120,14 @@ if (params.readsControl != "NO_FILE") {
 
     script:
     """
-    $JAVA8 -jar $MUTECT1 \
+    $JAVA7 -jar $MUTECT1 \
     --analysis_type MuTect \
     --reference_sequence ${RefFasta} \
     --cosmic ${Cosmic} \
     --dbsnp ${DBSNP} \
     -L ${IntervalsList} \
     --input_file:tumor ${bamTumor} \
-    --out ${TumorReplicateId}_mutect1.stats.txt \
+    --out ${TumorReplicateId}_mutect1.raw.stats.txt \
     --vcf ${TumorReplicateId}_mutect1.raw.vcf.gz && \
     $GATK4 SelectVariants \
     --variant ${TumorReplicateId}_mutect1.raw.vcf.gz \
@@ -1169,4 +1195,23 @@ def defineDatabases() {
   'KnownIndels' : checkParamReturnFileDatabases("KnownIndels"),
   'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
   ]
+}
+
+def helpMessage() {
+  log.info ""
+  log.info "-------------------------------------------------------------------------"
+  log.info " U S A G E"
+  log.info ""
+  log.info ' nextflow run wes.nf "--readsTumor" "[--readsControl]" "--IntervalsList" \n\t\t    "--IntervalsBed"'
+  log.info ""
+  log.info " Mandatory arguments:"
+  log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTA file (can be zipped)"
+  log.info "--IntervalsList \t intervals.list \t\t interval.list file for targeting"
+  log.info "--IntervalsBed \t\t intervals.bed \t\t\t interval.bed file for targeting"
+  log.info ""
+  log.info "All references, databases, software should be edited in the nextflow.config file"
+  log.info ""
+  log.info "Optional argument:"
+  log.info "--readsControl \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTA file (can be zipped)"
+  log.info "-------------------------------------------------------------------------"
 }
