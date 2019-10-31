@@ -19,7 +19,7 @@ log.info ""
 log.info "I N P U T"
 log.info ""
 if  (params.readsControl != "NO_FILE") log.info " Reads Tumor: \t\t " + params.readsTumor
-if  (params.readsControl != "NO_FILE") log.info "Reads Control: \t " + params.readsControl
+if  (params.readsControl != "NO_FILE") log.info "Reads Control: \t\t " + params.readsControl
 log.info ""
 log.info "Please check --help for further instruction"
 log.info "-------------------------------------------------------------------------"
@@ -55,6 +55,7 @@ PICARD        = file(params.PICARD)
 BAMREADCOUNT  = file(params.BAMREADCOUNT)
 JAVA8         = file(params.JAVA8)
 JAVA7         = file(params.JAVA7)
+PERL          = file(params.PERL)
 
 /*
 ________________________________________________________________________________
@@ -199,7 +200,8 @@ if (params.readsControl != "NO_FILE") {
     output:
     set ControlReplicateId, file("${ControlReplicateId}_aligned_sort_mkdp.bam"),
      file("${ControlReplicateId}_aligned_sort_mkdp.bai"),
-     file("${ControlReplicateId}_aligned_sort_mkdp.txt") into MarkDuplicatesControl1, MarkDuplicatesControl2
+     file("${ControlReplicateId}_aligned_sort_mkdp.txt") into MarkDuplicatesControl1,
+      MarkDuplicatesControl2
 
     script:
     """
@@ -241,7 +243,8 @@ process 'BaseRecalApplyTumor' {
   output:
   set TumorReplicateId, file("${TumorReplicateId}_bqsr.table") into BaseRecalibratorTumor
   set TumorReplicateId, file("${TumorReplicateId}_recal4.bam"),
-   file("${TumorReplicateId}_recal4.bai") into (ApplyTumor1, ApplyTumor2, ApplyTumor3, ApplyTumor4, ApplyTumor5)
+   file("${TumorReplicateId}_recal4.bai") into (ApplyTumor1, ApplyTumor2, ApplyTumor3,
+      ApplyTumor4, ApplyTumor5)
 
 
   script:
@@ -277,7 +280,8 @@ process 'GetPileupTumor' {
   set TumorReplicateId, file(bam), file(bai) from ApplyTumor1
 
   output:
-  set TumorReplicateId, file("${TumorReplicateId}_pileup.table") into PileupTumor1, PileupTumor2
+  set TumorReplicateId, file("${TumorReplicateId}_pileup.table") into PileupTumor1,
+   PileupTumor2
 
   script:
   """
@@ -420,7 +424,7 @@ if (params.readsControl == "NO_FILE") {
     file(preAdapterDetail) from CollectSequencingArtifactMetrics1
 
     output:
-    set file("${TumorReplicateId}_mutect2_final.vcf.gz"),
+    set TumorReplicateId, file("${TumorReplicateId}_mutect2_final.vcf.gz"),
       file("${TumorReplicateId}_mutect2_final.vcf.gz.tbi") into FilterMutect2Tumor
 
     script:
@@ -961,15 +965,15 @@ if (params.readsControl != "NO_FILE") {
     set TumorReplicateId, ControlReplicateId,
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.vcf"),
+      file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.LOH.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.LOH.hc.vcf"),
-      file("${TumorReplicateId}_${ControlReplicateId}_varscna.snp.LOH.hc.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Germline.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Germline.hc.vcf") into ProcessSomaticSNP
     set TumorReplicateId, ControlReplicateId,
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.vcf"),
+      file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.LOH.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.LOH.hc.vcf"),
-      file("${TumorReplicateId}_${ControlReplicateId}_varscna.indel.LOH.hc.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Germline.vcf"),
       file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Germline.hc.vcf") into ProcessSomaticIndel
 
@@ -979,12 +983,12 @@ if (params.readsControl != "NO_FILE") {
     ${snp} \
     --min-tumor-freq ${params.min_tumor_freq} \
     --max-normal-freq ${params.max_normal_freq} \
-    --p-value ${paramsProcessSomatic_pvalue} && \
+    --p-value ${params.processSomatic_pvalue} && \
     java -jar $VARSCAN processSomatic \
     ${indel} \
     --min-tumor-freq ${params.min_tumor_freq} \
     --max-normal-freq ${params.max_normal_freq} \
-    --p-value ${paramsProcessSomatic_pvalue}
+    --p-value ${params.processSomatic_pvalue}
     """
   }
 
@@ -1009,9 +1013,9 @@ if (params.readsControl != "NO_FILE") {
 
     output:
     set TumorReplicateId, ControlReplicateId,
-     file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf")
+     file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf") into FilterSnp
     set TumorReplicateId, ControlReplicateId,
-     file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf")
+     file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf") into FilterIndel
 
     script:
     """
@@ -1058,12 +1062,11 @@ if (params.readsControl != "NO_FILE") {
     output:
     set TumorReplicateId, ControlReplicateId,
       file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz"),
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz.idx")
+      file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz.idx"),
       file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt") into Mutect1raw
     set TumorReplicateId, ControlReplicateId,
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz"),
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz.idx")
-      file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.stats.txt") into Mutect1filter
+    file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz"),
+    file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz.tbi") into Mutect1filter
 
     script:
     """
@@ -1095,7 +1098,7 @@ if (params.readsControl != "NO_FILE") {
   // Mutect1: calls SNPS from tumor sample
 
     tag "$TumorReplicateId"
-    publishDir "$params.publishDir/$TumorReplicateId/mutect1/", mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/mutect1/", mode: params.publishDirMode
 
     input:
     set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor3
@@ -1108,11 +1111,10 @@ if (params.readsControl != "NO_FILE") {
     set TumorReplicateId,
       file("${TumorReplicateId}_mutect1.raw.vcf.gz"),
       file("${TumorReplicateId}_mutect1.raw.vcf.gz.idx")
-      file("${TumorReplicateId}_mutect1.raw.stats.txt") into Mutect1raw
+      file("${TumorReplicateId}_mutect1.raw.stats.txt") into Mutect1rawTumor
     set TumorReplicateId,
-      file("${TumorReplicateId}_mutect1.final.vcf.gz"),
-      file("${TumorReplicateId}_mutect1.final.vcf.gz.idx")
-      file("${TumorReplicateId}_mutect1_final.stats.txt") into Mutect1filter
+      file("${TumorReplicateId}_mutect1_final.vcf.gz"),
+      file("${TumorReplicateId}_mutect1_final.vcf.gz.tbi") into Mutect1filterTumor
 
     script:
     """
@@ -1137,6 +1139,127 @@ if (params.readsControl != "NO_FILE") {
     --genotype-filter-name "AD.1_2" \
     --output ${TumorReplicateId}_mutect1_final.vcf.gz
     """
+  }
+}
+
+if (params.readsControl != "NO_FILE") {
+  process 'Vep' {
+  //
+
+  tag "$TumorReplicateId"
+  publishDir "$params.outputDir/$TumorReplicateId/vep/", mode: params.publishDirMode
+
+  input:
+  set TumorReplicateId, ControlReplicateId, file(mutect2Vcf),
+    file(mutect2Idx) from FilterMutect2
+  set TumorReplicateId, ControlReplicateId, file(varscanSnp) from FilterSnp
+  set TumorReplicateId, ControlReplicateId, file(varscanIndel) from FilterIndel
+  set TumorReplicateId, ControlReplicateId, file(mutect1Vcf),
+   file(mutect1Idx) from Mutect1filter
+  file(VepFasta) from Channel.value([reference.VepFasta])
+
+  script:
+  """
+  $PERL $VEP -i ${mutect1Vcf} \
+  -o ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --fasta ${VepFasta} \
+  --format "vcf" \
+  --tab  && \
+  $PERL $VEP -i ${mutect2Vcf} \
+  -o ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --fasta ${VepFasta} \
+  --format "vcf" \
+  --tab  && \
+  $PERL $VEP -i ${varscanSnp} \
+  -o ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --format "vcf" \
+  --tab  && \
+  $PERL $VEP -i ${varscanIndel} \
+  -o ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --format "vcf" \
+  --tab && \
+  variant_sort.sh  \
+  -1 ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
+  -2 ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
+  -S ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
+  -I ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
+  -t ${TumorReplicateId} \
+  -c ${ControlReplicateId}
+  """
+  }
+}else {
+  process 'VepTumor' {
+  //
+
+  tag "$TumorReplicateId"
+  publishDir "$params.outputDir/$TumorReplicateId/vep/", mode: params.publishDirMode
+
+  input:
+  set TumorReplicateId, file(mutect2Vcf),
+    file(mutect2Idx) from FilterMutect2Tumor
+  set TumorReplicateId, file(mutect1Vcf),
+   file(mutect1Idx) from Mutect1filterTumor
+  file(VepFasta) from Channel.value([reference.VepFasta])
+
+  script:
+  """
+  $PERL $VEP -i ${mutect1Vcf} \
+  -o ${TumorReplicateId}_mutect1_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_mutect1_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --fasta ${VepFasta} \
+  --format "vcf" \
+  --tab  && \
+  $PERL $VEP -i ${mutect2Vcf} \
+  -o ${TumorReplicateId}_mutect2_vep.txt \
+  --fork ${params.vep_threads} \
+  --stats_file ${TumorReplicateId}_mutect2_vep_summary.html \
+  --species ${params.vep_species} \
+  --assembly ${params.vep_assembly} \
+  --offline \
+  --dir ${params.vep_dir} \
+  --cache --dir_cache ${params.vep_cache} \
+  --fasta ${VepFasta} \
+  --format "vcf" \
+  --tab  && \
+  variant_sort.sh \
+  -1 ${TumorReplicateId}_mutect1_vep.txt \
+  -2 ${TumorReplicateId}_mutect2_vep.txt \
+  -t ${TumorReplicateId}
+  """
   }
 }
 
