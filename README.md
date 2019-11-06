@@ -63,20 +63,20 @@ References, Databases and Software should be edited in the params.config.
 ```
 nextflow run wes.nf "--readsTumor" "[--readsControl]" "--IntervalsList" "--IntervalsBed" [--single_end]
 ```
-### Singularity
+#### Singularity
 The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
 
-### Single-end reads:
+#### Single-end reads:
 **--single_end:** sets parameter to TRUE (default false)
 
-### Mandatory aerguments:
+#### Mandatory arguments:
 **--readsTumor:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
 
 **--IntervalsList:** 	 intervals.list; 		 interval.list file for targeting
 
 **--IntervalsBed:** 		 intervals.bed; 			 interval.bed file for targeting
 
-### Optional argument:
+#### Optional argument:
 **--readsControl:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
 
 ## 3. Output
