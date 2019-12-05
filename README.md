@@ -61,7 +61,7 @@ Every parameter can be edited in the params file or with the command lind by usi
 References, Databases and Software should be edited in the params.config.
 
 ```
-nextflow run wes.nf "--readsTumor" "[--readsControl]" "--IntervalsList" "--IntervalsBed" [--single_end]
+nextflow run wes.nf "--readsTumor|--batchFile" "[--readsControl]" "--IntervalsList" "--IntervalsBed" [--single_end]
 ```
 #### Singularity
 The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
@@ -71,6 +71,25 @@ The singularity mode has to be anabled in the params.config file and the path to
 
 #### Mandatory arguments:
 **--readsTumor:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
+
+or
+
+**--batchFile:**
+* CSV-file, paired-end T/N reads:
+
+* sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV,group
+* sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,Control1_reads_1.fastq,Control1_reads_2.fastq,group1
+* sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,Control2_reads_1.fastq,Control2_reads_2.fastq,group1
+* ...
+* sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,ControlN_reads_1.fastq,ControlN_reads_2.fastq,groupX
+
+* CSV-file, paired-end T only reads:
+
+* sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV,group
+* sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,NO_FILE,,NO_FILE,group1
+* sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,NO_FILE,,NO_FILE,group1
+* ...
+* sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,,NO_FILE,groupX
 
 **--IntervalsList:** 	 intervals.list; 		 interval.list file for targeting
 
