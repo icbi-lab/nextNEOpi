@@ -97,6 +97,7 @@ or
 
 #### Optional argument:
 **--readsControl:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
+**--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
 
 **--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
 
