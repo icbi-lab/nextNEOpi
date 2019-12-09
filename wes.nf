@@ -181,8 +181,8 @@ if (single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned_sort.bam"),
-         file("${TumorReplicateId}_aligned_sort.bai") into BwaSortTumor
+        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam"),
+         file("${TumorReplicateId}_aligned.bai") into BwaSortTumor
 
         script:
         """
@@ -190,12 +190,9 @@ if (single_end) {
         -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \
         -M ${RefFasta} \
         -t ${task.cpus} \
-        ${readsFWD} |java -jar $PICARD SortSam \
-        INPUT=/dev/stdin \
-        OUTPUT=${TumorReplicateId}_aligned_sort.bam \
-        SORT_ORDER=coordinate \
-        VALIDATION_STRINGENCY=LENIENT \
-        CREATE_INDEX=true
+        ${readsFWD}  | \
+        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam - && \
+        $SAMTOOLS index ${TumorReplicateId}_aligned.bam
         """
     }
 } else {
@@ -212,8 +209,8 @@ if (single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned_sort.bam"),
-         file("${TumorReplicateId}_aligned_sort.bai") into BwaSortTumor
+        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam"),
+         file("${TumorReplicateId}_aligned.bai") into BwaSortTumor
 
         script:
         """
@@ -222,12 +219,9 @@ if (single_end) {
         -M ${RefFasta} \
         -t ${task.cpus} \
         ${readsFWD} \
-        ${readsREV} |java -jar $PICARD SortSam \
-        INPUT=/dev/stdin \
-        OUTPUT=${TumorReplicateId}_aligned_sort.bam \
-        SORT_ORDER=coordinate \
-        VALIDATION_STRINGENCY=LENIENT \
-        CREATE_INDEX=true
+        ${readsREV}  | \
+        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam - && \
+        $SAMTOOLS index ${TumorReplicateId}_aligned.bam
         """
     }
 }
@@ -274,8 +268,8 @@ if (readsControl != "NO_FILE" && single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort.bam"),
-         file("${ControlReplicateId}_Control_aligned_sort.bai") into BwaSortControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam"),
+         file("${ControlReplicateId}_Control_aligned.bai") into BwaSortControl
 
         script:
         """
@@ -283,12 +277,9 @@ if (readsControl != "NO_FILE" && single_end) {
         -R "@RG\\tID:${ControlReplicateId}\\tLB:${ControlReplicateId}\\tSM:${ControlReplicateId}\\tPL:ILLUMINA" \
         -M ${RefFasta} \
         -t ${task.cpus} \
-        ${readsFWD} |java -jar $PICARD SortSam \
-        INPUT=/dev/stdin \
-        OUTPUT=${ControlReplicateId}_Control_aligned_sort.bam \
-        SORT_ORDER=coordinate \
-        VALIDATION_STRINGENCY=LENIENT \
-        CREATE_INDEX=true
+        ${readsFWD} | \
+        $SAMTOOLS  view -Shb -o ${ControlReplicateId}_Control_aligned.bam - && \
+        $SAMTOOLS index ${ControlReplicateId}_Control_aligned.bam
         """
     }
 } else if (readsControl != "NO_FILE" && !single_end) {
@@ -305,8 +296,8 @@ if (readsControl != "NO_FILE" && single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort.bam"),
-         file("${ControlReplicateId}_Control_aligned_sort.bai") into BwaSortControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam"),
+         file("${ControlReplicateId}_Control_aligned.bai") into BwaSortControl
 
         script:
         """
@@ -315,12 +306,9 @@ if (readsControl != "NO_FILE" && single_end) {
         -M ${RefFasta} \
         -t ${task.cpus} \
         ${readsFWD} \
-        ${readsREV} |java -jar $PICARD SortSam \
-        INPUT=/dev/stdin \
-        OUTPUT=${ControlReplicateId}_Control_aligned_sort.bam \
-        SORT_ORDER=coordinate \
-        VALIDATION_STRINGENCY=LENIENT \
-        CREATE_INDEX=true
+        ${readsREV} | \
+        $SAMTOOLS view -Shb -o ${ControlReplicateId}_Control_aligned.bam - && \
+        $SAMTOOLS index ${ControlReplicateId}_Control_aligned.bam
         """
     }
 
@@ -335,17 +323,17 @@ if (readsControl != "NO_FILE" && single_end) {
         set ControlReplicateId, file(bam), file(bai) from BwaSortControl
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_aligned_sort_mkdp.bam"),
-         file("${ControlReplicateId}_aligned_sort_mkdp.bam.bai"),
-         file("${ControlReplicateId}_aligned_sort_mkdp.txt") into MarkDuplicatesControl1,
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
+         file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai"),
+         file("${ControlReplicateId}_Control_aligned_sort_mkdp.txt") into MarkDuplicatesControl1,
             MarkDuplicatesControl2
 
         script:
         """
         $GATK4 MarkDuplicatesSpark \
         -I ${bam} \
-        -O ${ControlReplicateId}_aligned_sort_mkdp.bam \
-        -M ${ControlReplicateId}_aligned_sort_mkdp.txt \
+        -O ${ControlReplicateId}_Control_aligned_sort_mkdp.bam \
+        -M ${ControlReplicateId}_Control_aligned_sort_mkdp.txt \
         --create-output-bam-index true \
         --read-validation-stringency LENIENT \
         --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
@@ -389,20 +377,28 @@ process 'BaseRecalApplyTumor' {
 
     script:
     """
-    $GATK4 BaseRecalibrator \
-     -I ${bam} \
+    java -jar $PICARD SetNmMdAndUqTags \
+     R=${RefFasta} \
+     I=${bam} \
+     O=fixed.bam \
+     CREATE_INDEX=true \
+     VALIDATION_STRINGENCY=LENIENT && \
+    $GATK4 BaseRecalibratorSpark \
+     -I fixed.bam \
      -R ${RefFasta} \
      -L ${IntervalsList} \
      -O ${TumorReplicateId}_bqsr.table \
      --known-sites ${DBSNP} \
      --known-sites ${KnownIndels} \
-     --known-sites ${MillsGold} && \
-     $GATK4 ApplyBQSR \
+     --known-sites ${MillsGold} \
+     --conf 'spark.executor.cores=${task.cpus}' && \
+     $GATK4 ApplyBQSRSpark \
      -I ${bam} \
      -R ${RefFasta} \
      -L ${IntervalsList} \
      -O ${TumorReplicateId}_recal4.bam \
-     --bqsr-recal-file ${TumorReplicateId}_bqsr.table
+     --bqsr-recal-file ${TumorReplicateId}_bqsr.table \
+     --conf 'spark.executor.cores=${task.cpus}'
     """
 }
 
@@ -455,12 +451,13 @@ process 'AnalyzeCovariates' {
 
     script:
     """
-    $GATK4 BaseRecalibrator \
+    $GATK4 BaseRecalibratorSpark \
     -I ${bam} -R ${RefFasta} \
     -L ${IntervalsList} -O ${TumorReplicateId}_postbqsr.table \
     --known-sites ${DBSNP} \
     --known-sites ${KnownIndels} \
-    --known-sites ${MillsGold} && \
+    --known-sites ${MillsGold} \
+    --conf 'spark.executor.cores=${task.cpus}' && \
     $GATK4 AnalyzeCovariates \
     -before ${recalTable} \
     -after ${TumorReplicateId}_postbqsr.table \
@@ -623,26 +620,34 @@ if (readsControl != 'NO_FILE') {
 
         output:
         set ControlReplicateId,
-         file("${ControlReplicateId}_bqsr.table") into BaseRecalibratorControl
-        set ControlReplicateId, file("${ControlReplicateId}_recal4.bam"),
-         file("${ControlReplicateId}_recal4.bai") into ApplyControl1, ApplyControl2
+         file("${ControlReplicateId}_Control_bqsr.table") into BaseRecalibratorControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_recal4.bam"),
+         file("${ControlReplicateId}_Control_recal4.bai") into ApplyControl1, ApplyControl2
 
         script:
         """
-        $GATK4 BaseRecalibrator \
-         -I ${bam} \
+        java -jar $PICARD SetNmMdAndUqTags \
+         R=${RefFasta} \
+         I=${bam} \
+         O=Control_fixed.bam \
+         CREATE_INDEX=true \
+         VALIDATION_STRINGENCY=LENIENT && \
+        $GATK4 BaseRecalibratorSpark \
+         -I Control_fixed_bam \
          -R ${RefFasta} \
          -L ${IntervalsList} \
-         -O ${ControlReplicateId}_bqsr.table \
+         -O ${ControlReplicateId}_Control_bqsr.table \
          --known-sites ${DBSNP} \
          --known-sites ${KnownIndels} \
-         --known-sites ${MillsGold} && \
-         $GATK4 ApplyBQSR \
+         --known-sites ${MillsGold} \
+         --conf 'spark.executor.cores=${task.cpus}'&& \
+         $GATK4 ApplyBQSRSpark \
          -I ${bam} \
          -R ${RefFasta} \
          -L ${IntervalsList} \
-         -O ${ControlReplicateId}_recal4.bam \
-         --bqsr-recal-file ${ControlReplicateId}_bqsr.table
+         -O ${ControlReplicateId}_Control_recal4.bam \
+         --bqsr-recal-file ${ControlReplicateId}_Control_bqsr.table \
+         --conf 'spark.executor.cores=${task.cpus}'
         """
     }
 
@@ -660,12 +665,12 @@ if (readsControl != 'NO_FILE') {
         set ControlReplicateId, file(bam), file(bai) from ApplyControl1
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_pileup.table") into PileupControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_pileup.table") into PileupControl
 
         script:
         """
         $GATK4 GetPileupSummaries \
-        -I ${bam} -O ${ControlReplicateId}_pileup.table \
+        -I ${bam} -O ${ControlReplicateId}_Control_pileup.table \
         -L ${intervals} --variant ${GnomAD}
         """
     }
@@ -935,8 +940,8 @@ if (readsControl != "NO_FILE") {
             database.MillsGold, database.MillsGoldIdx])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_aligned_sort_mkdp_realign.bam"),
-         file("${ControlReplicateId}_aligned_sort_mkdp_realign.bai") into IndelRealignerControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam"),
+         file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bai") into IndelRealignerControl
 
         script:
         """
@@ -983,8 +988,8 @@ if (readsControl != "NO_FILE") {
 
         output:
         set ControlReplicateId, file("${ControlReplicateId}_fixmate.bam"),
-            file("${ControlReplicateId}_fixmate.bai"),
-             file("${ControlReplicateId}_bqsr3.table") into FixMateBaseRecalControl
+            file("${ControlReplicateId}_Control_fixmate.bai"),
+             file("${ControlReplicateId}_Control_bqsr3.table") into FixMateBaseRecalControl
 
         script:
         """
@@ -996,12 +1001,12 @@ if (readsControl != "NO_FILE") {
             -T BaseRecalibrator \
             -R ${RefFasta} \
             -L ${IntervalsList} \
-            -I ${ControlReplicateId}_fixmate.bam \
+            -I ${ControlReplicateId}_Control_fixmate.bam \
             -knownSites ${DBSNP} \
             -knownSites ${KnownIndels} \
             -knownSites ${MillsGold} \
             -nct ${task.cpus} \
-            -o ${ControlReplicateId}_bqsr3.table
+            -o ${ControlReplicateId}_Control_bqsr3.table
         """
     }
 
@@ -1018,8 +1023,8 @@ if (readsControl != "NO_FILE") {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_printreads.bam"),
-         file("${ControlReplicateId}_printreads.bai") into PrintReadsControl1,
+        set ControlReplicateId, file("${ControlReplicateId}_Control_printreads.bam"),
+         file("${ControlReplicateId}_Control_printreads.bai") into PrintReadsControl1,
             PrintReadsControl2
 
         script:
@@ -1031,7 +1036,7 @@ if (readsControl != "NO_FILE") {
         -I ${bam} \
         -BQSR ${bqsr3} \
         -nct ${task.cpus} \
-        -o ${ControlReplicateId}_printreads.bam
+        -o ${ControlReplicateId}_Control_printreads.bam
         """
     }
 
@@ -1060,12 +1065,17 @@ if (readsControl != "NO_FILE") {
         SD=${RefDict} \
         INPUT=${bamTumor} \
         CREATE_INDEX=true \
-        OUTPUT=${TumorReplicateId}_reorder_tumor.bam && \
+        OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
+        tumor_process_id=\$!
+
         java -jar $PICARD ReorderSam \
         SD=${RefDict} \
         INPUT=${bamControl} \
         CREATE_INDEX=true \
-        OUTPUT=${ControlReplicateId}_reorder_control.bam
+        OUTPUT=${ControlReplicateId}_reorder_control.bam &
+        control_process_id=\$!
+        wait $tumor_process_id
+        wait $control_process_id
         """
     }
 
