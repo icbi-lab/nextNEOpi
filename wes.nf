@@ -473,7 +473,7 @@ process 'BaseRecalApplyTumor' {
         CREATE_INDEX=true \
         VALIDATION_STRINGENCY=LENIENT && \
     $GATK4 BaseRecalibratorSpark \
-        TMP_DIR=${params.tmpDir} \
+        --tmp-dir ${params.tmpDir} \
         -I fixed.bam \
         -R ${RefFasta} \
         -L ${IntervalsList} \
@@ -483,6 +483,7 @@ process 'BaseRecalApplyTumor' {
         --known-sites ${MillsGold} \
         --conf 'spark.executor.cores=${task.cpus}' && \
      $GATK4 ApplyBQSRSpark \
+        --tmp-dir ${params.tmpDir} \
         -I ${bam} \
         -R ${RefFasta} \
         -L ${IntervalsList} \
