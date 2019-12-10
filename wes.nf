@@ -587,6 +587,7 @@ process 'CollectSequencingArtifactMetrics' {
     script:
     """
     mkdir -p ${params.tmpDir}
+
     java -jar $PICARD CollectSequencingArtifactMetrics \
         TMP_DIR=${params.tmpDir} \
         I=${bam} \
@@ -647,10 +648,10 @@ if (readsControl == "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        $GATK4 MergeVcfs \
-            --tmp-dir ${params.tmpDir} \
-            -I ${vcf.join(" -I ")} \
-            -O ${TumorReplicateId}_mutect2_raw.vcf.gz
+        java -jar $PICARD MergeVcfs \
+            TMP_DIR=${params.tmpDir} \
+            I=${vcf.join(" I=")} \
+            O=${TumorReplicateId}_mutect2_raw.vcf.gz
 
         $GATK4 MergeMutectStats \
             --tmp-dir ${params.tmpDir} \
@@ -866,10 +867,10 @@ if (readsControl != 'NO_FILE') {
         """
         mkdir -p ${params.tmpDir}
         
-        $GATK4 MergeVcfs \
-            --tmp-dir ${params.tmpDir} \
-            -I ${vcf.join(" -I ")} \
-            -O ${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz
+        java -jar $PICARD MergeVcfs \
+            TMP_DIR=${params.tmpDir} \
+            I=${vcf.join(" I=")} \
+            O=${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz
 
         $GATK4 MergeMutectStats \
             --tmp-dir ${params.tmpDir} \
