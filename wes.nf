@@ -160,11 +160,14 @@ process 'SplitIntervals' {
     script:
     IntervalName = IntervalsList.baseName
     """
+    mkdir -p ${params.tmpDir}
+
     $GATK4 SplitIntervals \
-    -R ${RefFasta}  \
-    -scatter ${x} \
-    -L ${IntervalsList} \
-    -O ${IntervalName}
+        --tmp-dir ${params.tmpDir} \
+        -R ${RefFasta}  \
+        -scatter ${x} \
+        -L ${IntervalsList} \
+        -O ${IntervalName}
     """
 }
 
@@ -244,14 +247,15 @@ process 'MarkDuplicatesTumor' {
     script:
     """
     mkdir -p ${params.tmpDir}
+
     $GATK4 MarkDuplicatesSpark \
-    --tmp-dir ${params.tmpDir} \
-    -I ${bam} \
-    -O ${TumorReplicateId}_aligned_sort_mkdp.bam \
-    -M ${TumorReplicateId}_aligned_sort_mkdp.txt \
-    --create-output-bam-index true \
-    --read-validation-stringency LENIENT \
-    --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
+        --tmp-dir ${params.tmpDir} \
+        -I ${bam} \
+        -O ${TumorReplicateId}_aligned_sort_mkdp.bam \
+        -M ${TumorReplicateId}_aligned_sort_mkdp.txt \
+        --create-output-bam-index true \
+        --read-validation-stringency LENIENT \
+        --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
     """
 }
 
@@ -276,7 +280,9 @@ process 'alignmentMetrics' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
     java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+        TMP_DIR=${params.tmpDir} \
         INPUT=${bam} \
         OUTPUT=${TumorReplicateId}.HS.metrics.txt \
         R=${RefFasta} \
@@ -284,6 +290,7 @@ process 'alignmentMetrics' {
         TARGET_INTERVALS=${IntervalsList} \
         PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \
     java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+        TMP_DIR=${params.tmpDir} \
         INPUT=${bam} \
         OUTPUT=${TumorReplicateId}.AS.metrics.txt \
         R=${RefFasta} &&
@@ -367,14 +374,15 @@ if (readsControl != "NO_FILE" && single_end) {
         script:
         """
         mkdir -p ${params.tmpDir}
+
         $GATK4 MarkDuplicatesSpark \
-        --tmp-dir ${params.tmpDir} \
-        -I ${bam} \
-        -O ${ControlReplicateId}_Control_aligned_sort_mkdp.bam \
-        -M ${ControlReplicateId}_Control_aligned_sort_mkdp.txt \
-        --create-output-bam-index true \
-        --read-validation-stringency LENIENT \
-        --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
+            --tmp-dir ${params.tmpDir} \
+            -I ${bam} \
+            -O ${ControlReplicateId}_Control_aligned_sort_mkdp.bam \
+            -M ${ControlReplicateId}_Control_aligned_sort_mkdp.txt \
+            --create-output-bam-index true \
+            --read-validation-stringency LENIENT \
+            --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
         """
     }
 
@@ -400,7 +408,9 @@ if (readsControl != "NO_FILE" && single_end) {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
         java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+            TMP_DIR=${params.tmpDir} \
             INPUT=${bam} \
             OUTPUT=${ControlReplicateId}_Control.HS.metrics.txt \
             R=${RefFasta} \
@@ -408,6 +418,7 @@ if (readsControl != "NO_FILE" && single_end) {
             TARGET_INTERVALS=${IntervalsList} \
             PER_TARGET_COVERAGE=${ControlReplicateId}_Control.perTarget.coverage.txt && \
         java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+            TMP_DIR=${params.tmpDir} \
             INPUT=${bam} \
             OUTPUT=${ControlReplicateId}_Control.AS.metrics.txt \
             R=${RefFasta} && \
@@ -452,28 +463,32 @@ process 'BaseRecalApplyTumor' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
+
     java -jar $PICARD SetNmMdAndUqTags \
-     R=${RefFasta} \
-     I=${bam} \
-     O=fixed.bam \
-     CREATE_INDEX=true \
-     VALIDATION_STRINGENCY=LENIENT && \
+        TMP_DIR=${params.tmpDir} \
+        R=${RefFasta} \
+        I=${bam} \
+        O=fixed.bam \
+        CREATE_INDEX=true \
+        VALIDATION_STRINGENCY=LENIENT && \
     $GATK4 BaseRecalibratorSpark \
-     -I fixed.bam \
-     -R ${RefFasta} \
-     -L ${IntervalsList} \
-     -O ${TumorReplicateId}_bqsr.table \
-     --known-sites ${DBSNP} \
-     --known-sites ${KnownIndels} \
-     --known-sites ${MillsGold} \
-     --conf 'spark.executor.cores=${task.cpus}' && \
+        TMP_DIR=${params.tmpDir} \
+        -I fixed.bam \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -O ${TumorReplicateId}_bqsr.table \
+        --known-sites ${DBSNP} \
+        --known-sites ${KnownIndels} \
+        --known-sites ${MillsGold} \
+        --conf 'spark.executor.cores=${task.cpus}' && \
      $GATK4 ApplyBQSRSpark \
-     -I ${bam} \
-     -R ${RefFasta} \
-     -L ${IntervalsList} \
-     -O ${TumorReplicateId}_recal4.bam \
-     --bqsr-recal-file ${TumorReplicateId}_bqsr.table \
-     --conf 'spark.executor.cores=${task.cpus}'
+        -I ${bam} \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -O ${TumorReplicateId}_recal4.bam \
+        --bqsr-recal-file ${TumorReplicateId}_bqsr.table \
+        --conf 'spark.executor.cores=${task.cpus}'
     """
 }
 
@@ -496,9 +511,14 @@ process 'GetPileupTumor' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
+
     $GATK4 GetPileupSummaries \
-    -I ${bam} -O ${TumorReplicateId}_pileup.table \
-    -L ${IntervalsList} --variant ${GnomAD}
+        --tmp-dir ${params.tmpDir} \
+        -I ${bam} \
+        -O ${TumorReplicateId}_pileup.table \
+        -L ${IntervalsList} \
+        --variant ${GnomAD}
     """
 }
 
@@ -526,17 +546,23 @@ process 'AnalyzeCovariates' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
+
     $GATK4 BaseRecalibratorSpark \
-    -I ${bam} -R ${RefFasta} \
-    -L ${IntervalsList} -O ${TumorReplicateId}_postbqsr.table \
-    --known-sites ${DBSNP} \
-    --known-sites ${KnownIndels} \
-    --known-sites ${MillsGold} \
-    --conf 'spark.executor.cores=${task.cpus}' && \
+        --tmp-dir ${params.tmpDir} \
+        -I ${bam} \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -O ${TumorReplicateId}_postbqsr.table \
+        --known-sites ${DBSNP} \
+        --known-sites ${KnownIndels} \
+        --known-sites ${MillsGold} \
+        --conf 'spark.executor.cores=${task.cpus}' && \
     $GATK4 AnalyzeCovariates \
-    -before ${recalTable} \
-    -after ${TumorReplicateId}_postbqsr.table \
-    -csv ${TumorReplicateId}_BQSR.csv
+        --tmp-dir ${params.tmpDir} \
+        -before ${recalTable} \
+        -after ${TumorReplicateId}_postbqsr.table \
+        -csv ${TumorReplicateId}_BQSR.csv
     """
 }
 
@@ -559,8 +585,12 @@ process 'CollectSequencingArtifactMetrics' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
     java -jar $PICARD CollectSequencingArtifactMetrics \
-    I=${bam} R=${RefFasta} O=${TumorReplicateId}
+        TMP_DIR=${params.tmpDir} \
+        I=${bam} \
+        R=${RefFasta} \
+        O=${TumorReplicateId}
     """
 }
 
@@ -585,11 +615,14 @@ if (readsControl == "NO_FILE") {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 Mutect2 \
-        -R ${RefFasta} \
-        -I ${Tumorbam} -tumor ${TumorReplicateId} \
-        -L ${IntervalsList} --native-pair-hmm-threads ${task.cpus} \
-        -O ${IntervalsList}.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -I ${Tumorbam} -tumor ${TumorReplicateId} \
+            -L ${IntervalsList} --native-pair-hmm-threads ${task.cpus} \
+            -O ${IntervalsList}.vcf.gz
         """
     }
 
@@ -611,13 +644,17 @@ if (readsControl == "NO_FILE") {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 MergeVcfs \
-        -I ${vcf.join(" -I ")} \
-        -O ${TumorReplicateId}_mutect2_raw.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            -I ${vcf.join(" -I ")} \
+            -O ${TumorReplicateId}_mutect2_raw.vcf.gz
 
         $GATK4 MergeMutectStats \
-        --stats ${stats.join(" --stats ")} \
-        -O ${TumorReplicateId}_mutect2_raw.vcf.gz.stats
+            --tmp-dir ${params.tmpDir} \
+            --stats ${stats.join(" --stats ")} \
+            -O ${TumorReplicateId}_mutect2_raw.vcf.gz.stats
         """
     }
 
@@ -647,26 +684,36 @@ if (readsControl == "NO_FILE") {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 CalculateContamination \
-        -I ${pileup} -O ${TumorReplicateId}_cont.table && \
+            --tmp-dir ${params.tmpDir} \
+            -I ${pileup} \
+            -O ${TumorReplicateId}_cont.table && \
         $GATK4 FilterMutectCalls \
-        -R ${RefFasta} -V ${vcf} \
-        --contamination-table ${TumorReplicateId}_cont.table \
-        -O ${TumorReplicateId}_oncefiltered.vcf.gz && \
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -V ${vcf} \
+            --contamination-table ${TumorReplicateId}_cont.table \
+            -O ${TumorReplicateId}_oncefiltered.vcf.gz && \
         $GATK4 FilterByOrientationBias \
-        -V ${TumorReplicateId}_oncefiltered.vcf.gz \
-        -P ${preAdapterDetail} \
-        -O ${TumorReplicateId}_twicefitlered.vcf.gz && \
+            --tmp-dir ${params.tmpDir} \
+            -V ${TumorReplicateId}_oncefiltered.vcf.gz \
+            -P ${preAdapterDetail} \
+            -O ${TumorReplicateId}_twicefitlered.vcf.gz && \
         $GATK4 SelectVariants \
-        --variant ${TumorReplicateId}_twicefitlered.vcf.gz \
-        -R ${RefFasta} --exclude-filtered true \
-        --output ${TumorReplicateId}_mutect2_pass.vcf && \
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_twicefitlered.vcf.gz \
+            -R ${RefFasta} \
+            --exclude-filtered true \
+            --output ${TumorReplicateId}_mutect2_pass.vcf && \
         $GATK4 VariantFiltration \
-        --variant ${TumorReplicateId}_mutect2_pass.vcf \
-        -R ${RefFasta} \
-        --genotype-filter-expression 'g.getAD().1 < 2' \
-        --genotype-filter-name "AD.1_2" \
-        --output ${TumorReplicateId}_mutect2_final.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_mutect2_pass.vcf \
+            -R ${RefFasta} \
+            --genotype-filter-expression 'g.getAD().1 < ${params.minAD}' \
+            --genotype-filter-name "AD.1_${params.minAD}" \
+            --output ${TumorReplicateId}_mutect2_final.vcf.gz
         """
     }
 }
@@ -701,29 +748,33 @@ if (readsControl != 'NO_FILE') {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         java -jar $PICARD SetNmMdAndUqTags \
-         R=${RefFasta} \
-         I=${bam} \
-         O=Control_fixed.bam \
-         CREATE_INDEX=true \
-         VALIDATION_STRINGENCY=LENIENT && \
+            TMP_DIR=${params.tmpDir} \
+            R=${RefFasta} \
+            I=${bam} \
+            O=Control_fixed.bam \
+            CREATE_INDEX=true \
+            VALIDATION_STRINGENCY=LENIENT && \
         $GATK4 BaseRecalibratorSpark \
-         -I Control_fixed.bam \
-         -R ${RefFasta} \
-         -L ${IntervalsList} \
-         -O ${ControlReplicateId}_Control_bqsr.table \
-         --known-sites ${DBSNP} \
-         --known-sites ${KnownIndels} \
-         --known-sites ${MillsGold} \
-         --conf 'spark.executor.cores=${task.cpus}'&& \
+            --tmp-dir ${params.tmpDir} \
+            -I Control_fixed.bam \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -O ${ControlReplicateId}_Control_bqsr.table \
+            --known-sites ${DBSNP} \
+            --known-sites ${KnownIndels} \
+            --known-sites ${MillsGold} \
+            --conf 'spark.executor.cores=${task.cpus}'&& \
          $GATK4 ApplyBQSRSpark \
-         -I ${bam} \
-         -R ${RefFasta} \
-         -L ${IntervalsList} \
-         -O ${ControlReplicateId}_Control_recal4.bam \
-         --bqsr-recal-file ${ControlReplicateId}_Control_bqsr.table \
-         --conf 'spark.executor.cores=${task.cpus}' && \
-         sleep 20
+            --tmp-dir ${params.tmpDir} \
+            -I ${bam} \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -O ${ControlReplicateId}_Control_recal4.bam \
+            --bqsr-recal-file ${ControlReplicateId}_Control_bqsr.table \
+            --conf 'spark.executor.cores=${task.cpus}'
         """
     }
 
@@ -745,9 +796,14 @@ if (readsControl != 'NO_FILE') {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 GetPileupSummaries \
-        -I ${bam} -O ${ControlReplicateId}_Control_pileup.table \
-        -L ${intervals} --variant ${GnomAD}
+            --tmp-dir ${params.tmpDir} \
+            -I ${bam} \
+            -O ${ControlReplicateId}_Control_pileup.table \
+            -L ${intervals} \
+            --variant ${GnomAD}
         """
     }
 
@@ -775,12 +831,15 @@ if (readsControl != 'NO_FILE') {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 Mutect2 \
-        -R ${RefFasta} \
-        -I ${Tumorbam} -tumor ${TumorReplicateId} \
-        -I ${Controlbam} -normal ${ControlReplicateId} \
-        -L ${intervals} --native-pair-hmm-threads ${task.cpus} \
-        -O ${intervals}.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -I ${Tumorbam} -tumor ${TumorReplicateId} \
+            -I ${Controlbam} -normal ${ControlReplicateId} \
+            -L ${intervals} --native-pair-hmm-threads ${task.cpus} \
+            -O ${intervals}.vcf.gz
         """
     }
 
@@ -804,13 +863,17 @@ if (readsControl != 'NO_FILE') {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+        
         $GATK4 MergeVcfs \
-        -I ${vcf.join(" -I ")} \
-        -O ${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            -I ${vcf.join(" -I ")} \
+            -O ${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz
 
         $GATK4 MergeMutectStats \
-        --stats ${stats.join(" --stats ")} \
-        -O ${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.stats
+            --tmp-dir ${params.tmpDir} \
+            --stats ${stats.join(" --stats ")} \
+            -O ${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.stats
         """
     }
 
@@ -844,27 +907,37 @@ if (readsControl != 'NO_FILE') {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
+
         $GATK4 CalculateContamination \
-        -I ${pileupTumor} --matched-normal ${pileupControl} \
-        -O ${TumorReplicateId}_${ControlReplicateId}_cont.table && \
+            --tmp-dir ${params.tmpDir} \
+            -I ${pileupTumor} \
+            --matched-normal ${pileupControl} \
+            -O ${TumorReplicateId}_${ControlReplicateId}_cont.table && \
         $GATK4 FilterMutectCalls \
-        -R ${RefFasta} -V ${vcf} \
-        --contamination-table ${TumorReplicateId}_${ControlReplicateId}_cont.table \
-        -O ${TumorReplicateId}_${ControlReplicateId}_oncefiltered.vcf.gz && \
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -V ${vcf} \
+            --contamination-table ${TumorReplicateId}_${ControlReplicateId}_cont.table \
+            -O ${TumorReplicateId}_${ControlReplicateId}_oncefiltered.vcf.gz && \
         $GATK4 FilterByOrientationBias \
-        -V ${TumorReplicateId}_${ControlReplicateId}_oncefiltered.vcf.gz \
-        -P ${preAdapterDetail} \
-        -O ${TumorReplicateId}_${ControlReplicateId}_twicefitlered.vcf.gz && \
+            --tmp-dir ${params.tmpDir} \
+            -V ${TumorReplicateId}_${ControlReplicateId}_oncefiltered.vcf.gz \
+            -P ${preAdapterDetail} \
+            -O ${TumorReplicateId}_${ControlReplicateId}_twicefitlered.vcf.gz && \
         $GATK4 SelectVariants \
-        --variant ${TumorReplicateId}_${ControlReplicateId}_twicefitlered.vcf.gz \
-        -R ${RefFasta} --exclude-filtered true \
-        --output ${TumorReplicateId}_${ControlReplicateId}_mutect2_pass.vcf && \
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_${ControlReplicateId}_twicefitlered.vcf.gz \
+            -R ${RefFasta} \
+            --exclude-filtered true \
+            --output ${TumorReplicateId}_${ControlReplicateId}_mutect2_pass.vcf && \
         $GATK4 VariantFiltration \
-        --variant ${TumorReplicateId}_${ControlReplicateId}_mutect2_pass.vcf \
-        -R ${RefFasta} \
-        --genotype-filter-expression 'g.getAD().1 < 2' \
-        --genotype-filter-name "AD.1_2" \
-        --output ${TumorReplicateId}_${ControlReplicateId}_mutect2_final.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_${ControlReplicateId}_mutect2_pass.vcf \
+            -R ${RefFasta} \
+            --genotype-filter-expression 'g.getAD().1 < ${params.minAD}' \
+            --genotype-filter-name "AD.1_${params.minAD}" \
+            --output ${TumorReplicateId}_${ControlReplicateId}_mutect2_final.vcf.gz
         """
     }
 }
@@ -899,24 +972,26 @@ process 'IndelRealignerTumor' {
 
     script:
     """
-    $JAVA8 -jar $GATK3 \
-    -T RealignerTargetCreator \
-    --known ${MillsGold} \
-    --known ${KnownIndels} \
-    -R ${RefFasta} \
-    -L ${IntervalsList} \
-    -I ${bam} \
-    -o target.list \
-    -nt ${task.cpus} && \
-    $JAVA8 -jar $GATK3 \
-    -T IndelRealigner \
-    -R ${RefFasta} \
-    -L ${IntervalsList} \
-    -I ${bam} \
-    -targetIntervals target.list \
-    -known ${KnownIndels} \
-    -known ${MillsGold} \
-    -nWayOut _realign.bam && \
+    mkdir -p ${params.tmpDir}
+
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        -T RealignerTargetCreator \
+        --known ${MillsGold} \
+        --known ${KnownIndels} \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -I ${bam} \
+        -o target.list \
+        -nt ${task.cpus} && \
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        -T IndelRealigner \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -I ${bam} \
+        -targetIntervals target.list \
+        -known ${KnownIndels} \
+        -known ${MillsGold} \
+        -nWayOut _realign.bam && \
     rm target.list
     """
 }
@@ -947,11 +1022,14 @@ process 'FixMateBaseRecalTumor' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
+
     java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
+        TMP_DIR=${params.tmpDir} \
         I=${bam} \
         O=${TumorReplicateId}_fixmate.bam \
         CREATE_INDEX=true && \
-        $JAVA8 -jar $GATK3\
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
         -T BaseRecalibrator \
         -R ${RefFasta} \
         -L ${IntervalsList} \
@@ -1021,24 +1099,26 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        $JAVA8 -jar $GATK3 \
-        -T RealignerTargetCreator \
-        --known ${MillsGold} \
-        --known ${KnownIndels} \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -o target.list \
-        -nt ${task.cpus} && \
-        $JAVA8 -jar $GATK3 \
-        -T IndelRealigner \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -targetIntervals target.list \
-        -known ${KnownIndels} \
-        -known ${MillsGold} \
-        -nWayOut _realign.bam && \
+        mkdir -p ${params.tmpDir}
+
+        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+            -T RealignerTargetCreator \
+            --known ${MillsGold} \
+            --known ${KnownIndels} \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -I ${bam} \
+            -o target.list \
+            -nt ${task.cpus} && \
+        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+            -T IndelRealigner \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -I ${bam} \
+            -targetIntervals target.list \
+            -known ${KnownIndels} \
+            -known ${MillsGold} \
+            -nWayOut _realign.bam && \
         rm target.list
         """
     }
@@ -1069,7 +1149,9 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
         java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
+            TMP_DIR=${params.tmpDir} \
             I=${bam} \
             O=${ControlReplicateId}_fixmate.bam \
             CREATE_INDEX=true && \
@@ -1105,14 +1187,16 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        $JAVA8 -jar $GATK3  \
-        -T PrintReads \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -BQSR ${bqsr3} \
-        -nct ${task.cpus} \
-        -o ${ControlReplicateId}_Control_printreads.bam
+        mkdir -p ${params.tmpDir}
+
+        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
+            -T PrintReads \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -I ${bam} \
+            -BQSR ${bqsr3} \
+            -nct ${task.cpus} \
+            -o ${ControlReplicateId}_Control_printreads.bam
         """
     }
 
@@ -1137,19 +1221,23 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
+        mkdir -p ${params.tmpDir}
         java -jar $PICARD ReorderSam \
-        SD=${RefDict} \
-        INPUT=${bamTumor} \
-        CREATE_INDEX=true \
-        OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
+            TMP_DIR=${params.tmpDir} \
+            SD=${RefDict} \
+            INPUT=${bamTumor} \
+            CREATE_INDEX=true \
+            OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
         tumor_process_id=\$!
 
         java -jar $PICARD ReorderSam \
-        SD=${RefDict} \
-        INPUT=${bamControl} \
-        CREATE_INDEX=true \
-        OUTPUT=${ControlReplicateId}_reorder_control.bam &
-        control_process_id=\$!
+            TMP_DIR=${params.tmpDir} \
+            SD=${RefDict} \
+            INPUT=${bamControl} \
+            CREATE_INDEX=true \
+            OUTPUT=${ControlReplicateId}_reorder_control.bam &
+            control_process_id=\$!
+
         wait $tumor_process_id
         wait $control_process_id
         """
@@ -1318,27 +1406,31 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        $JAVA7 -jar $MUTECT1 \
-        --analysis_type MuTect \
-        --reference_sequence ${RefFasta} \
-        --cosmic ${Cosmic} \
-        --dbsnp ${DBSNP} \
-        -L ${IntervalsList} \
-        --input_file:normal ${bamControl} \
-        --input_file:tumor ${bamTumor} \
-        --out ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt \
-        --vcf ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz && \
+        mkdir -p ${params.tmpDir}
+
+        $JAVA7 -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
+            --analysis_type MuTect \
+            --reference_sequence ${RefFasta} \
+            --cosmic ${Cosmic} \
+            --dbsnp ${DBSNP} \
+            -L ${IntervalsList} \
+            --input_file:normal ${bamControl} \
+            --input_file:tumor ${bamTumor} \
+            --out ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt \
+            --vcf ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz && \
         $GATK4 SelectVariants \
-        --variant ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz \
-        -R ${RefFasta} \
-        --exclude-filtered true \
-        --output ${TumorReplicateId}_${ControlReplicateId}_mutect1_pass.vcf && \
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz \
+            -R ${RefFasta} \
+            --exclude-filtered true \
+            --output ${TumorReplicateId}_${ControlReplicateId}_mutect1_pass.vcf && \
         $GATK4 VariantFiltration \
-        --variant ${TumorReplicateId}_${ControlReplicateId}_mutect1_pass.vcf \
-        -R ${RefFasta} \
-        --genotype-filter-expression "g.getAD().1 < 2" \
-        --genotype-filter-name "AD.1_2" \
-        --output ${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_${ControlReplicateId}_mutect1_pass.vcf \
+            -R ${RefFasta} \
+            --genotype-filter-expression "g.getAD().1 < 2" \
+            --genotype-filter-name "AD.1_2" \
+            --output ${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz
         """
     }
 }else {
@@ -1366,26 +1458,30 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        $JAVA7 -jar $MUTECT1 \
-        --analysis_type MuTect \
-        --reference_sequence ${RefFasta} \
-        --cosmic ${Cosmic} \
-        --dbsnp ${DBSNP} \
-        -L ${IntervalsList} \
-        --input_file:tumor ${bamTumor} \
-        --out ${TumorReplicateId}_mutect1.raw.stats.txt \
-        --vcf ${TumorReplicateId}_mutect1.raw.vcf.gz && \
+        mkdir -p ${params.tmpDir}
+
+        $JAVA7 -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
+            --analysis_type MuTect \
+            --reference_sequence ${RefFasta} \
+            --cosmic ${Cosmic} \
+            --dbsnp ${DBSNP} \
+            -L ${IntervalsList} \
+            --input_file:tumor ${bamTumor} \
+            --out ${TumorReplicateId}_mutect1.raw.stats.txt \
+            --vcf ${TumorReplicateId}_mutect1.raw.vcf.gz && \
         $GATK4 SelectVariants \
-        --variant ${TumorReplicateId}_mutect1.raw.vcf.gz \
-        -R ${RefFasta} \
-        --exclude-filtered true \
-        --output ${TumorReplicateId}_mutect1_pass.vcf && \
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_mutect1.raw.vcf.gz \
+            -R ${RefFasta} \
+            --exclude-filtered true \
+            --output ${TumorReplicateId}_mutect1_pass.vcf && \
         $GATK4 VariantFiltration \
-        --variant ${TumorReplicateId}_mutect1_pass.vcf \
-        -R ${RefFasta} \
-        --genotype-filter-expression "g.getAD().1 < 2" \
-        --genotype-filter-name "AD.1_2" \
-        --output ${TumorReplicateId}_mutect1_final.vcf.gz
+            --tmp-dir ${params.tmpDir} \
+            --variant ${TumorReplicateId}_mutect1_pass.vcf \
+            -R ${RefFasta} \
+            --genotype-filter-expression "g.getAD().1 < 2" \
+            --genotype-filter-name "AD.1_2" \
+            --output ${TumorReplicateId}_mutect1_final.vcf.gz
         """
     }
 }
