@@ -28,7 +28,7 @@ To run the pipeline local, the required software has to be installed:
 * SAMTOOLS 		 (Version 1.9)
 * PICARD 			 (Version 2.20.0)
 * GATK3 			 (Version 3.8-0)
-* GATK4 			 (Version 4.1.3.0)
+* GATK4 			 (Version 4.1.4.1)
 * VARSCAN 		 (Version 2.4.3)
 * MUTECT1 		 (Version 1.1.7)
 * BAMREADCOUNT 		 (Version 0.8.0)
@@ -89,7 +89,7 @@ or
  sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,NO_FILE,NO_FILE,group1
  sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,NO_FILE,NO_FILE,group1
  ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,,NO_FILE,groupX
+ sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,NO_FILE,groupX
 
 **--IntervalsList:** 	 intervals.list; 		 interval.list file for targeting
 

@@ -113,6 +113,7 @@ if (! params.batchFile) {
 
 reference = defineReference()
 database = defineDatabases()
+mkTmpDir()
 
 scatter_count = Channel.from(params.scatter_count)
 
@@ -181,8 +182,7 @@ if (single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam"),
-         file("${TumorReplicateId}_aligned.bai") into BwaSortTumor
+        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam") into BwaTumor_ch
 
         script:
         """
@@ -191,8 +191,7 @@ if (single_end) {
         -M ${RefFasta} \
         -t ${task.cpus} \
         ${readsFWD}  | \
-        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam - && \
-        $SAMTOOLS index ${TumorReplicateId}_aligned.bam
+        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
         """
     }
 } else {
@@ -209,8 +208,7 @@ if (single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam"),
-         file("${TumorReplicateId}_aligned.bai") into BwaSortTumor
+        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam") into BwaTumor_ch
 
         script:
         """
@@ -220,8 +218,7 @@ if (single_end) {
         -t ${task.cpus} \
         ${readsFWD} \
         ${readsREV}  | \
-        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam - && \
-        $SAMTOOLS index ${TumorReplicateId}_aligned.bam
+        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
         """
     }
 }
@@ -234,9 +231,11 @@ process 'MarkDuplicatesTumor' {
      mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam), file(bai) from BwaSortTumor
+    set TumorReplicateId, file(bam) from BwaTumor_ch
 
     output:
+    set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
+     file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai") into MarkDuplicatesTumor0
     set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
      file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
      file("${TumorReplicateId}_aligned_sort_mkdp.txt") into MarkDuplicatesTumor1,
@@ -244,7 +243,9 @@ process 'MarkDuplicatesTumor' {
 
     script:
     """
+    mkdir -p ${params.tmpDir}
     $GATK4 MarkDuplicatesSpark \
+    --tmp-dir ${params.tmpDir} \
     -I ${bam} \
     -O ${TumorReplicateId}_aligned_sort_mkdp.bam \
     -M ${TumorReplicateId}_aligned_sort_mkdp.txt \
@@ -253,6 +254,43 @@ process 'MarkDuplicatesTumor' {
     --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
     """
 }
+
+process 'alignmentMetrics' {
+// Generate HS metrics using picard
+
+    tag "$TumorReplicateId"
+    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
+        mode: params.publishDirMode
+
+    input:
+    set TumorReplicateId, file(bam), file(bai) from MarkDuplicatesTumor0
+    set file(RefFasta), file(RefIdx), file(IntervalsList), file(BaitIntervalsList) from Channel.value(
+    [reference.RefFasta, reference.RefIdx, reference.IntervalsList, reference.BaitIntervalsList])
+
+
+    output:
+    file("${TumorReplicateId}.HS.metrics.txt")
+    file("${TumorReplicateId}.perTarget.coverage.txt")
+    file("${TumorReplicateId}.AS.metrics.txt")
+    file("${TumorReplicateId}.flagstat.txt")
+
+    script:
+    """
+    java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+        INPUT=${bam} \
+        OUTPUT=${TumorReplicateId}.HS.metrics.txt \
+        R=${RefFasta} \
+        BAIT_INTERVALS=${BaitIntervalsList} \
+        TARGET_INTERVALS=${IntervalsList} \
+        PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \
+    java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+        INPUT=${bam} \
+        OUTPUT=${TumorReplicateId}.AS.metrics.txt \
+        R=${RefFasta} &&
+    $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${TumorReplicateId}.flagstat.txt
+    """
+}
+
 
 if (readsControl != "NO_FILE" && single_end) {
     process 'BwaControlSinlge' {
@@ -268,8 +306,7 @@ if (readsControl != "NO_FILE" && single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam"),
-         file("${ControlReplicateId}_Control_aligned.bai") into BwaSortControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam") into BwaControl_ch
 
         script:
         """
@@ -278,8 +315,7 @@ if (readsControl != "NO_FILE" && single_end) {
         -M ${RefFasta} \
         -t ${task.cpus} \
         ${readsFWD} | \
-        $SAMTOOLS  view -Shb -o ${ControlReplicateId}_Control_aligned.bam - && \
-        $SAMTOOLS index ${ControlReplicateId}_Control_aligned.bam
+        $SAMTOOLS  view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
         """
     }
 } else if (readsControl != "NO_FILE" && !single_end) {
@@ -296,8 +332,7 @@ if (readsControl != "NO_FILE" && single_end) {
             [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam"),
-         file("${ControlReplicateId}_Control_aligned.bai") into BwaSortControl
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam") into BwaControl_ch
 
         script:
         """
@@ -307,8 +342,7 @@ if (readsControl != "NO_FILE" && single_end) {
         -t ${task.cpus} \
         ${readsFWD} \
         ${readsREV} | \
-        $SAMTOOLS view -Shb -o ${ControlReplicateId}_Control_aligned.bam - && \
-        $SAMTOOLS index ${ControlReplicateId}_Control_aligned.bam
+        $SAMTOOLS view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
         """
     }
 
@@ -320,23 +354,64 @@ if (readsControl != "NO_FILE" && single_end) {
          mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam), file(bai) from BwaSortControl
+        set ControlReplicateId, file(bam) from BwaControl_ch
 
         output:
         set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
+         file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai") into MarkDuplicatesControl0
+        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
          file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai"),
          file("${ControlReplicateId}_Control_aligned_sort_mkdp.txt") into MarkDuplicatesControl1,
-            MarkDuplicatesControl2
+             MarkDuplicatesControl2
 
         script:
         """
+        mkdir -p ${params.tmpDir}
         $GATK4 MarkDuplicatesSpark \
+        --tmp-dir ${params.tmpDir} \
         -I ${bam} \
         -O ${ControlReplicateId}_Control_aligned_sort_mkdp.bam \
         -M ${ControlReplicateId}_Control_aligned_sort_mkdp.txt \
         --create-output-bam-index true \
         --read-validation-stringency LENIENT \
         --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
+        """
+    }
+
+    process 'alignmentMetricsControl' {
+    // Generate HS metrics using picard
+
+        tag "$ControlReplicateId"
+        publishDir "$params.outputDir/$ControlReplicateId/02_QC/",
+         mode: params.publishDirMode
+
+        input:
+        set ControlReplicateId, file(bam), file(bai) from MarkDuplicatesControl0
+        set file(RefFasta), file(RefIdx), file(IntervalsList), file(BaitIntervalsList) from Channel.value(
+        [reference.RefFasta, reference.RefIdx, reference.IntervalsList, reference.BaitIntervalsList])
+
+
+        output:
+        file("${ControlReplicateId}_Control.HS.metrics.txt")
+        file("${ControlReplicateId}_Control.perTarget.coverage.txt")
+        file("${ControlReplicateId}_Control.AS.metrics.txt")
+        file("${ControlReplicateId}_Control.flagstat.txt")
+
+
+        script:
+        """
+        java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+            INPUT=${bam} \
+            OUTPUT=${ControlReplicateId}_Control.HS.metrics.txt \
+            R=${RefFasta} \
+            BAIT_INTERVALS=${BaitIntervalsList} \
+            TARGET_INTERVALS=${IntervalsList} \
+            PER_TARGET_COVERAGE=${ControlReplicateId}_Control.perTarget.coverage.txt && \
+        java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+            INPUT=${bam} \
+            OUTPUT=${ControlReplicateId}_Control.AS.metrics.txt \
+            R=${RefFasta} && \
+        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${ControlReplicateId}_Control.flagstat.txt
         """
     }
 }
@@ -371,7 +446,7 @@ process 'BaseRecalApplyTumor' {
     output:
     set TumorReplicateId, file("${TumorReplicateId}_bqsr.table") into BaseRecalibratorTumor
     set TumorReplicateId, file("${TumorReplicateId}_recal4.bam"),
-     file("${TumorReplicateId}_recal4.bai") into (ApplyTumor1, ApplyTumor2, ApplyTumor3,
+     file("${TumorReplicateId}_recal4.bam.bai") into (ApplyTumor1, ApplyTumor2, ApplyTumor3,
             ApplyTumor4, ApplyTumor5)
 
 
@@ -622,7 +697,7 @@ if (readsControl != 'NO_FILE') {
         set ControlReplicateId,
          file("${ControlReplicateId}_Control_bqsr.table") into BaseRecalibratorControl
         set ControlReplicateId, file("${ControlReplicateId}_Control_recal4.bam"),
-         file("${ControlReplicateId}_Control_recal4.bai") into ApplyControl1, ApplyControl2
+         file("${ControlReplicateId}_Control_recal4.bam.bai") into ApplyControl1, ApplyControl2
 
         script:
         """
@@ -633,7 +708,7 @@ if (readsControl != 'NO_FILE') {
          CREATE_INDEX=true \
          VALIDATION_STRINGENCY=LENIENT && \
         $GATK4 BaseRecalibratorSpark \
-         -I Control_fixed_bam \
+         -I Control_fixed.bam \
          -R ${RefFasta} \
          -L ${IntervalsList} \
          -O ${ControlReplicateId}_Control_bqsr.table \
@@ -647,7 +722,8 @@ if (readsControl != 'NO_FILE') {
          -L ${IntervalsList} \
          -O ${ControlReplicateId}_Control_recal4.bam \
          --bqsr-recal-file ${ControlReplicateId}_Control_bqsr.table \
-         --conf 'spark.executor.cores=${task.cpus}'
+         --conf 'spark.executor.cores=${task.cpus}' && \
+         sleep 20
         """
     }
 
@@ -871,7 +947,7 @@ process 'FixMateBaseRecalTumor' {
 
     script:
     """
-    java -XX:ParallelGCThreads=8 -jar $PICARD FixMateInformation \
+    java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
         I=${bam} \
         O=${TumorReplicateId}_fixmate.bam \
         CREATE_INDEX=true && \
@@ -993,7 +1069,7 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        java -XX:ParallelGCThreads=8 -jar $PICARD FixMateInformation \
+        java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
             I=${bam} \
             O=${ControlReplicateId}_fixmate.bam \
             CREATE_INDEX=true && \
@@ -1443,6 +1519,12 @@ ________________________________________________________________________________
 
 */
 
+def mkTmpDir() {
+    myTmpDir = file(params.tmpDir)
+    result = myTmpDir.mkdirs()
+    println result ? "tmpDir created: $myTmpDir" : "Cannot create directory: $myTmpDir"
+}
+
 def checkParamReturnFileReferences(item) {
     params."${item}" = params.references."${item}"
     return file(params."${item}")
@@ -1454,7 +1536,7 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 7) exit 1, """
+    if (params.references.size() != 8) exit 1, """
     ERROR: Not all References needed found in configuration
     Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
     """
@@ -1463,7 +1545,8 @@ def defineReference() {
         'RefIdx'       : checkParamReturnFileReferences("RefIdx"),
         'RefDict'    : checkParamReturnFileReferences("RefDict"),
         'BwaRef'     : checkParamReturnFileReferences("BwaRef"),
-        'IntervalsList': checkParamReturnFileReferences("IntervalsList"),
+        'IntervalsList' : checkParamReturnFileReferences("IntervalsList"),
+        'BaitIntervalsList' : checkParamReturnFileReferences("BaitIntervalsList"),
         'VepFasta'     : checkParamReturnFileReferences("VepFasta"),
         'IntervalsBed' : checkParamReturnFileReferences("IntervalsBed")
     ]
