@@ -1718,7 +1718,7 @@ process 'PrintReadsTumor' {
         -I ${bam} \
         -BQSR ${bqsr3} \
         -nct ${task.cpus} \
-    -o ${TumorReplicateId}_printreads.bam
+        -o ${TumorReplicateId}_printreads.bam
     """
 }
 
