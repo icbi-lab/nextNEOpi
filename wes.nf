@@ -116,6 +116,7 @@ database = defineDatabases()
 mkTmpDir()
 
 scatter_count = Channel.from(params.scatter_count)
+padding = params.readLength + 100
 
 BWA           = file(params.BWA)
 VARSCAN       = file(params.VARSCAN)
@@ -142,6 +143,68 @@ ________________________________________________________________________________
 **       P R E P R O C E S S I N G         **
 *********************************************
 */
+process 'BedToIntervalList' {
+    tag 'BedToIntervalList'
+
+    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefDict),
+        file(RegionsBed)
+    ) from Channel.value(
+        [ reference.RefDict,
+          reference.RegionsBed ]
+    )
+
+    output:
+    file(
+        "${RegionsBed.baseName}.list"
+    ) into intervals_from_bed_ch0
+
+    script:
+    """
+    $JAVA8 -jar $PICARD BedToIntervalList \
+        I=${RegionsBed} \
+        O=${RegionsBed.baseName}.list \
+        SD=$RefDict
+    """
+}
+
+process 'preprocessIntervalList' {
+    tag 'preprocessIntervalList'
+
+    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+    file(interval_list) from intervals_from_bed_ch0
+
+    output:
+    file(
+        "${interval_list.baseName}_merged_padded.list"
+    ) into intervals_merged_padded_ch
+
+    script:
+    """
+    $GATK4 PreprocessIntervals \
+        -R $RefFasta \
+        -L ${interval_list} \
+        --bin-length 0 \
+        --padding ${padding} \
+        --interval-merging-rule OVERLAPPING_ONLY \
+        -O ${interval_list.baseName}_merged_padded.list
+    """
+}
+
 process 'SplitIntervals' {
 // Splitting interval file in 20(default) files for scattering Mutect2
 
@@ -149,13 +212,28 @@ process 'SplitIntervals' {
     publishDir "$params.outputDir/SplitIntervals/", mode: params.publishDirMode
 
     input:
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict,
-        reference.IntervalsList])
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+    file(IntervalsList) from intervals_merged_padded_ch
+
     val x from scatter_count
 
     output:
-    file "${IntervalName}/*-scattered.interval_list" into interval_ch1, interval_ch2
+    file(
+        "${IntervalName}/*-scattered.interval_list"
+    ) into (
+        interval_ch1,
+        interval_ch2,
+        interval_ch3,
+        interval_ch4
+    )
 
     script:
     IntervalName = IntervalsList.baseName
@@ -166,6 +244,8 @@ process 'SplitIntervals' {
         --tmp-dir ${params.tmpDir} \
         -R ${RefFasta}  \
         -scatter ${x} \
+        --interval-merging-rule ALL \
+        --subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW \
         -L ${IntervalsList} \
         -O ${IntervalName}
     """
@@ -176,16 +256,32 @@ if (single_end) {
     // Aligning tumor reads to reference, sort and index; create BAMs
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(readsFWD) from tumor_ch
-        set file(RefFasta), file(RefIdx), file(RefDict), file(BwaRef) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
+        set(
+            TumorReplicateId,
+            file(readsFWD)
+        ) from tumor_ch
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(BwaRef)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.BwaRef ]
+        )
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam") into BwaTumor_ch
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_aligned.bam")
+        ) into BwaTumor_ch
 
         script:
         """
@@ -206,12 +302,28 @@ if (single_end) {
          mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(readsFWD), file(readsREV) from tumor_ch
-        set file(RefFasta), file(RefIdx), file(RefDict), file(BwaRef) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
+        set(
+            TumorReplicateId,
+            file(readsFWD),
+            file(readsREV)
+        ) from tumor_ch
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(BwaRef)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.BwaRef ]
+        )
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_aligned.bam") into BwaTumor_ch
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_aligned.bam")
+        ) into BwaTumor_ch
 
         script:
         """
@@ -230,19 +342,31 @@ process 'MarkDuplicatesTumor' {
 // Mark duplicates with Picard
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-     mode: params.publishDirMode
+        mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam) from BwaTumor_ch
+    set(
+        TumorReplicateId, file(bam)
+    ) from BwaTumor_ch
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-     file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai") into MarkDuplicatesTumor0
-    set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-     file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
-     file("${TumorReplicateId}_aligned_sort_mkdp.txt") into MarkDuplicatesTumor1,
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
+        file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai") 
+    ) into MarkDuplicatesTumor0
+
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
+        file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
+        file("${TumorReplicateId}_aligned_sort_mkdp.txt")
+    ) into (
+        MarkDuplicatesTumor1,
         MarkDuplicatesTumor2
+    )
 
     script:
     """
@@ -263,13 +387,28 @@ process 'alignmentMetrics' {
 // Generate HS metrics using picard
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
         mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam), file(bai) from MarkDuplicatesTumor0
-    set file(RefFasta), file(RefIdx), file(IntervalsList), file(BaitIntervalsList) from Channel.value(
-    [reference.RefFasta, reference.RefIdx, reference.IntervalsList, reference.BaitIntervalsList])
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from MarkDuplicatesTumor0
+    
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(IntervalsList),
+        file(BaitIntervalsList)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.IntervalsList,
+          reference.BaitIntervalsList ]
+    )
 
 
     output:
@@ -304,24 +443,41 @@ if (readsControl != "NO_FILE" && single_end) {
     // Aligning control reads to reference, sort and index; create BAMs
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/1_preprocessing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(readsFWD) from control_ch
-        set file(RefFasta), file(RefIdx), file(RefDict), file(BwaRef) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
+        set(
+            ControlReplicateId,
+            file(readsFWD)
+        ) from control_ch
+        
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(BwaRef)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.BwaRef ]
+        )
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam") into BwaControl_ch
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned.bam")
+        ) into BwaControl_ch
 
         script:
         """
         $BWA mem \
-        -R "@RG\\tID:${ControlReplicateId}\\tLB:${ControlReplicateId}\\tSM:${ControlReplicateId}\\tPL:ILLUMINA" \
-        -M ${RefFasta} \
-        -t ${task.cpus} \
-        ${readsFWD} | \
+            -R "@RG\\tID:${ControlReplicateId}\\tLB:${ControlReplicateId}\\tSM:${ControlReplicateId}\\tPL:ILLUMINA" \
+            -M ${RefFasta} \
+            -t ${task.cpus} \
+            ${readsFWD} | \
         $SAMTOOLS  view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
         """
     }
@@ -330,25 +486,44 @@ if (readsControl != "NO_FILE" && single_end) {
     // Aligning control reads to reference, sort and index; create BAMs
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/01_preprocessing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(readsFWD), file(readsREV) from control_ch
-        set file(RefFasta), file(RefIdx), file(RefDict), file(BwaRef) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.BwaRef])
+        set(
+            ControlReplicateId,
+            file(readsFWD),
+            file(readsREV)
+        ) from control_ch
+        
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(BwaRef)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.BwaRef
+            ]
+        )
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned.bam") into BwaControl_ch
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned.bam")
+        ) into BwaControl_ch
 
         script:
         """
         $BWA mem \
-        -R "@RG\\tID:${ControlReplicateId}\\tLB:${ControlReplicateId}\\tSM:${ControlReplicateId}\\tPL:ILLUMINA" \
-        -M ${RefFasta} \
-        -t ${task.cpus} \
-        ${readsFWD} \
-        ${readsREV} | \
+            -R "@RG\\tID:${ControlReplicateId}\\tLB:${ControlReplicateId}\\tSM:${ControlReplicateId}\\tPL:ILLUMINA" \
+            -M ${RefFasta} \
+            -t ${task.cpus} \
+            ${readsFWD} \
+            ${readsREV} | \
         $SAMTOOLS view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
         """
     }
@@ -357,19 +532,32 @@ if (readsControl != "NO_FILE" && single_end) {
     // Mark duplicates with Picard
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/01_preprocessing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam) from BwaControl_ch
+        set(
+            ControlReplicateId,
+            file(bam)
+        ) from BwaControl_ch
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
-         file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai") into MarkDuplicatesControl0
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
-         file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai"),
-         file("${ControlReplicateId}_Control_aligned_sort_mkdp.txt") into MarkDuplicatesControl1,
-             MarkDuplicatesControl2
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai")
+        ) into MarkDuplicatesControl0
+
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai"),
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp.txt")
+        ) into (
+            MarkDuplicatesControl1,
+            MarkDuplicatesControl2
+        )
 
         script:
         """
@@ -390,13 +578,28 @@ if (readsControl != "NO_FILE" && single_end) {
     // Generate HS metrics using picard
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/02_QC/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam), file(bai) from MarkDuplicatesControl0
-        set file(RefFasta), file(RefIdx), file(IntervalsList), file(BaitIntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.IntervalsList, reference.BaitIntervalsList])
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai)
+        ) from MarkDuplicatesControl0
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(IntervalsList),
+            file(BaitIntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.IntervalsList,
+              reference.BaitIntervalsList ]
+        )
 
 
         output:
@@ -441,24 +644,63 @@ process 'BaseRecalApplyTumor' {
 */
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-     mode: params.publishDirMode
+        mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam), file(bai), file(list) from MarkDuplicatesTumor1
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-    set file(MillsGold), file(MillsGoldIdx), file(DBSNP), file(DBSNPIdx),
-        file(KnownIndels), file(KnownIndelsIdx) from Channel.value(
-                [database.MillsGold, database.MillsGoldIdx,
-                database.DBSNP, database.DBSNPIdx,
-                database.KnownIndels, database.KnownIndelsIdx])
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai),
+        file(list)
+    ) from MarkDuplicatesTumor1
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict), 
+        file(IntervalsList)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.IntervalsList ]
+    )
+
+    set(
+        file(MillsGold),
+        file(MillsGoldIdx),
+        file(DBSNP),
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx)
+    ) from Channel.value(
+        [ database.MillsGold,
+          database.MillsGoldIdx,
+          database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx ]
+    )
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_bqsr.table") into BaseRecalibratorTumor
-    set TumorReplicateId, file("${TumorReplicateId}_recal4.bam"),
-     file("${TumorReplicateId}_recal4.bam.bai") into (ApplyTumor1, ApplyTumor2, ApplyTumor3,
-            ApplyTumor4, ApplyTumor5)
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_bqsr.table")
+    ) into BaseRecalibratorTumor
+
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_recal4.bam"),
+        file("${TumorReplicateId}_recal4.bam.bai")
+    ) into (
+        ApplyTumor1,
+        ApplyTumor2,
+        ApplyTumor3,
+        ApplyTumor4,
+        ApplyTumor5
+    )
 
 
     script:
@@ -471,6 +713,7 @@ process 'BaseRecalApplyTumor' {
         I=${bam} \
         O=fixed.bam \
         CREATE_INDEX=true \
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
         VALIDATION_STRINGENCY=LENIENT && \
     $GATK4 BaseRecalibratorSpark \
         --tmp-dir ${params.tmpDir} \
@@ -497,18 +740,35 @@ process 'GetPileupTumor' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-     mode: params.publishDirMode
+        mode: params.publishDirMode
 
     input:
-    set file(GnomAD), file(GnomADIdx) from Channel.value(
-        [database.GnomAD, database.GnomADIdx])
+    set(
+        file(GnomAD),
+        file(GnomADIdx)
+    ) from Channel.value(
+        [ database.GnomAD,
+          database.GnomADIdx ]
+    )
+    
     file(IntervalsList) from Channel.value([reference.IntervalsList])
-    set TumorReplicateId, file(bam), file(bai) from ApplyTumor1
+    
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from ApplyTumor1
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_pileup.table") into PileupTumor1,
-     PileupTumor2
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_pileup.table")
+    ) into (
+        PileupTumor1,
+        PileupTumor2
+    )
 
     script:
     """
@@ -530,20 +790,55 @@ process 'AnalyzeCovariates' {
 */
 
     tag "$TumorReplicateId"
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/", mode: params.publishDirMode
+
+    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
+        mode: params.publishDirMode
 
     input:
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-    set file(DBSNP), file(DBSNPIdx), file(KnownIndels), file(KnownIndelsIdx),
-        file(MillsGold), file(MillsGoldIdx) from Channel.value(
-        [database.DBSNP, database.DBSNPIdx, database.KnownIndels,
-        database.KnownIndelsIdx, database.MillsGold, database.MillsGoldIdx])
-    set TumorReplicateId, file(recalTable) from BaseRecalibratorTumor
-    set TumorReplicateId, file(bam), file(bai) from ApplyTumor2
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(IntervalsList)
+    ) from Channel.value(
+         [reference.RefFasta,
+         reference.RefIdx,
+         reference.RefDict,
+         reference.IntervalsList ]
+    )
+
+    set(
+        file(DBSNP), 
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx),
+        file(MillsGold),
+        file(MillsGoldIdx)
+    ) from Channel.value(
+         [database.DBSNP,
+         database.DBSNPIdx,
+         database.KnownIndels,
+         database.KnownIndelsIdx,
+         database.MillsGold,
+         database.MillsGoldIdx ]
+    )
+
+    set(
+        TumorReplicateId,
+        file(recalTable)
+    ) from BaseRecalibratorTumor
+
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from ApplyTumor2
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_postbqsr.table") into AnalyzeCovariates
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_postbqsr.table")
+    ) into AnalyzeCovariates
 
     script:
     """
@@ -574,15 +869,34 @@ process 'CollectSequencingArtifactMetrics' {
 */
 
     tag "$TumorReplicateId"
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/", mode: params.publishDirMode
+
+    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
+        mode: params.publishDirMode
 
     input:
-    set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict])
-    set TumorReplicateId, file(bam), file(bai) from ApplyTumor3
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from ApplyTumor3
 
     output:
-    file("${TumorReplicateId}.pre_adapter_detail_metrics") into (CollectSequencingArtifactMetrics1, CollectSequencingArtifactMetrics2)
+    file(
+        "${TumorReplicateId}.pre_adapter_detail_metrics"
+    ) into (
+        CollectSequencingArtifactMetrics1,
+        CollectSequencingArtifactMetrics2
+    )
 
     script:
     """
@@ -601,19 +915,38 @@ if (readsControl == "NO_FILE") {
     // Call somatic SNPs and indels via local re-assembly of haplotypes; only tumor sample
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
-        set TumorReplicateId, file(Tumorbam), file(Tumorbai),
-            file(IntervalsList) from ApplyTumor4.combine(interval_ch1.flatten())
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            file(Tumorbam),
+            file(Tumorbai),
+            file(IntervalsList)
+        ) from ApplyTumor4
+            .combine(
+                interval_ch1.flatten()
+            )
 
         output:
         file("${IntervalsList}.vcf.gz") into Mutect2VcfTumor
         file("${IntervalsList}.vcf.gz.stats") into Mutect2StatsTumor
-        set TumorReplicateId, file("${IntervalsList}.vcf.gz.tbi") into Mutect2IdxTumor
+        set(
+            TumorReplicateId,
+            file("${IntervalsList}.vcf.gz.tbi")
+        ) into Mutect2IdxTumor
 
         script:
         """
@@ -632,17 +965,26 @@ if (readsControl == "NO_FILE") {
     // Merge scattered Mutect2 vcfs
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
+            mode: params.publishDirMode
 
         input:
         file(vcf) from Mutect2VcfTumor.collect()
         file(stats) from Mutect2StatsTumor.collect()
-        set TumorReplicateId, file(idx) from Mutect2IdxTumor.groupTuple()
+
+        set(
+            TumorReplicateId,
+            file(idx)
+        ) from Mutect2IdxTumor.groupTuple()
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_mutect2_raw.vcf.gz"),
-        file("${TumorReplicateId}_mutect2_raw.vcf.gz.tbi"),
-        file("${TumorReplicateId}_mutect2_raw.vcf.gz.stats") into mutect2Tumor
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_mutect2_raw.vcf.gz"),
+            file("${TumorReplicateId}_mutect2_raw.vcf.gz.tbi"),
+            file("${TumorReplicateId}_mutect2_raw.vcf.gz.stats")
+        ) into mutect2Tumor
 
         script:
         """
@@ -671,18 +1013,41 @@ if (readsControl == "NO_FILE") {
     */
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
+            mode: params.publishDirMode
 
         input:
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
-        set TumorReplicateId, file(pileup) from PileupTumor1
-        set TumorReplicateId, file(vcf), file(vcfIdx), file(vcfStats) from mutect2Tumor
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            file(pileup)
+        ) from PileupTumor1
+
+        set(
+            TumorReplicateId,
+            file(vcf),
+            file(vcfIdx),
+            file(vcfStats)
+        ) from mutect2Tumor
+
         file(preAdapterDetail) from CollectSequencingArtifactMetrics1
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_mutect2_final.vcf.gz"),
-            file("${TumorReplicateId}_mutect2_final.vcf.gz.tbi") into FilterMutect2Tumor
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_mutect2_final.vcf.gz"),
+            file("${TumorReplicateId}_mutect2_final.vcf.gz.tbi")
+        ) into FilterMutect2Tumor
 
         script:
         """
@@ -729,24 +1094,60 @@ if (readsControl != 'NO_FILE') {
     */
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/03_mutect2/processing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam), file(bai), file(list) from MarkDuplicatesControl1
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-        set file(MillsGold), file(MillsGoldIdx), file(DBSNP), file(DBSNPIdx),
-         file(KnownIndels), file(KnownIndelsIdx) from Channel.value(
-                    [database.MillsGold, database.MillsGoldIdx,
-                    database.DBSNP, database.DBSNPIdx,
-                    database.KnownIndels, database.KnownIndelsIdx])
+        set(
+            ControlReplicateId,
+            file(bam), file(bai),
+            file(list)
+        ) from MarkDuplicatesControl1
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsList
+            ]
+        )
+
+        set(
+            file(MillsGold),
+            file(MillsGoldIdx),
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(KnownIndels),
+            file(KnownIndelsIdx)
+        ) from Channel.value(
+            [ database.MillsGold,
+              database.MillsGoldIdx,
+              database.DBSNP,
+              database.DBSNPIdx,
+              database.KnownIndels,
+              database.KnownIndelsIdx ]
+        )
 
         output:
-        set ControlReplicateId,
-         file("${ControlReplicateId}_Control_bqsr.table") into BaseRecalibratorControl
-        set ControlReplicateId, file("${ControlReplicateId}_Control_recal4.bam"),
-         file("${ControlReplicateId}_Control_recal4.bam.bai") into ApplyControl1, ApplyControl2
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_bqsr.table")
+        ) into BaseRecalibratorControl
+
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_recal4.bam"),
+            file("${ControlReplicateId}_Control_recal4.bam.bai")
+        ) into (
+            ApplyControl1,
+            ApplyControl2
+        )
 
         script:
         """
@@ -758,6 +1159,7 @@ if (readsControl != 'NO_FILE') {
             I=${bam} \
             O=Control_fixed.bam \
             CREATE_INDEX=true \
+            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
             VALIDATION_STRINGENCY=LENIENT && \
         $GATK4 BaseRecalibratorSpark \
             --tmp-dir ${params.tmpDir} \
@@ -784,17 +1186,32 @@ if (readsControl != 'NO_FILE') {
     // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/03_mutect2/processing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set file(GnomAD), file(GnomADIdx) from Channel.value(
-            [database.GnomAD, database.GnomADIdx])
+        set(
+            file(GnomAD),
+            file(GnomADIdx)
+        ) from Channel.value(
+            [ database.GnomAD,
+              database.GnomADIdx ]
+        )
+        
         file(intervals) from Channel.value([reference.IntervalsList])
-        set ControlReplicateId, file(bam), file(bai) from ApplyControl1
+
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai)
+        ) from ApplyControl1
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_pileup.table") into PileupControl
+        set(
+            ControlReplicateId, 
+            file("${ControlReplicateId}_Control_pileup.table")
+        ) into PileupControl
 
         script:
         """
@@ -815,21 +1232,45 @@ if (readsControl != 'NO_FILE') {
      and matched normal sample 
     */
 
-        tag "$TumorreplicateId"
+        tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
          mode: params.publishDirMode
 
         input:
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
-        set TumorReplicateId, file(Tumorbam), file(Tumorbai),
-            ControlReplicateId, file(Controlbam), file(Controlbai),
-            file(intervals) from ApplyTumor5.combine(ApplyControl2).combine(interval_ch2.flatten())
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            file(Tumorbam),
+            file(Tumorbai),
+            ControlReplicateId,
+            file(Controlbam),
+            file(Controlbai),
+            file(intervals)
+        ) from ApplyTumor5
+            .combine(ApplyControl2)
+            .combine(
+                interval_ch2.flatten()
+            )
 
         output:
         file("${intervals}.vcf.gz") into Mutect2Vcf
         file("${intervals}.vcf.gz.stats") into Mutect2Stats
-        set TumorReplicateId, ControlReplicateId, file("${intervals}.vcf.gz.tbi") into Mutect2Idx
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${intervals}.vcf.gz.tbi")
+        ) into Mutect2Idx
 
         script:
         """
@@ -849,19 +1290,29 @@ if (readsControl != 'NO_FILE') {
     // Merge scattered Mutect2 vcfs
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
         file(vcf) from Mutect2Vcf.collect()
         file (stats) from Mutect2Stats.collect()
-        set TumorReplicateId, ControlReplicateId, file(idx) from Mutect2Idx.groupTuple(by: [0,1])
+        
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(idx)
+        ) from Mutect2Idx
+            .groupTuple(by: [0,1])
 
         output:
-        set TumorReplicateId, ControlReplicateId,
-         file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz"),
-             file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.tbi"),
-             file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.stats") into mutect2
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz"),
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.tbi"),
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz.stats")
+        ) into mutect2
 
         script:
         """
@@ -890,22 +1341,48 @@ if (readsControl != 'NO_FILE') {
     */
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
-        set TumorReplicateId, file(pileupTumor) from PileupTumor2
-        set ControlReplicateId, file(pileupControl) from PileupControl
-        set TumorReplicateId, ControlReplicateId, file(vcf), file(vcfIdx),
-         file(vcfStats) from mutect2
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            file(pileupTumor)
+        ) from PileupTumor2
+
+        set(
+            ControlReplicateId,
+            file(pileupControl)
+        ) from PileupControl
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(vcf),
+            file(vcfIdx),
+            file(vcfStats)
+        ) from mutect2
+
         file(preAdapterDetail) from CollectSequencingArtifactMetrics2
 
         output:
-        set TumorReplicateId, ControlReplicateId,
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
             file("${TumorReplicateId}_${ControlReplicateId}_mutect2_final.vcf.gz"),
-            file("${TumorReplicateId}_${ControlReplicateId}_mutect2_final.vcf.gz.tbi") into FilterMutect2
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect2_final.vcf.gz.tbi")
+        ) into FilterMutect2
 
         script:
         """
@@ -950,12 +1427,13 @@ if (readsControl != 'NO_FILE') {
 *********************************************
 */
 
-process 'IndelRealignerTumor' {
+
+//process 'IndelRealignerTumor' {
 /* 
  RealignerTargetCreator (GATK3): define intervals to target for local realignment
  IndelRealigner (GATK3): perform local realignment of reads around indels
 */
-
+/*
     tag "$TumorReplicateId"
     publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
      mode: params.publishDirMode
@@ -998,6 +1476,121 @@ process 'IndelRealignerTumor' {
     """
 }
 
+*/
+
+process 'IndelRealignerTumorIntervals' {
+/* 
+ RealignerTargetCreator (GATK3): define intervals to target for local realignment
+ IndelRealigner (GATK3): perform local realignment of reads around indels
+*/
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai),
+        file(list)
+    ) from MarkDuplicatesTumor2
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        file(KnownIndels),
+        file(KnownIndelsIdx),
+        file(MillsGold),
+        file(MillsGoldIdx)
+    ) from Channel.value(
+        [ database.KnownIndels,
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
+    )
+
+    each file(interval) from interval_ch3.flatten()
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_aligned_sort_mkdp_realign_${interval}.bam"),
+        file("${TumorReplicateId}_aligned_sort_mkdp_realign_${interval}.bai")
+    ) into IndelRealignerTumorIntervals
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        -T RealignerTargetCreator \
+        --known ${MillsGold} \
+        --known ${KnownIndels} \
+        -R ${RefFasta} \
+        -L ${interval} \
+        -I ${bam} \
+        -o ${interval}_target.list \
+        -nt ${task.cpus} && \
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        -T IndelRealigner \
+        -R ${RefFasta} \
+        -L ${interval} \
+        -I ${bam} \
+        -targetIntervals ${interval}_target.list \
+        -known ${KnownIndels} \
+        -known ${MillsGold} \
+        -nWayOut _realign_${interval}.bam && \
+    rm ${interval}_target.list
+    """
+}
+
+process 'MergeRealignedBamFilesTumor' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from IndelRealignerTumorIntervals
+        .collect()
+        .flatten()
+        .collate(3)
+        .groupTuple(by: 0)
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_aligned_sort_mkdp_realign.bam"),
+        file("${TumorReplicateId}_aligned_sort_mkdp_realign.bai") 
+    ) into IndelRealignerTumor
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    java -jar $PICARD MergeSamFiles \
+            TMP_DIR=${params.tmpDir} \
+            I=${bam.join(" I=")} \
+            O=${TumorReplicateId}_aligned_sort_mkdp_realign.bam \
+            CREATE_INDEX=true \
+            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
+            USE_THREADING=true
+    """
+}
+
 process 'FixMateBaseRecalTumor' {
 /*
  FixMateInformation (Picard): verify mate-pair information between mates; ensure that
@@ -1005,22 +1598,52 @@ process 'FixMateBaseRecalTumor' {
 */
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
-     mode: params.publishDirMode
+        mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam), file(bai) from IndelRealignerTumor
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-    set file(DBSNP), file(DBSNPIdx), file(KnownIndels), file(KnownIndelsIdx),
-        file(MillsGold), file(MillsGoldIdx) from Channel.value(
-        [database.DBSNP, database.DBSNPIdx, database.KnownIndels,
-        database.KnownIndelsIdx, database.MillsGold, database.MillsGoldIdx])
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from IndelRealignerTumor
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(IntervalsList)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.IntervalsList ]
+    )
+
+    set(
+        file(DBSNP),
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx),
+        file(MillsGold),
+        file(MillsGoldIdx)
+    ) from Channel.value(
+        [ database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
+    )
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_fixmate.bam"),
-     file("${TumorReplicateId}_fixmate.bai"),
-     file("${TumorReplicateId}_bqsr3.table") into FixMateBaseRecalTumor
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_fixmate.bam"),
+        file("${TumorReplicateId}_fixmate.bai"),
+        file("${TumorReplicateId}_bqsr3.table")
+    ) into FixMateBaseRecalTumor
 
     script:
     """
@@ -1030,6 +1653,7 @@ process 'FixMateBaseRecalTumor' {
         TMP_DIR=${params.tmpDir} \
         I=${bam} \
         O=${TumorReplicateId}_fixmate.bam \
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
         CREATE_INDEX=true && \
     $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
         -T BaseRecalibrator \
@@ -1048,40 +1672,64 @@ process 'PrintReadsTumor' {
 // PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
 
     tag "$TumorReplicateId"
+
     publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing",
-     mode: params.publishDirMode
+        mode: params.publishDirMode
 
     input:
-    set TumorReplicateId, file(bam), file(bai), file(bqsr3) from FixMateBaseRecalTumor
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai),
+        file(bqsr3)
+    ) from FixMateBaseRecalTumor
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(IntervalsList)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.IntervalsList ]
+    )
 
     output:
-    set TumorReplicateId, file("${TumorReplicateId}_printreads.bam"),
-     file("${TumorReplicateId}_printreads.bai") into PrintReadsTumor1, PrintReadsTumor2,
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_printreads.bam"),
+        file("${TumorReplicateId}_printreads.bai")
+    ) into ( 
+        PrintReadsTumor1,
+        PrintReadsTumor2,
         PrintReadsTumor3
+    )
 
     script:
     """
-    $JAVA8 -jar $GATK3  \
-    -T PrintReads \
-    -R ${RefFasta} \
-    -L ${IntervalsList} \
-    -I ${bam} \
-    -BQSR ${bqsr3} \
-    -nct ${task.cpus} \
+    mkdir -p ${params.tmpDir}
+
+    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
+        -T PrintReads \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -I ${bam} \
+        -BQSR ${bqsr3} \
+        -nct ${task.cpus} \
     -o ${TumorReplicateId}_printreads.bam
     """
 }
 
 if (readsControl != "NO_FILE") {
 
-    process 'IndelRealignerControl' {
+    //process 'IndelRealignerControl' {
     /*
      RealignerTargetCreator (GATK3): define intervals to target for local realignment
      IndelRealigner (GATK3): perform local realignment of reads around indels
     */
-
+/*
         tag "$ControlReplicateId"
         publishDir "$params.outputDir/$ControlReplicateId/05_varscan/processing/",
          mode: params.publishDirMode
@@ -1124,6 +1772,125 @@ if (readsControl != "NO_FILE") {
         rm target.list
         """
     }
+*/
+    //////////////////////
+    process 'IndelRealignerControlIntervals' {
+    /* 
+    RealignerTargetCreator (GATK3): define intervals to target for local realignment
+    IndelRealigner (GATK3): perform local realignment of reads around indels
+    */
+
+        tag "$ControlReplicateId"
+
+        input:
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai),
+            file(list)
+        ) from MarkDuplicatesControl2
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            file(KnownIndels),
+            file(KnownIndelsIdx),
+            file(MillsGold),
+            file(MillsGoldIdx)
+        ) from Channel.value(
+            [ database.KnownIndels,
+              database.KnownIndelsIdx,
+              database.MillsGold,
+              database.MillsGoldIdx ]
+        )
+
+        each file(interval) from interval_ch4.flatten()
+
+        output:
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign_${interval}.bam"),
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign_${interval}.bai")
+        ) into IndelRealignerControlIntervals
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+            -T RealignerTargetCreator \
+            --known ${MillsGold} \
+            --known ${KnownIndels} \
+            -R ${RefFasta} \
+            -L ${interval} \
+            -I ${bam} \
+            -o ${interval}_Control_target.list \
+            -nt ${task.cpus} && \
+        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+            -T IndelRealigner \
+            -R ${RefFasta} \
+            -L ${interval} \
+            -I ${bam} \
+            -targetIntervals ${interval}_Control_target.list \
+            -known ${KnownIndels} \
+            -known ${MillsGold} \
+            -nWayOut _realign_${interval}.bam && \
+        rm ${interval}_Control_target.list
+        """
+    }
+
+    process 'MergeRealignedBamFilesControl' {
+
+        tag "$ControlReplicateId"
+
+        publishDir "$params.outputDir/$ControlReplicateId/05_varscan/processing/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai)
+        ) from IndelRealignerControlIntervals
+            .collect()
+            .flatten()
+            .collate(3)
+            .groupTuple(by: 0)
+
+        output:
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam"),
+            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bai") 
+        ) into IndelRealignerControl
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        java -jar $PICARD MergeSamFiles \
+                TMP_DIR=${params.tmpDir} \
+                I=${bam.join(" I=")} \
+                O=${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam \
+                CREATE_INDEX=true \
+                MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
+                USE_THREADING=true
+        """
+    }
+
+
+    //////////////////////
+
+
 
     process 'FixMateBaseRecalControl' {
     /*
@@ -1136,28 +1903,58 @@ if (readsControl != "NO_FILE") {
          mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam), file(bai) from IndelRealignerControl
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-        set file(DBSNP), file(DBSNPIdx), file(KnownIndels), file(KnownIndelsIdx),
-            file(MillsGold), file(MillsGoldIdx) from Channel.value(
-            [database.DBSNP, database.DBSNPIdx, database.KnownIndels, database.KnownIndelsIdx,
-            database.MillsGold, database.MillsGoldIdx])
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai)
+        ) from IndelRealignerControl
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsList ]
+        )
+
+        set(
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(KnownIndels),
+            file(KnownIndelsIdx),
+            file(MillsGold),
+            file(MillsGoldIdx)
+        ) from Channel.value(
+            [ database.DBSNP,
+              database.DBSNPIdx,
+              database.KnownIndels,
+              database.KnownIndelsIdx,
+              database.MillsGold, database.MillsGoldIdx ]
+        )
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_fixmate.bam"),
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_fixmate.bam"),
             file("${ControlReplicateId}_Control_fixmate.bai"),
-             file("${ControlReplicateId}_Control_bqsr3.table") into FixMateBaseRecalControl
+            file("${ControlReplicateId}_Control_bqsr3.table")
+        ) into FixMateBaseRecalControl
 
         script:
         """
         mkdir -p ${params.tmpDir}
+
         java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
             TMP_DIR=${params.tmpDir} \
             I=${bam} \
-            O=${ControlReplicateId}_fixmate.bam \
+            O=${ControlReplicateId}_Control_fixmate.bam \
+            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
             CREATE_INDEX=true && \
-            $JAVA8 -jar $GATK3\
+        $JAVA8 -jar $GATK3\
             -T BaseRecalibrator \
             -R ${RefFasta} \
             -L ${IntervalsList} \
@@ -1174,18 +1971,39 @@ if (readsControl != "NO_FILE") {
     // PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
 
         tag "$ControlReplicateId"
+
         publishDir "$params.outputDir/$ControlReplicateId/05_varscan/processing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set ControlReplicateId, file(bam), file(bai), file(bqsr3) from FixMateBaseRecalControl
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai),
+            file(bqsr3)
+        ) from FixMateBaseRecalControl
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsList ]
+        )
 
         output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_printreads.bam"),
-         file("${ControlReplicateId}_Control_printreads.bai") into PrintReadsControl1,
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_Control_printreads.bam"),
+            file("${ControlReplicateId}_Control_printreads.bai")
+        ) into (
+            PrintReadsControl1,
             PrintReadsControl2
+        )
 
         script:
         """
@@ -1206,28 +2024,58 @@ if (readsControl != "NO_FILE") {
     // ReorderSam (Picard): reorders reads to match the contig order in a reference file
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor1
-        set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl1
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
+        set(
+            TumorReplicateId,
+            file(bamTumor),
+            file(baiTumor)
+        ) from PrintReadsTumor1
+
+        set(
+            ControlReplicateId,
+            file(bamControl),
+            file(baiControl)
+        ) from PrintReadsControl1
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
 
         output:
-        set TumorReplicateId, file("${TumorReplicateId}_reorder_tumor.bam"),
-         file("${TumorReplicateId}_reorder_tumor.bai") into ReorderSamTumor1, ReorderSamTumor2
-        set ControlReplicateId, file("${ControlReplicateId}_reorder_control.bam"),
-         file("${ControlReplicateId}_reorder_control.bai") into ReorderSamControl
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_reorder_tumor.bam"),
+            file("${TumorReplicateId}_reorder_tumor.bai")
+        ) into (
+            ReorderSamTumor1,
+            ReorderSamTumor2
+        )
+
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_reorder_control.bam"),
+            file("${ControlReplicateId}_reorder_control.bai")
+        ) into ReorderSamControl
 
         script:
         """
         mkdir -p ${params.tmpDir}
+
         java -jar $PICARD ReorderSam \
             TMP_DIR=${params.tmpDir} \
             SD=${RefDict} \
             INPUT=${bamTumor} \
+            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
             CREATE_INDEX=true \
             OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
         tumor_process_id=\$!
@@ -1240,8 +2088,8 @@ if (readsControl != "NO_FILE") {
             OUTPUT=${ControlReplicateId}_reorder_control.bam &
             control_process_id=\$!
 
-        wait $tumor_process_id
-        wait $control_process_id
+        wait \$tumor_process_id
+        wait \$control_process_id
         """
     }
 
@@ -1249,40 +2097,64 @@ if (readsControl != "NO_FILE") {
     // somatic (Varscan): calls somatic variants (SNPS and indels)
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/05_varscan/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/05_varscan/",
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(bamTumor), file(baiTumor) from ReorderSamTumor1
-        set ControlReplicateId, file(bamControl), file(baiControl) from ReorderSamControl
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsBed) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsBed])
+        set(
+            TumorReplicateId,
+            file(bamTumor),
+            file(baiTumor)
+        ) from ReorderSamTumor1
+
+        set(
+            ControlReplicateId,
+            file(bamControl),
+            file(baiControl)
+        ) from ReorderSamControl
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsBed)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsBed ]
+        )
 
         output:
-        set TumorReplicateId, ControlReplicateId,
-         file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.vcf"),
-         file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.vcf") into VarscanSomatic
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.vcf"),
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.vcf")
+        ) into VarscanSomatic
 
         script:
         """
         mkfifo ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo
         $SAMTOOLS mpileup \
-        -q ${params.q} \
-        -f ${RefFasta} \
-        -l ${IntervalsBed} \
-        ${bamControl} ${bamTumor} > ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo &
+            -q ${params.q} \
+            -f ${RefFasta} \
+            -l ${IntervalsBed} \
+            ${bamControl} ${bamTumor} > ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo &
         java -jar $VARSCAN somatic \
-        ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo \
-        ${TumorReplicateId}_${ControlReplicateId}_varscan \
-        --output-vcf 1 \
-        --mpileup 1 \
-        --min-coverage ${params.min_cov} \
-        --min-coverage-normal ${params.min_cov_normal} \
-        --min-coverage-tumor ${params.min_cov_tumor} \
-        --min-freq-for-hom ${params.min_freq_for_hom} \
-        --tumor-purity ${params.tumor_purity} \
-        --p-value ${params.somatic_pvalue} \
-        --somatic-p-value ${params.somatic_somaticpvalue} \
-        --strand-filter ${params.strand_filter} && \
+            ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo \
+            ${TumorReplicateId}_${ControlReplicateId}_varscan \
+            --output-vcf 1 \
+            --mpileup 1 \
+            --min-coverage ${params.min_cov} \
+            --min-coverage-normal ${params.min_cov_normal} \
+            --min-coverage-tumor ${params.min_cov_tumor} \
+            --min-freq-for-hom ${params.min_freq_for_hom} \
+            --tumor-purity ${params.tumor_purity} \
+            --p-value ${params.somatic_pvalue} \
+            --somatic-p-value ${params.somatic_somaticpvalue} \
+            --strand-filter ${params.strand_filter} && \
         rm -f ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo
         """
     }
@@ -1291,40 +2163,53 @@ if (readsControl != "NO_FILE") {
     // Filter variants by somatic status and confidences
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, ControlReplicateId, file(snp), file(indel) from VarscanSomatic
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(snp),
+            file(indel)
+        ) from VarscanSomatic
 
         output:
-        set TumorReplicateId, ControlReplicateId,
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.LOH.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.LOH.hc.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Germline.vcf"),
-            file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Germline.hc.vcf") into ProcessSomaticSNP
-        set TumorReplicateId, ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Germline.hc.vcf")
+        ) into ProcessSomaticSNP
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.LOH.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.LOH.hc.vcf"),
             file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Germline.vcf"),
-            file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Germline.hc.vcf") into ProcessSomaticIndel
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Germline.hc.vcf")
+        ) into ProcessSomaticIndel
 
         script:
         """
         java -jar $VARSCAN processSomatic \
-        ${snp} \
-        --min-tumor-freq ${params.min_tumor_freq} \
-        --max-normal-freq ${params.max_normal_freq} \
-        --p-value ${params.processSomatic_pvalue} && \
+            ${snp} \
+            --min-tumor-freq ${params.min_tumor_freq} \
+            --max-normal-freq ${params.max_normal_freq} \
+            --p-value ${params.processSomatic_pvalue} && \
         java -jar $VARSCAN processSomatic \
-        ${indel} \
-        --min-tumor-freq ${params.min_tumor_freq} \
-        --max-normal-freq ${params.max_normal_freq} \
-        --p-value ${params.processSomatic_pvalue}
+            ${indel} \
+            --min-tumor-freq ${params.min_tumor_freq} \
+            --max-normal-freq ${params.max_normal_freq} \
+            --p-value ${params.processSomatic_pvalue}
         """
     }
 
@@ -1336,41 +2221,89 @@ if (readsControl != "NO_FILE") {
     */
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/05_varscan/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(bam), file(bai) from ReorderSamTumor2
-        set TumorReplicateId, ControlReplicateId, file(snpSomatic), file(snpSomaticHc),
-            file(snpLOH), file(snpLOHhc), file(snpGerm), file(snpGemHc) from ProcessSomaticSNP
-        set TumorReplicateId, ControlReplicateId, file(indelSomatic), file(indelSomaticHc),
-            file(indelLOH), file(indelLOHhc), file(indelGerm),
-            file(indelGemHc) from ProcessSomaticIndel
-        set file(RefFasta), file(RefIdx), file(RefDict) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict])
+        set(
+            TumorReplicateId,
+            file(bam),
+            file(bai)
+        ) from ReorderSamTumor2
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(snpSomatic),
+            file(snpSomaticHc),
+            file(snpLOH),
+            file(snpLOHhc),
+            file(snpGerm),
+            file(snpGemHc)
+        ) from ProcessSomaticSNP
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(indelSomatic),
+            file(indelSomaticHc),
+            file(indelLOH),
+            file(indelLOHhc),
+            file(indelGerm),
+            file(indelGemHc)
+        ) from ProcessSomaticIndel
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
 
         output:
-        set TumorReplicateId, ControlReplicateId,
-         file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf") into FilterSnp
-        set TumorReplicateId, ControlReplicateId,
-         file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf") into FilterIndel
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf")
+        ) into FilterSnp
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf")
+         ) into FilterIndel
 
         script:
         """
-        cat ${snpSomaticHc} | awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' |$BAMREADCOUNT \
-        -q${params.min_map_cov} -b${params.min_base_q} \
-        -w1 -l /dev/stdin \
-        -f ${RefFasta} ${bam} |java -jar $VARSCAN fpfilter \
-        ${snpSomaticHc} \
-        /dev/stdin \
-        --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf && \
-        cat ${indelSomaticHc} | awk '{if (! /^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' |$BAMREADCOUNT \
-        -q${params.min_map_cov} -b${params.min_base_q} \
-        -w1 -l /dev/stdin \
-        -f ${RefFasta} ${bam} |java -jar $VARSCAN fpfilter \
-        ${indelSomaticHc} \
-        /dev/stdin \
-        --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf
+        cat ${snpSomaticHc} | \
+        awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \
+        $BAMREADCOUNT \
+            -q${params.min_map_cov} \
+            -b${params.min_base_q} \
+            -w1 \
+            -l /dev/stdin \
+            -f ${RefFasta} \
+            ${bam} | \
+        java -jar $VARSCAN fpfilter \
+            ${snpSomaticHc} \
+            /dev/stdin \
+            --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf && \
+        cat ${indelSomaticHc} | \
+        awk '{if (! /^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \
+        $BAMREADCOUNT \
+            -q${params.min_map_cov} \
+            -b${params.min_base_q} \
+            -w1 \
+            -l /dev/stdin \
+            -f ${RefFasta} ${bam} | \
+        java -jar $VARSCAN fpfilter \
+            ${indelSomaticHc} \
+            /dev/stdin \
+            --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf
         """
     }
 }
@@ -1386,25 +2319,62 @@ if (readsControl != "NO_FILE") {
     // Mutect1: calls SNPS from tumor and matched normal sample
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/04_mutect1/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor2
-        set ControlReplicateId, file(bamControl), file(baiControl) from PrintReadsControl2
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-        set file(DBSNP), file(DBSNPIdx), file(Cosmic), file(CosmicIdx) from Channel.value(
-            [database.DBSNP, database.DBSNPIdx, database.Cosmic, database.CosmicIdx])
+        set(
+            TumorReplicateId,
+            file(bamTumor),
+            file(baiTumor)
+         ) from PrintReadsTumor2
+
+        set(
+            ControlReplicateId,
+            file(bamControl),
+            file(baiControl)
+        ) from PrintReadsControl2
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsList ]
+        )
+
+        set(
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(Cosmic),
+            file(CosmicIdx)
+        ) from Channel.value(
+            [ database.DBSNP,
+              database.DBSNPIdx,
+              database.Cosmic,
+              database.CosmicIdx ]
+        )
 
         output:
-        set TumorReplicateId, ControlReplicateId,
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
             file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz"),
             file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.vcf.gz.idx"),
-            file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt") into raw
-        set TumorReplicateId, ControlReplicateId,
-        file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz"),
-        file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz.tbi") into Mutect1filter
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect1.raw.stats.txt")
+        ) into raw
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz"),
+            file("${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz.tbi")
+        ) into Mutect1filter
 
         script:
         """
@@ -1435,28 +2405,58 @@ if (readsControl != "NO_FILE") {
             --output ${TumorReplicateId}_${ControlReplicateId}_mutect1_final.vcf.gz
         """
     }
-}else {
+} else {
     process 'MutectTumor' {
     // Mutect1: calls SNPS from tumor sample
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/04_mutect1/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/04_mutect1/",
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(bamTumor), file(baiTumor) from PrintReadsTumor3
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-        set file(DBSNP), file(DBSNPIdx), file(Cosmic), file(CosmicIdx) from Channel.value(
-            [database.DBSNP, database.DBSNPIdx, database.Cosmic, database.CosmicIdx])
+        set(
+            TumorReplicateId,
+            file(bamTumor),
+            file(baiTumor)
+        ) from PrintReadsTumor3
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              reference.IntervalsList ]
+        )
+        set(
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(Cosmic),
+            file(CosmicIdx)
+        ) from Channel.value(
+            [ database.DBSNP,
+              database.DBSNPIdx,
+              database.Cosmic,
+              database.CosmicIdx ]
+        )
 
         output:
-        set TumorReplicateId,
+        set(
+            TumorReplicateId,
             file("${TumorReplicateId}_mutect1.raw.vcf.gz"),
             file("${TumorReplicateId}_mutect1.raw.vcf.gz.idx")
-            file("${TumorReplicateId}_mutect1.raw.stats.txt") into Mutect1rawTumor
-        set TumorReplicateId,
+            file("${TumorReplicateId}_mutect1.raw.stats.txt")
+        ) into Mutect1rawTumor
+
+        set(
+            TumorReplicateId,
             file("${TumorReplicateId}_mutect1_final.vcf.gz"),
-            file("${TumorReplicateId}_mutect1_final.vcf.gz.tbi") into Mutect1filterTumor
+            file("${TumorReplicateId}_mutect1_final.vcf.gz.tbi")
+        ) into Mutect1filterTumor
 
         script:
         """
@@ -1490,121 +2490,153 @@ if (readsControl != "NO_FILE") {
 
 if (readsControl != "NO_FILE") {
     process 'Vep' {
-    //
+    // Variant Effect Prediction: using ensembl vep
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/06_vep/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/06_vep/",
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, ControlReplicateId, file(mutect2Vcf),
-            file(mutect2Idx) from FilterMutect2
-        set TumorReplicateId, ControlReplicateId, file(varscanSnp) from FilterSnp
-        set TumorReplicateId, ControlReplicateId, file(varscanIndel) from FilterIndel
-        set TumorReplicateId, ControlReplicateId, file(mutect1Vcf),
-        file(mutect1Idx) from Mutect1filter
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(mutect2Vcf),
+            file(mutect2Idx)
+        ) from FilterMutect2
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(varscanSnp)
+        ) from FilterSnp
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(varscanIndel)
+        ) from FilterIndel
+
+        set(
+            TumorReplicateId,
+            ControlReplicateId,
+            file(mutect1Vcf),
+            file(mutect1Idx)
+        ) from Mutect1filter
+
         file(VepFasta) from Channel.value([reference.VepFasta])
 
         script:
         """
         $PERL $VEP -i ${mutect1Vcf} \
-        -o ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
-        --format "vcf" \
-        --tab  && \
+            -o ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --fasta ${VepFasta} \
+            --format "vcf" \
+            --tab  && \
         $PERL $VEP -i ${mutect2Vcf} \
-        -o ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
-        --format "vcf" \
-        --tab  && \
+            -o ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --fasta ${VepFasta} \
+            --format "vcf" \
+            --tab  && \
         $PERL $VEP -i ${varscanSnp} \
-        -o ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --format "vcf" \
-        --tab  && \
+            -o ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --format "vcf" \
+            --tab  && \
         $PERL $VEP -i ${varscanIndel} \
-        -o ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --format "vcf" \
-        --tab && \
+            -o ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --format "vcf" \
+            --tab && \
         variant_sort.sh  \
-        -1 ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
-        -2 ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
-        -S ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
-        -I ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
-        -t ${TumorReplicateId} \
-        -c ${ControlReplicateId}
+            -1 ${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt \
+            -2 ${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt \
+            -S ${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt \
+            -I ${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt \
+            -t ${TumorReplicateId} \
+            -c ${ControlReplicateId}
         """
     }
 } else {
     process 'VepTumor' {
-    //
+    // Variant Effect Prediction: using ensembl vep
 
         tag "$TumorReplicateId"
-        publishDir "$params.outputDir/$TumorReplicateId/06_vep/", mode: params.publishDirMode
+
+        publishDir "$params.outputDir/$TumorReplicateId/06_vep/",
+            mode: params.publishDirMode
 
         input:
-        set TumorReplicateId, file(mutect2Vcf),
-            file(mutect2Idx) from FilterMutect2Tumor
-        set TumorReplicateId, file(mutect1Vcf),
-        file(mutect1Idx) from Mutect1filterTumor
+        set(
+            TumorReplicateId,
+            file(mutect2Vcf),
+            file(mutect2Idx)
+         ) from FilterMutect2Tumor
+
+        set(
+            TumorReplicateId,
+            file(mutect1Vcf),
+            file(mutect1Idx)
+        ) from Mutect1filterTumor
+        
         file(VepFasta) from Channel.value([reference.VepFasta])
 
         script:
         """
         $PERL $VEP -i ${mutect1Vcf} \
-        -o ${TumorReplicateId}_mutect1_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_mutect1_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
-        --format "vcf" \
-        --tab  && \
+            -o ${TumorReplicateId}_mutect1_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_mutect1_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --fasta ${VepFasta} \
+            --format "vcf" \
+            --tab  && \
         $PERL $VEP -i ${mutect2Vcf} \
-        -o ${TumorReplicateId}_mutect2_vep.txt \
-        --fork ${params.vep_threads} \
-        --stats_file ${TumorReplicateId}_mutect2_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --dir ${params.vep_dir} \
-        --cache --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
-        --format "vcf" \
-        --tab  && \
+            -o ${TumorReplicateId}_mutect2_vep.txt \
+            --fork ${params.vep_threads} \
+            --stats_file ${TumorReplicateId}_mutect2_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --dir ${params.vep_dir} \
+            --cache --dir_cache ${params.vep_cache} \
+            --fasta ${VepFasta} \
+            --format "vcf" \
+            --tab  && \
         variant_sort.sh \
-        -1 ${TumorReplicateId}_mutect1_vep.txt \
-        -2 ${TumorReplicateId}_mutect2_vep.txt \
-        -t ${TumorReplicateId}
+            -1 ${TumorReplicateId}_mutect1_vep.txt \
+            -2 ${TumorReplicateId}_mutect2_vep.txt \
+            -t ${TumorReplicateId}
         """
     }
 }
@@ -1634,38 +2666,39 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 8) exit 1, """
+    if (params.references.size() != 9) exit 1, """
     ERROR: Not all References needed found in configuration
     Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
     """
     return [
-        'RefFasta'   : checkParamReturnFileReferences("RefFasta"),
-        'RefIdx'       : checkParamReturnFileReferences("RefIdx"),
-        'RefDict'    : checkParamReturnFileReferences("RefDict"),
-        'BwaRef'     : checkParamReturnFileReferences("BwaRef"),
-        'IntervalsList' : checkParamReturnFileReferences("IntervalsList"),
+        'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
+        'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
+        'RefDict'           : checkParamReturnFileReferences("RefDict"),
+        'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
+        'IntervalsList'     : checkParamReturnFileReferences("IntervalsList"),
         'BaitIntervalsList' : checkParamReturnFileReferences("BaitIntervalsList"),
-        'VepFasta'     : checkParamReturnFileReferences("VepFasta"),
-        'IntervalsBed' : checkParamReturnFileReferences("IntervalsBed")
+        'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+        'IntervalsBed'      : checkParamReturnFileReferences("IntervalsBed"),
+        'RegionsBed'        : checkParamReturnFileReferences("RegionsBed")
     ]
 }
 
 def defineDatabases() {
-    if (params.databases.size() !=10) exit 1, """
+    if (params.databases.size() != 10) exit 1, """
     ERROR: Not all Databases needed found in configuration
     Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
     """
     return [
-    'MillsGold'   : checkParamReturnFileDatabases("MillsGold"),
-    'MillsGoldIdx'   : checkParamReturnFileDatabases("MillsGoldIdx"),
-    'Cosmic'      : checkParamReturnFileDatabases("Cosmic"),
-    'CosmicIdx'      : checkParamReturnFileDatabases("CosmicIdx"),
-    'DBSNP'       : checkParamReturnFileDatabases("DBSNP"),
-    'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
-    'GnomAD'      : checkParamReturnFileDatabases("GnomAD"),
-    'GnomADIdx'      : checkParamReturnFileDatabases("GnomADIdx"),
-    'KnownIndels' : checkParamReturnFileDatabases("KnownIndels"),
-    'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
+        'MillsGold'      : checkParamReturnFileDatabases("MillsGold"),
+        'MillsGoldIdx'   : checkParamReturnFileDatabases("MillsGoldIdx"),
+        'Cosmic'         : checkParamReturnFileDatabases("Cosmic"),
+        'CosmicIdx'      : checkParamReturnFileDatabases("CosmicIdx"),
+        'DBSNP'          : checkParamReturnFileDatabases("DBSNP"),
+        'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
+        'GnomAD'         : checkParamReturnFileDatabases("GnomAD"),
+        'GnomADIdx'      : checkParamReturnFileDatabases("GnomADIdx"),
+        'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
+        'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
     ]
 }
 
