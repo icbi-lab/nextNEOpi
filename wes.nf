@@ -32,6 +32,7 @@ ________________________________________________________________________________
 */
 if (params.help) exit 0, helpMessage()
 
+params.RUNTHIS = false
 
 // default is not to process a batchfile
 params.batchFile = false
@@ -61,9 +62,10 @@ if (! params.batchFile) {
                    .set { tumor_ch }
 
             if (params.readsControl != "NO_FILE") {
+                sampleNameControl = sampleName + "_Normal"
                 Channel
                        .fromFilePairs(params.readsControl)
-                       .map { reads -> tuple(sampleName, reads[1][0], reads[1][1], "None") }
+                       .map { reads -> tuple(sampleNameControl, reads[1][0], reads[1][1], "None") }
                        .set { control_ch }
             }
         } else  {
@@ -102,7 +104,7 @@ if (! params.batchFile) {
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
-                .map { row -> tuple(row.sampleId, 
+                .map { row -> tuple(row.sampleId + "_Normal", 
                                     file(row.readsControlFWD),
                                     file(row.readsControlREV),
                                     row.group) }
@@ -144,6 +146,7 @@ ________________________________________________________________________________
 *********************************************
 */
 process 'BedToIntervalList' {
+
     tag 'BedToIntervalList'
 
     publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
@@ -164,7 +167,7 @@ process 'BedToIntervalList' {
 
     script:
     """
-    $JAVA8 -jar $PICARD BedToIntervalList \
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \
         I=${RegionsBed} \
         O=${RegionsBed.baseName}.list \
         SD=$RefDict
@@ -172,6 +175,7 @@ process 'BedToIntervalList' {
 }
 
 process 'preprocessIntervalList' {
+
     tag 'preprocessIntervalList'
 
     publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
@@ -209,6 +213,7 @@ process 'SplitIntervals' {
 // Splitting interval file in 20(default) files for scattering Mutect2
 
     tag "SplitIntervals"
+
     publishDir "$params.outputDir/SplitIntervals/", mode: params.publishDirMode
 
     input:
@@ -286,11 +291,11 @@ if (single_end) {
         script:
         """
         $BWA mem \
-        -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \
-        -M ${RefFasta} \
-        -t ${task.cpus} \
-        ${readsFWD}  | \
-        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
+            -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \
+            -M ${RefFasta} \
+            -t ${task.cpus} \
+            ${readsFWD}  | \
+            $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
         """
     }
 } else {
@@ -298,8 +303,9 @@ if (single_end) {
     // Aligning tumor reads to reference, sort and index; create BAMs
 
         tag "$TumorReplicateId"
+
         publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-         mode: params.publishDirMode
+            mode: params.publishDirMode
 
         input:
         set(
@@ -328,12 +334,12 @@ if (single_end) {
         script:
         """
         $BWA mem \
-        -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \
-        -M ${RefFasta} \
-        -t ${task.cpus} \
-        ${readsFWD} \
-        ${readsREV}  | \
-        $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
+            -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \
+            -M ${RefFasta} \
+            -t ${task.cpus} \
+            ${readsFWD} \
+            ${readsREV}  | \
+            $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
         """
     }
 }
@@ -420,7 +426,7 @@ process 'alignmentMetrics' {
     script:
     """
     mkdir -p ${params.tmpDir}
-    java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
         TMP_DIR=${params.tmpDir} \
         INPUT=${bam} \
         OUTPUT=${TumorReplicateId}.HS.metrics.txt \
@@ -428,7 +434,7 @@ process 'alignmentMetrics' {
         BAIT_INTERVALS=${BaitIntervalsList} \
         TARGET_INTERVALS=${IntervalsList} \
         PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \
-    java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
         TMP_DIR=${params.tmpDir} \
         INPUT=${bam} \
         OUTPUT=${TumorReplicateId}.AS.metrics.txt \
@@ -468,7 +474,7 @@ if (readsControl != "NO_FILE" && single_end) {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned.bam")
+            file("${ControlReplicateId}_aligned.bam")
         ) into BwaControl_ch
 
         script:
@@ -478,7 +484,7 @@ if (readsControl != "NO_FILE" && single_end) {
             -M ${RefFasta} \
             -t ${task.cpus} \
             ${readsFWD} | \
-        $SAMTOOLS  view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
+        $SAMTOOLS  view -Shb -o ${ControlReplicateId}_aligned.bam -
         """
     }
 } else if (readsControl != "NO_FILE" && !single_end) {
@@ -513,7 +519,7 @@ if (readsControl != "NO_FILE" && single_end) {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned.bam")
+            file("${ControlReplicateId}_aligned.bam")
         ) into BwaControl_ch
 
         script:
@@ -524,7 +530,7 @@ if (readsControl != "NO_FILE" && single_end) {
             -t ${task.cpus} \
             ${readsFWD} \
             ${readsREV} | \
-        $SAMTOOLS view -Shb -o ${ControlReplicateId}_Control_aligned.bam -
+        $SAMTOOLS view -Shb -o ${ControlReplicateId}_aligned.bam -
         """
     }
 
@@ -545,15 +551,15 @@ if (readsControl != "NO_FILE" && single_end) {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai")
+            file("${ControlReplicateId}_aligned_sort_mkdp.bam"),
+            file("${ControlReplicateId}_aligned_sort_mkdp.bam.bai")
         ) into MarkDuplicatesControl0
 
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam"),
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp.bam.bai"),
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp.txt")
+            file("${ControlReplicateId}_aligned_sort_mkdp.bam"),
+            file("${ControlReplicateId}_aligned_sort_mkdp.bam.bai"),
+            file("${ControlReplicateId}_aligned_sort_mkdp.txt")
         ) into (
             MarkDuplicatesControl1,
             MarkDuplicatesControl2
@@ -566,8 +572,8 @@ if (readsControl != "NO_FILE" && single_end) {
         $GATK4 MarkDuplicatesSpark \
             --tmp-dir ${params.tmpDir} \
             -I ${bam} \
-            -O ${ControlReplicateId}_Control_aligned_sort_mkdp.bam \
-            -M ${ControlReplicateId}_Control_aligned_sort_mkdp.txt \
+            -O ${ControlReplicateId}_aligned_sort_mkdp.bam \
+            -M ${ControlReplicateId}_aligned_sort_mkdp.txt \
             --create-output-bam-index true \
             --read-validation-stringency LENIENT \
             --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
@@ -603,29 +609,29 @@ if (readsControl != "NO_FILE" && single_end) {
 
 
         output:
-        file("${ControlReplicateId}_Control.HS.metrics.txt")
-        file("${ControlReplicateId}_Control.perTarget.coverage.txt")
-        file("${ControlReplicateId}_Control.AS.metrics.txt")
-        file("${ControlReplicateId}_Control.flagstat.txt")
+        file("${ControlReplicateId}.HS.metrics.txt")
+        file("${ControlReplicateId}.perTarget.coverage.txt")
+        file("${ControlReplicateId}.AS.metrics.txt")
+        file("${ControlReplicateId}.flagstat.txt")
 
 
         script:
         """
         mkdir -p ${params.tmpDir}
-        java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \
             TMP_DIR=${params.tmpDir} \
             INPUT=${bam} \
-            OUTPUT=${ControlReplicateId}_Control.HS.metrics.txt \
+            OUTPUT=${ControlReplicateId}.HS.metrics.txt \
             R=${RefFasta} \
             BAIT_INTERVALS=${BaitIntervalsList} \
             TARGET_INTERVALS=${IntervalsList} \
-            PER_TARGET_COVERAGE=${ControlReplicateId}_Control.perTarget.coverage.txt && \
-        java -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
+            PER_TARGET_COVERAGE=${ControlReplicateId}.perTarget.coverage.txt && \
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \
             TMP_DIR=${params.tmpDir} \
             INPUT=${bam} \
-            OUTPUT=${ControlReplicateId}_Control.AS.metrics.txt \
+            OUTPUT=${ControlReplicateId}.AS.metrics.txt \
             R=${RefFasta} && \
-        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${ControlReplicateId}_Control.flagstat.txt
+        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${ControlReplicateId}.flagstat.txt
         """
     }
 }
@@ -707,7 +713,7 @@ process 'BaseRecalApplyTumor' {
     """
     mkdir -p ${params.tmpDir}
 
-    java -jar $PICARD SetNmMdAndUqTags \
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \
         TMP_DIR=${params.tmpDir} \
         R=${RefFasta} \
         I=${bam} \
@@ -725,7 +731,7 @@ process 'BaseRecalApplyTumor' {
         --known-sites ${KnownIndels} \
         --known-sites ${MillsGold} \
         --conf 'spark.executor.cores=${task.cpus}' && \
-     $GATK4 ApplyBQSRSpark \
+    $GATK4 ApplyBQSRSpark \
         --tmp-dir ${params.tmpDir} \
         -I ${bam} \
         -R ${RefFasta} \
@@ -902,7 +908,7 @@ process 'CollectSequencingArtifactMetrics' {
     """
     mkdir -p ${params.tmpDir}
 
-    java -jar $PICARD CollectSequencingArtifactMetrics \
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD CollectSequencingArtifactMetrics \
         TMP_DIR=${params.tmpDir} \
         I=${bam} \
         R=${RefFasta} \
@@ -990,7 +996,7 @@ if (readsControl == "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        java -jar $PICARD MergeVcfs \
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
             TMP_DIR=${params.tmpDir} \
             I=${vcf.join(" I=")} \
             O=${TumorReplicateId}_mutect2_raw.vcf.gz
@@ -1137,13 +1143,13 @@ if (readsControl != 'NO_FILE') {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_bqsr.table")
+            file("${ControlReplicateId}_bqsr.table")
         ) into BaseRecalibratorControl
 
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_recal4.bam"),
-            file("${ControlReplicateId}_Control_recal4.bam.bai")
+            file("${ControlReplicateId}_recal4.bam"),
+            file("${ControlReplicateId}_recal4.bam.bai")
         ) into (
             ApplyControl1,
             ApplyControl2
@@ -1153,7 +1159,7 @@ if (readsControl != 'NO_FILE') {
         """
         mkdir -p ${params.tmpDir}
 
-        java -jar $PICARD SetNmMdAndUqTags \
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \
             TMP_DIR=${params.tmpDir} \
             R=${RefFasta} \
             I=${bam} \
@@ -1166,7 +1172,7 @@ if (readsControl != 'NO_FILE') {
             -I Control_fixed.bam \
             -R ${RefFasta} \
             -L ${IntervalsList} \
-            -O ${ControlReplicateId}_Control_bqsr.table \
+            -O ${ControlReplicateId}_bqsr.table \
             --known-sites ${DBSNP} \
             --known-sites ${KnownIndels} \
             --known-sites ${MillsGold} \
@@ -1176,8 +1182,8 @@ if (readsControl != 'NO_FILE') {
             -I ${bam} \
             -R ${RefFasta} \
             -L ${IntervalsList} \
-            -O ${ControlReplicateId}_Control_recal4.bam \
-            --bqsr-recal-file ${ControlReplicateId}_Control_bqsr.table \
+            -O ${ControlReplicateId}_recal4.bam \
+            --bqsr-recal-file ${ControlReplicateId}_bqsr.table \
             --conf 'spark.executor.cores=${task.cpus}'
         """
     }
@@ -1210,7 +1216,7 @@ if (readsControl != 'NO_FILE') {
         output:
         set(
             ControlReplicateId, 
-            file("${ControlReplicateId}_Control_pileup.table")
+            file("${ControlReplicateId}_pileup.table")
         ) into PileupControl
 
         script:
@@ -1220,7 +1226,7 @@ if (readsControl != 'NO_FILE') {
         $GATK4 GetPileupSummaries \
             --tmp-dir ${params.tmpDir} \
             -I ${bam} \
-            -O ${ControlReplicateId}_Control_pileup.table \
+            -O ${ControlReplicateId}_pileup.table \
             -L ${intervals} \
             --variant ${GnomAD}
         """
@@ -1318,7 +1324,7 @@ if (readsControl != 'NO_FILE') {
         """
         mkdir -p ${params.tmpDir}
         
-        java -jar $PICARD MergeVcfs \
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
             TMP_DIR=${params.tmpDir} \
             I=${vcf.join(" I=")} \
             O=${TumorReplicateId}_${ControlReplicateId}_mutect2_raw.vcf.gz
@@ -1427,57 +1433,6 @@ if (readsControl != 'NO_FILE') {
 *********************************************
 */
 
-
-//process 'IndelRealignerTumor' {
-/* 
- RealignerTargetCreator (GATK3): define intervals to target for local realignment
- IndelRealigner (GATK3): perform local realignment of reads around indels
-*/
-/*
-    tag "$TumorReplicateId"
-    publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
-     mode: params.publishDirMode
-
-    input:
-    set TumorReplicateId, file(bam), file(bai), file(list) from MarkDuplicatesTumor2
-    set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-        [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-    set file(KnownIndels), file(KnownIndelsIdx), file(MillsGold),
-     file(MillsGoldIdx) from Channel.value([database.KnownIndels, database.KnownIndelsIdx,
-            database.MillsGold, database.MillsGoldIdx])
-
-    output:
-    set TumorReplicateId, file("${TumorReplicateId}_aligned_sort_mkdp_realign.bam"),
-     file("${TumorReplicateId}_aligned_sort_mkdp_realign.bai") into IndelRealignerTumor
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-        -T RealignerTargetCreator \
-        --known ${MillsGold} \
-        --known ${KnownIndels} \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -o target.list \
-        -nt ${task.cpus} && \
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-        -T IndelRealigner \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -targetIntervals target.list \
-        -known ${KnownIndels} \
-        -known ${MillsGold} \
-        -nWayOut _realign.bam && \
-    rm target.list
-    """
-}
-
-*/
-
 process 'IndelRealignerTumorIntervals' {
 /* 
  RealignerTargetCreator (GATK3): define intervals to target for local realignment
@@ -1529,7 +1484,7 @@ process 'IndelRealignerTumorIntervals' {
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
         -T RealignerTargetCreator \
         --known ${MillsGold} \
         --known ${KnownIndels} \
@@ -1538,7 +1493,7 @@ process 'IndelRealignerTumorIntervals' {
         -I ${bam} \
         -o ${interval}_target.list \
         -nt ${task.cpus} && \
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
         -T IndelRealigner \
         -R ${RefFasta} \
         -L ${interval} \
@@ -1551,7 +1506,7 @@ process 'IndelRealignerTumorIntervals' {
     """
 }
 
-process 'MergeRealignedBamFilesTumor' {
+process 'GatherRealignedBamFilesTumor' {
 
     tag "$TumorReplicateId"
 
@@ -1564,7 +1519,7 @@ process 'MergeRealignedBamFilesTumor' {
         file(bam),
         file(bai)
     ) from IndelRealignerTumorIntervals
-        .collect()
+        .toSortedList({a, b -> a[1].baseName <=> b[1].baseName})
         .flatten()
         .collate(3)
         .groupTuple(by: 0)
@@ -1576,21 +1531,20 @@ process 'MergeRealignedBamFilesTumor' {
         file("${TumorReplicateId}_aligned_sort_mkdp_realign.bai") 
     ) into IndelRealignerTumor
 
-
     script:
     """
     mkdir -p ${params.tmpDir}
 
-    java -jar $PICARD MergeSamFiles \
-            TMP_DIR=${params.tmpDir} \
-            I=${bam.join(" I=")} \
-            O=${TumorReplicateId}_aligned_sort_mkdp_realign.bam \
-            CREATE_INDEX=true \
-            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
-            USE_THREADING=true
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \
+        TMP_DIR=${params.tmpDir} \
+        I=${bam.join(" I=")} \
+        O=${TumorReplicateId}_aligned_sort_mkdp_realign.bam \
+        CREATE_INDEX=true \
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam}
     """
 }
 
+if (params.RUNTHIS) {
 process 'FixMateBaseRecalTumor' {
 /*
  FixMateInformation (Picard): verify mate-pair information between mates; ensure that
@@ -1649,13 +1603,13 @@ process 'FixMateBaseRecalTumor' {
     """
     mkdir -p ${params.tmpDir}
 
-    java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
+    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
         TMP_DIR=${params.tmpDir} \
         I=${bam} \
         O=${TumorReplicateId}_fixmate.bam \
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
         CREATE_INDEX=true && \
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
         -T BaseRecalibrator \
         -R ${RefFasta} \
         -L ${IntervalsList} \
@@ -1667,7 +1621,94 @@ process 'FixMateBaseRecalTumor' {
         -o ${TumorReplicateId}_bqsr3.table
     """
 }
+} // end RUNTHIS
 
+process 'BaseRecalTumor' {
+/*
+ FixMateInformation (Picard): verify mate-pair information between mates; ensure that
+ all mate-pair information is in sync between reads and its pairs
+*/
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        file(bam),
+        file(bai)
+    ) from IndelRealignerTumor
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(IntervalsList)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.IntervalsList ]
+    )
+
+    set(
+        file(DBSNP),
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx),
+        file(MillsGold),
+        file(MillsGoldIdx)
+    ) from Channel.value(
+        [ database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
+    )
+
+    output:
+    file("${TumorReplicateId}_bqsr4.table")
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_recal4.bam"),
+        file("${TumorReplicateId}_recal4.bam.bai"),
+    ) into (
+        BaseRecalTumor1,
+        BaseRecalTumor2,
+        BaseRecalTumor3
+    )
+
+
+    ///
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $GATK4 BaseRecalibratorSpark \
+        --tmp-dir ${params.tmpDir} \
+        -I ${bam} \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -O ${TumorReplicateId}_bqsr4.table \
+        --known-sites ${DBSNP} \
+        --known-sites ${KnownIndels} \
+        --known-sites ${MillsGold} \
+        --conf 'spark.executor.cores=${task.cpus}'&& \
+    $GATK4 ApplyBQSRSpark \
+        --tmp-dir ${params.tmpDir} \
+        -I ${bam} \
+        -R ${RefFasta} \
+        -L ${IntervalsList} \
+        -O ${TumorReplicateId}_recal4.bam \
+        --bqsr-recal-file ${TumorReplicateId}_bqsr4.table \
+        --conf 'spark.executor.cores=${task.cpus}'
+    """
+}
+
+if(params.RUNTHIS) {
 process 'PrintReadsTumor' {
 // PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
 
@@ -1711,7 +1752,7 @@ process 'PrintReadsTumor' {
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
+    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
         -T PrintReads \
         -R ${RefFasta} \
         -L ${IntervalsList} \
@@ -1721,59 +1762,10 @@ process 'PrintReadsTumor' {
         -o ${TumorReplicateId}_printreads.bam
     """
 }
+} // end RUNTHIS
 
 if (readsControl != "NO_FILE") {
 
-    //process 'IndelRealignerControl' {
-    /*
-     RealignerTargetCreator (GATK3): define intervals to target for local realignment
-     IndelRealigner (GATK3): perform local realignment of reads around indels
-    */
-/*
-        tag "$ControlReplicateId"
-        publishDir "$params.outputDir/$ControlReplicateId/05_varscan/processing/",
-         mode: params.publishDirMode
-
-        input:
-        set ControlReplicateId, file(bam), file(bai), file(list) from MarkDuplicatesControl2
-        set file(RefFasta), file(RefIdx), file(RefDict), file(IntervalsList) from Channel.value(
-            [reference.RefFasta, reference.RefIdx, reference.RefDict, reference.IntervalsList])
-        set file(KnownIndels), file(KnownIndelsIdx), file(MillsGold),
-            file(MillsGoldIdx) from Channel.value(
-            [database.KnownIndels, database.KnownIndelsIdx,
-            database.MillsGold, database.MillsGoldIdx])
-
-        output:
-        set ControlReplicateId, file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam"),
-         file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bai") into IndelRealignerControl
-
-        script:
-        """
-        mkdir -p ${params.tmpDir}
-
-        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-            -T RealignerTargetCreator \
-            --known ${MillsGold} \
-            --known ${KnownIndels} \
-            -R ${RefFasta} \
-            -L ${IntervalsList} \
-            -I ${bam} \
-            -o target.list \
-            -nt ${task.cpus} && \
-        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-            -T IndelRealigner \
-            -R ${RefFasta} \
-            -L ${IntervalsList} \
-            -I ${bam} \
-            -targetIntervals target.list \
-            -known ${KnownIndels} \
-            -known ${MillsGold} \
-            -nWayOut _realign.bam && \
-        rm target.list
-        """
-    }
-*/
-    //////////////////////
     process 'IndelRealignerControlIntervals' {
     /* 
     RealignerTargetCreator (GATK3): define intervals to target for local realignment
@@ -1817,37 +1809,37 @@ if (readsControl != "NO_FILE") {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign_${interval}.bam"),
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign_${interval}.bai")
+            file("${ControlReplicateId}_aligned_sort_mkdp_realign_${interval}.bam"),
+            file("${ControlReplicateId}_aligned_sort_mkdp_realign_${interval}.bai")
         ) into IndelRealignerControlIntervals
 
         script:
         """
         mkdir -p ${params.tmpDir}
 
-        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
             -T RealignerTargetCreator \
             --known ${MillsGold} \
             --known ${KnownIndels} \
             -R ${RefFasta} \
             -L ${interval} \
             -I ${bam} \
-            -o ${interval}_Control_target.list \
+            -o ${interval}_target.list \
             -nt ${task.cpus} && \
-        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
             -T IndelRealigner \
             -R ${RefFasta} \
             -L ${interval} \
             -I ${bam} \
-            -targetIntervals ${interval}_Control_target.list \
+            -targetIntervals ${interval}_target.list \
             -known ${KnownIndels} \
             -known ${MillsGold} \
             -nWayOut _realign_${interval}.bam && \
-        rm ${interval}_Control_target.list
+        rm ${interval}_target.list
         """
     }
 
-    process 'MergeRealignedBamFilesControl' {
+    process 'GatherRealignedBamFilesContol' {
 
         tag "$ControlReplicateId"
 
@@ -1860,7 +1852,7 @@ if (readsControl != "NO_FILE") {
             file(bam),
             file(bai)
         ) from IndelRealignerControlIntervals
-            .collect()
+            .toSortedList({a, b -> a[1].baseName <=> b[1].baseName})
             .flatten()
             .collate(3)
             .groupTuple(by: 0)
@@ -1868,30 +1860,24 @@ if (readsControl != "NO_FILE") {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam"),
-            file("${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bai") 
+            file("${ControlReplicateId}_aligned_sort_mkdp_realign.bam"),
+            file("${ControlReplicateId}_aligned_sort_mkdp_realign.bai") 
         ) into IndelRealignerControl
-
 
         script:
         """
         mkdir -p ${params.tmpDir}
 
-        java -jar $PICARD MergeSamFiles \
-                TMP_DIR=${params.tmpDir} \
-                I=${bam.join(" I=")} \
-                O=${ControlReplicateId}_Control_aligned_sort_mkdp_realign.bam \
-                CREATE_INDEX=true \
-                MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
-                USE_THREADING=true
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \
+            TMP_DIR=${params.tmpDir} \
+            I=${bam.join(" I=")} \
+            O=${ControlReplicateId}_aligned_sort_mkdp_realign.bam \
+            CREATE_INDEX=true \
+            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam}
         """
     }
 
-
-    //////////////////////
-
-
-
+if(params.RUNTHIS) {
     process 'FixMateBaseRecalControl' {
     /*
      FixMateInformation (Picard): verify mate-pair information beteen mates; ensure that
@@ -1939,31 +1925,31 @@ if (readsControl != "NO_FILE") {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_fixmate.bam"),
-            file("${ControlReplicateId}_Control_fixmate.bai"),
-            file("${ControlReplicateId}_Control_bqsr3.table")
+            file("${ControlReplicateId}_fixmate.bam"),
+            file("${ControlReplicateId}_fixmate.bai"),
+            file("${ControlReplicateId}_bqsr3.table")
         ) into FixMateBaseRecalControl
 
         script:
         """
         mkdir -p ${params.tmpDir}
 
-        java -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
             TMP_DIR=${params.tmpDir} \
             I=${bam} \
-            O=${ControlReplicateId}_Control_fixmate.bam \
+            O=${ControlReplicateId}_fixmate.bam \
             MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
             CREATE_INDEX=true && \
-        $JAVA8 -jar $GATK3\
+        $JAVA8 ${params.JAVA_Xmx} -jar $GATK3\
             -T BaseRecalibrator \
             -R ${RefFasta} \
             -L ${IntervalsList} \
-            -I ${ControlReplicateId}_Control_fixmate.bam \
+            -I ${ControlReplicateId}_fixmate.bam \
             -knownSites ${DBSNP} \
             -knownSites ${KnownIndels} \
             -knownSites ${MillsGold} \
             -nct ${task.cpus} \
-            -o ${ControlReplicateId}_Control_bqsr3.table
+            -o ${ControlReplicateId}_bqsr3.table
         """
     }
 
@@ -1998,8 +1984,8 @@ if (readsControl != "NO_FILE") {
         output:
         set(
             ControlReplicateId,
-            file("${ControlReplicateId}_Control_printreads.bam"),
-            file("${ControlReplicateId}_Control_printreads.bai")
+            file("${ControlReplicateId}_printreads.bam"),
+            file("${ControlReplicateId}_printreads.bai")
         ) into (
             PrintReadsControl1,
             PrintReadsControl2
@@ -2009,14 +1995,14 @@ if (readsControl != "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        $JAVA8 -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
+        $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
             -T PrintReads \
             -R ${RefFasta} \
             -L ${IntervalsList} \
             -I ${bam} \
             -BQSR ${bqsr3} \
             -nct ${task.cpus} \
-            -o ${ControlReplicateId}_Control_printreads.bam
+            -o ${ControlReplicateId}_printreads.bam
         """
     }
 
@@ -2071,18 +2057,18 @@ if (readsControl != "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        java -jar $PICARD ReorderSam \
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ReorderSam \
             TMP_DIR=${params.tmpDir} \
-            SD=${RefDict} \
+            SEQUENCE_DICTIONARY=${RefDict} \
             INPUT=${bamTumor} \
             MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
             CREATE_INDEX=true \
             OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
         tumor_process_id=\$!
 
-        java -jar $PICARD ReorderSam \
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ReorderSam \
             TMP_DIR=${params.tmpDir} \
-            SD=${RefDict} \
+            SEQUENCE_DICTIONARY=${RefDict} \
             INPUT=${bamControl} \
             CREATE_INDEX=true \
             OUTPUT=${ControlReplicateId}_reorder_control.bam &
@@ -2092,6 +2078,92 @@ if (readsControl != "NO_FILE") {
         wait \$control_process_id
         """
     }
+} // end RUNTHIS
+
+    process 'BaseRecalControl' {
+    /*
+    FixMateInformation (Picard): verify mate-pair information between mates; ensure that
+    all mate-pair information is in sync between reads and its pairs
+    */
+
+        tag "$ControlReplicateId"
+
+        publishDir "$params.outputDir/$ControlReplicateId/05_varscan/processing/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            ControlReplicateId,
+            file(bam),
+            file(bai)
+        ) from IndelRealignerControl
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(IntervalsList)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict,
+            reference.IntervalsList ]
+        )
+
+        set(
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(KnownIndels),
+            file(KnownIndelsIdx),
+            file(MillsGold),
+            file(MillsGoldIdx)
+        ) from Channel.value(
+            [ database.DBSNP,
+            database.DBSNPIdx,
+            database.KnownIndels,
+            database.KnownIndelsIdx,
+            database.MillsGold,
+            database.MillsGoldIdx ]
+        )
+
+        output:
+        file("${ControlReplicateId}_bqsr4.table")
+        set(
+            ControlReplicateId,
+            file("${ControlReplicateId}_recal4.bam"),
+            file("${ControlReplicateId}_recal4.bam.bai")
+        ) into (
+            BaseRecalControl1,
+            BaseRecalControl2
+        )
+
+
+        ///
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $GATK4 BaseRecalibratorSpark \
+            --tmp-dir ${params.tmpDir} \
+            -I ${bam} \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -O ${ControlReplicateId}_bqsr4.table \
+            --known-sites ${DBSNP} \
+            --known-sites ${KnownIndels} \
+            --known-sites ${MillsGold} \
+            --conf 'spark.executor.cores=${task.cpus}'&& \
+        $GATK4 ApplyBQSRSpark \
+            --tmp-dir ${params.tmpDir} \
+            -I ${bam} \
+            -R ${RefFasta} \
+            -L ${IntervalsList} \
+            -O ${ControlReplicateId}_recal4.bam \
+            --bqsr-recal-file ${ControlReplicateId}_bqsr4.table \
+            --conf 'spark.executor.cores=${task.cpus}'
+        """
+    }
+
 
     process 'VarscanSomatic' {
     // somatic (Varscan): calls somatic variants (SNPS and indels)
@@ -2106,13 +2178,13 @@ if (readsControl != "NO_FILE") {
             TumorReplicateId,
             file(bamTumor),
             file(baiTumor)
-        ) from ReorderSamTumor1
+        ) from BaseRecalTumor1 // from ReorderSamTumor1
 
         set(
             ControlReplicateId,
             file(bamControl),
             file(baiControl)
-        ) from ReorderSamControl
+        ) from BaseRecalControl1 // ReorderSamControl
 
         set(
             file(RefFasta),
@@ -2142,7 +2214,7 @@ if (readsControl != "NO_FILE") {
             -f ${RefFasta} \
             -l ${IntervalsBed} \
             ${bamControl} ${bamTumor} > ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo &
-        java -jar $VARSCAN somatic \
+        $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN somatic \
             ${TumorReplicateId}_${ControlReplicateId}_mpileup.fifo \
             ${TumorReplicateId}_${ControlReplicateId}_varscan \
             --output-vcf 1 \
@@ -2200,12 +2272,12 @@ if (readsControl != "NO_FILE") {
 
         script:
         """
-        java -jar $VARSCAN processSomatic \
+        $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN processSomatic \
             ${snp} \
             --min-tumor-freq ${params.min_tumor_freq} \
             --max-normal-freq ${params.max_normal_freq} \
             --p-value ${params.processSomatic_pvalue} && \
-        java -jar $VARSCAN processSomatic \
+        $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN processSomatic \
             ${indel} \
             --min-tumor-freq ${params.min_tumor_freq} \
             --max-normal-freq ${params.max_normal_freq} \
@@ -2230,7 +2302,7 @@ if (readsControl != "NO_FILE") {
             TumorReplicateId,
             file(bam),
             file(bai)
-        ) from ReorderSamTumor2
+        ) from BaseRecalTumor2 // ReorderSamTumor2
 
         set(
             TumorReplicateId,
@@ -2288,7 +2360,7 @@ if (readsControl != "NO_FILE") {
             -l /dev/stdin \
             -f ${RefFasta} \
             ${bam} | \
-        java -jar $VARSCAN fpfilter \
+        $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN fpfilter \
             ${snpSomaticHc} \
             /dev/stdin \
             --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.snp.Somatic.hc.filtered.vcf && \
@@ -2300,7 +2372,7 @@ if (readsControl != "NO_FILE") {
             -w1 \
             -l /dev/stdin \
             -f ${RefFasta} ${bam} | \
-        java -jar $VARSCAN fpfilter \
+        $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN fpfilter \
             ${indelSomaticHc} \
             /dev/stdin \
             --output-file ${TumorReplicateId}_${ControlReplicateId}_varscan.indel.Somatic.hc.filtered.vcf
@@ -2328,13 +2400,13 @@ if (readsControl != "NO_FILE") {
             TumorReplicateId,
             file(bamTumor),
             file(baiTumor)
-         ) from PrintReadsTumor2
+         ) from BaseRecalTumor3 // PrintReadsTumor2
 
         set(
             ControlReplicateId,
             file(bamControl),
             file(baiControl)
-        ) from PrintReadsControl2
+        ) from BaseRecalControl2 // PrintReadsControl2
 
         set(
             file(RefFasta),
@@ -2380,7 +2452,7 @@ if (readsControl != "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        $JAVA7 -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
+        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
             --analysis_type MuTect \
             --reference_sequence ${RefFasta} \
             --cosmic ${Cosmic} \
@@ -2419,7 +2491,7 @@ if (readsControl != "NO_FILE") {
             TumorReplicateId,
             file(bamTumor),
             file(baiTumor)
-        ) from PrintReadsTumor3
+        ) from BaseRecalTumor3
 
         set(
             file(RefFasta),
@@ -2448,8 +2520,8 @@ if (readsControl != "NO_FILE") {
         set(
             TumorReplicateId,
             file("${TumorReplicateId}_mutect1.raw.vcf.gz"),
-            file("${TumorReplicateId}_mutect1.raw.vcf.gz.idx")
-            file("${TumorReplicateId}_mutect1.raw.stats.txt")
+            file("${TumorReplicateId}_mutect1.raw.vcf.gz.idx"),
+            file("${TumorReplicateId}_mutect1.raw.stats.txt"),
         ) into Mutect1rawTumor
 
         set(
@@ -2462,7 +2534,7 @@ if (readsControl != "NO_FILE") {
         """
         mkdir -p ${params.tmpDir}
 
-        $JAVA7 -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
+        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
             --analysis_type MuTect \
             --reference_sequence ${RefFasta} \
             --cosmic ${Cosmic} \
@@ -2526,6 +2598,16 @@ if (readsControl != "NO_FILE") {
 
         file(VepFasta) from Channel.value([reference.VepFasta])
 
+        output:
+        file("${TumorReplicateId}_${ControlReplicateId}_mutect1_vep.txt")
+        file("${TumorReplicateId}_${ControlReplicateId}_mutect1_vep_summary.html")
+        file("${TumorReplicateId}_${ControlReplicateId}_mutect2_vep.txt")
+        file("${TumorReplicateId}_${ControlReplicateId}_mutect2_vep_summary.html")
+        file("${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep.txt")
+        file("${TumorReplicateId}_${ControlReplicateId}_varscanSnp_vep_summary.html")
+        file("${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep.txt")
+        file("${TumorReplicateId}_${ControlReplicateId}_varscanIndel_vep_summary.html")
+     
         script:
         """
         $PERL $VEP -i ${mutect1Vcf} \
@@ -2606,6 +2688,12 @@ if (readsControl != "NO_FILE") {
         ) from Mutect1filterTumor
         
         file(VepFasta) from Channel.value([reference.VepFasta])
+
+        output:
+        file("${TumorReplicateId}_mutect1_vep.txt")
+        file("${TumorReplicateId}_mutect1_vep_summary.html")
+        file("${TumorReplicateId}_mutect2_vep.txt")
+        file("${TumorReplicateId}_mutect2_vep_summary.html")
 
         script:
         """

@@ -1,2 +1,2 @@
-sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV
-MyTestID,/data/scratch/rieder/testdata/tumor_chr22_r1.fastq,/data/scratch/rieder/testdata/tumor_chr22_r2.fastq,/data/scratch/rieder/testdata/control_chr22_r1.fastq,/data/scratch/rieder/testdata/control_chr22_r2.fastq
+sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV,group
+MyTestID,/data/scratch/rieder/testdata/tumor_chr22_r1.fastq,/data/scratch/rieder/testdata/tumor_chr22_r2.fastq,/data/scratch/rieder/testdata/control_chr22_r1.fastq,/data/scratch/rieder/testdata/control_chr22_r2.fastq,test
