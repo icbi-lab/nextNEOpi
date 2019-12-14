@@ -1861,11 +1861,11 @@ if (readsNormal != "NO_FILE") {
         """
     }
 
-    process 'GatherRealignedBamFilesContol' {
+    process 'GatherRealignedBamFilesNormal' {
 
         tag "$NormalReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
+        publishDir "$params.outputDir/${TumorReplicateId[0]}/05_varscan/processing/",
             mode: params.publishDirMode
 
         input:
@@ -2118,7 +2118,7 @@ if(params.RUNTHIS) {
 
         tag "$NormalReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
+        publishDir "$params.outputDir/${TumorReplicateId[0]}/05_varscan/processing/",
             mode: params.publishDirMode
 
         input:
