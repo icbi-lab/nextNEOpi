@@ -1,11 +1,11 @@
 # Whole-Exome Sequencing Nextflow Pipeline
-Pipeline takes fastq file from tumor (and control) sampels for indels and SNPs 
+Pipeline takes fastq file from tumor (and Normal) sampels for indels and SNPs 
 predictions. 
 
 Therefore 3 different callers are used, depending on input:
 * MuTect2
 * MuTect1
-* VarScan2 (only when matched control sample is given)
+* VarScan2 (only when matched Normal sample is given)
 
 It outputs a txt file with the annotated and filtered SNPs and Indels, which
 where called with a minimum of 2 of the callers.
@@ -61,7 +61,7 @@ Every parameter can be edited in the params file or with the command lind by usi
 References, Databases and Software should be edited in the params.config.
 
 ```
-nextflow run wes.nf "--readsTumor|--batchFile" "[--readsControl]" "--IntervalsList" "--IntervalsBed" [--single_end]
+nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--IntervalsList" "--IntervalsBed" [--single_end]
 ```
 #### Singularity
 The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
@@ -77,15 +77,15 @@ or
 **--batchFile:**
 * CSV-file, paired-end T/N reads:
 
- sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV,group
- sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,Control1_reads_1.fastq,Control1_reads_2.fastq,group1
- sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,Control2_reads_1.fastq,Control2_reads_2.fastq,group1
+ sampleId,readsTumorFWD,readsTumorREV,readsNormalFWD,readsNormalREV,group
+ sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,Normal1_reads_1.fastq,Normal1_reads_2.fastq,group1
+ sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,Normal2_reads_1.fastq,Normal2_reads_2.fastq,group1
  ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,ControlN_reads_1.fastq,ControlN_reads_2.fastq,groupX
+ sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NormalN_reads_1.fastq,NormalN_reads_2.fastq,groupX
 
 * CSV-file, single-end T only reads:
 
- sampleId,readsTumorFWD,readsTumorREV,readsControlFWD,readsControlREV,group
+ sampleId,readsTumorFWD,readsTumorREV,readsNormalFWD,readsNormalREV,group
  sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,NO_FILE,NO_FILE,group1
  sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,NO_FILE,NO_FILE,group1
  ...
@@ -96,7 +96,7 @@ or
 **--IntervalsBed:** 		 intervals.bed; 			 interval.bed file for targeting
 
 #### Optional argument:
-**--readsControl:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
+**--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
 **--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
 
 **--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
@@ -114,7 +114,7 @@ RESULTS
 │   ├── 5_varscan
 │   │   ├── 1_processing
 │   └── 6_vep
-├──ControlSample
+├──NormalSample
 │   ├── 1_preprocessing
 │   ├── 3_mutect2
 │   │   ├── 1_processing
