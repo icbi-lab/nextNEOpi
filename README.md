@@ -91,9 +91,9 @@ or
  ...
  sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,NO_FILE,groupX
 
-**--IntervalsList:** 	 intervals.list; 		 interval.list file for targeting
+**--BaitsIntervalsList:** 	 baits.list; 		 baits.list file for Exon baits
 
-**--IntervalsBed:** 		 intervals.bed; 			 interval.bed file for targeting
+**--RegionsBed:** 		 regions.bed; 			 regions.bed file for Exon targeting
 
 #### Optional argument:
 **--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
@@ -105,21 +105,17 @@ or
 The Pipeline creates an ouput directory with the following structure:
 ```
 RESULTS
-├──TumorSample
-│   ├── 1_preprocessing
-│   ├── 2_QC
-│   ├── 3_mutect2
-│   │   ├── 1_processing
-│   ├── 4_mutect1
-│   ├── 5_varscan
-│   │   ├── 1_processing
-│   └── 6_vep
-├──NormalSample
-│   ├── 1_preprocessing
-│   ├── 3_mutect2
-│   │   ├── 1_processing
-│   └── 6_vep
-│       ├── 1_processing
-└──SplitIntervals
+├── 00_preprare_Intervals
+│   └── SplitIntervals
+│       └── <RegionsBed>_merged_padded
+└── <SampleId>
+    ├── 01_preprocessing
+    ├── 02_QC
+    ├── 03_mutect2
+    │   └── processing
+    ├── 04_mutect1
+    ├── 05_varscan
+    │   └── processing
+    └── 06_vep
 
 ```

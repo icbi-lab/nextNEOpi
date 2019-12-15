@@ -32,6 +32,7 @@ ________________________________________________________________________________
 */
 if (params.help) exit 0, helpMessage()
 
+// switch for enable/disable processes (debug/devel only: use if(params.RUNTHIS) { .... })
 params.RUNTHIS = false
 
 // default is not to process a batchfile
@@ -196,7 +197,21 @@ process 'preprocessIntervalList' {
     output:
     file(
         "${interval_list.baseName}_merged_padded.list"
-    ) into intervals_merged_padded_ch
+    ) into (
+        intervals_merged_padded_ch0,
+        intervals_merged_padded_ch1,
+        intervals_merged_padded_ch2,
+        intervals_merged_padded_ch3,
+        intervals_merged_padded_ch4,
+        intervals_merged_padded_ch5,
+        intervals_merged_padded_ch6,
+        intervals_merged_padded_ch7,
+        intervals_merged_padded_ch8,
+        intervals_merged_padded_ch9,
+        intervals_merged_padded_ch10,
+        intervals_merged_padded_ch11,
+        intervals_merged_padded_ch12
+    )
 
     script:
     """
@@ -227,7 +242,8 @@ process 'SplitIntervals' {
           reference.RefIdx,
           reference.RefDict ]
     )
-    file(IntervalsList) from intervals_merged_padded_ch
+
+    file(IntervalsList) from intervals_merged_padded_ch0
 
     val x from scatter_count
 
@@ -235,10 +251,10 @@ process 'SplitIntervals' {
     file(
         "${IntervalName}/*-scattered.interval_list"
     ) into (
-        interval_ch1,
-        interval_ch2,
-        interval_ch3,
-        interval_ch4
+        split_interval_ch1,
+        split_interval_ch2,
+        split_interval_ch3,
+        split_interval_ch4
     )
 
     script:
@@ -256,6 +272,30 @@ process 'SplitIntervals' {
         -O ${IntervalName}
     """
 }
+
+process 'IntervalListToBed' {
+    // convert padded interval list to Bed file (used by varscan)
+
+    tag 'BedFromIntervalList'
+
+    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+
+    input:
+        file(paddedIntervalList) from intervals_merged_padded_ch1
+
+    output:
+    file(
+        "${paddedIntervalList.baseName}.bed"
+    ) into IntervalsBed_ch
+
+    script:
+    """
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \
+        I=${paddedIntervalList} \
+        O=${paddedIntervalList.baseName}.bed
+    """
+}
+
 
 if (single_end) {
     process 'BwaTumorSingle' {
@@ -410,14 +450,14 @@ process 'alignmentMetrics' {
     set(
         file(RefFasta),
         file(RefIdx),
-        file(IntervalsList),
         file(BaitIntervalsList)
     ) from Channel.value(
         [ reference.RefFasta,
           reference.RefIdx,
-          reference.IntervalsList,
           reference.BaitIntervalsList ]
     )
+
+    file(IntervalsList) from intervals_merged_padded_ch2
 
 
     output:
@@ -611,14 +651,14 @@ if (readsNormal != "NO_FILE" && single_end) {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(IntervalsList),
             file(BaitIntervalsList)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.IntervalsList,
               reference.BaitIntervalsList ]
         )
+
+        file(IntervalsList) from intervals_merged_padded_ch3
 
 
         output:
@@ -678,14 +718,14 @@ process 'BaseRecalApplyTumor' {
     set(
         file(RefFasta),
         file(RefIdx),
-        file(RefDict), 
-        file(IntervalsList)
+        file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
           reference.RefIdx,
-          reference.RefDict,
-          reference.IntervalsList ]
+          reference.RefDict ]
     )
+
+    file(IntervalsList) from intervals_merged_padded_ch4
 
     set(
         file(MillsGold),
@@ -771,8 +811,8 @@ process 'GetPileupTumor' {
         [ database.GnomAD,
           database.GnomADIdx ]
     )
-    
-    file(IntervalsList) from Channel.value([reference.IntervalsList])
+
+    file(IntervalsList) from intervals_merged_padded_ch5
     
     set(
         TumorReplicateId,
@@ -817,14 +857,14 @@ process 'AnalyzeCovariates' {
     set(
         file(RefFasta),
         file(RefIdx),
-        file(RefDict),
-        file(IntervalsList)
+        file(RefDict)
     ) from Channel.value(
          [reference.RefFasta,
          reference.RefIdx,
-         reference.RefDict,
-         reference.IntervalsList ]
+         reference.RefDict ]
     )
+
+    file(IntervalsList) from intervals_merged_padded_ch6
 
     set(
         file(DBSNP), 
@@ -956,7 +996,7 @@ if (readsNormal == "NO_FILE") {
             file(IntervalsList)
         ) from ApplyTumor4
             .combine(
-                interval_ch1.flatten()
+                split_interval_ch1.flatten()
             )
 
         output:
@@ -1128,15 +1168,15 @@ if (readsNormal != 'NO_FILE') {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict),
-            file(IntervalsList)
+            file(RefDict)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsList
+              reference.RefDict
             ]
         )
+
+        file(IntervalsList) from intervals_merged_padded_ch7
 
         set(
             file(MillsGold),
@@ -1220,8 +1260,8 @@ if (readsNormal != 'NO_FILE') {
             [ database.GnomAD,
               database.GnomADIdx ]
         )
-        
-        file(intervals) from Channel.value([reference.IntervalsList])
+
+        file(intervals) from intervals_merged_padded_ch8
 
         set(
             NormalReplicateId,
@@ -1284,7 +1324,7 @@ if (readsNormal != 'NO_FILE') {
         ) from ApplyTumor5
             .combine(ApplyNormal2)
             .combine(
-                interval_ch2.flatten()
+                split_interval_ch2.flatten()
             )
 
         output:
@@ -1491,7 +1531,7 @@ process 'IndelRealignerTumorIntervals' {
           database.MillsGoldIdx ]
     )
 
-    each file(interval) from interval_ch3.flatten()
+    each file(interval) from split_interval_ch3.flatten()
 
     output:
     set(
@@ -1564,85 +1604,6 @@ process 'GatherRealignedBamFilesTumor' {
     """
 }
 
-if (params.RUNTHIS) {
-process 'FixMateBaseRecalTumor' {
-/*
- FixMateInformation (Picard): verify mate-pair information between mates; ensure that
- all mate-pair information is in sync between reads and its pairs
-*/
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        file(bam),
-        file(bai)
-    ) from IndelRealignerTumor
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-        file(IntervalsList)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict,
-          reference.IntervalsList ]
-    )
-
-    set(
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        file("${TumorReplicateId}_fixmate.bam"),
-        file("${TumorReplicateId}_fixmate.bai"),
-        file("${TumorReplicateId}_bqsr3.table")
-    ) into FixMateBaseRecalTumor
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
-        TMP_DIR=${params.tmpDir} \
-        I=${bam} \
-        O=${TumorReplicateId}_fixmate.bam \
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
-        CREATE_INDEX=true && \
-    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-        -T BaseRecalibrator \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${TumorReplicateId}_fixmate.bam \
-        -knownSites ${DBSNP} \
-        -knownSites ${KnownIndels} \
-        -knownSites ${MillsGold} \
-        -nct ${task.cpus} \
-        -o ${TumorReplicateId}_bqsr3.table
-    """
-}
-} // end RUNTHIS
-
 process 'BaseRecalTumor' {
 /*
  FixMateInformation (Picard): verify mate-pair information between mates; ensure that
@@ -1664,14 +1625,14 @@ process 'BaseRecalTumor' {
     set(
         file(RefFasta),
         file(RefIdx),
-        file(RefDict),
-        file(IntervalsList)
+        file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
           reference.RefIdx,
-          reference.RefDict,
-          reference.IntervalsList ]
+          reference.RefDict ]
     )
+
+    file(IntervalsList) from intervals_merged_padded_ch9
 
     set(
         file(DBSNP),
@@ -1728,62 +1689,6 @@ process 'BaseRecalTumor' {
     """
 }
 
-if(params.RUNTHIS) {
-process 'PrintReadsTumor' {
-// PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        file(bam),
-        file(bai),
-        file(bqsr3)
-    ) from FixMateBaseRecalTumor
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-        file(IntervalsList)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict,
-          reference.IntervalsList ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        file("${TumorReplicateId}_printreads.bam"),
-        file("${TumorReplicateId}_printreads.bai")
-    ) into ( 
-        PrintReadsTumor1,
-        PrintReadsTumor2,
-        PrintReadsTumor3
-    )
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
-        -T PrintReads \
-        -R ${RefFasta} \
-        -L ${IntervalsList} \
-        -I ${bam} \
-        -BQSR ${bqsr3} \
-        -nct ${task.cpus} \
-        -o ${TumorReplicateId}_printreads.bam
-    """
-}
-} // end RUNTHIS
-
 if (readsNormal != "NO_FILE") {
 
     process 'IndelRealignerNormalIntervals' {
@@ -1825,7 +1730,7 @@ if (readsNormal != "NO_FILE") {
               database.MillsGoldIdx ]
         )
 
-        each file(interval) from interval_ch4.flatten()
+        each file(interval) from split_interval_ch4.flatten()
 
         output:
         set(
@@ -1901,215 +1806,6 @@ if (readsNormal != "NO_FILE") {
         """
     }
 
-if(params.RUNTHIS) {
-    process 'FixMateBaseRecalNormal' {
-    /*
-     FixMateInformation (Picard): verify mate-pair information beteen mates; ensure that
-     all mate-pair information is in sync between reads and its pairs
-    */
-
-        tag "$NormalReplicateId"
-        publishDir "$params.outputDir/$NormalReplicateId/05_varscan/processing/",
-         mode: params.publishDirMode
-
-        input:
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file(bam),
-            file(bai)
-        ) from IndelRealignerNormal
-
-        set(
-            file(RefFasta),
-            file(RefIdx),
-            file(RefDict),
-            file(IntervalsList)
-        ) from Channel.value(
-            [ reference.RefFasta,
-              reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsList ]
-        )
-
-        set(
-            file(DBSNP),
-            file(DBSNPIdx),
-            file(KnownIndels),
-            file(KnownIndelsIdx),
-            file(MillsGold),
-            file(MillsGoldIdx)
-        ) from Channel.value(
-            [ database.DBSNP,
-              database.DBSNPIdx,
-              database.KnownIndels,
-              database.KnownIndelsIdx,
-              database.MillsGold, database.MillsGoldIdx ]
-        )
-
-        output:
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file("${NormalReplicateId}_fixmate.bam"),
-            file("${NormalReplicateId}_fixmate.bai"),
-            file("${NormalReplicateId}_bqsr3.table")
-        ) into FixMateBaseRecalNormal
-
-        script:
-        """
-        mkdir -p ${params.tmpDir}
-
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar $PICARD FixMateInformation \
-            TMP_DIR=${params.tmpDir} \
-            I=${bam} \
-            O=${NormalReplicateId}_fixmate.bam \
-            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
-            CREATE_INDEX=true && \
-        $JAVA8 ${params.JAVA_Xmx} -jar $GATK3\
-            -T BaseRecalibrator \
-            -R ${RefFasta} \
-            -L ${IntervalsList} \
-            -I ${NormalReplicateId}_fixmate.bam \
-            -knownSites ${DBSNP} \
-            -knownSites ${KnownIndels} \
-            -knownSites ${MillsGold} \
-            -nct ${task.cpus} \
-            -o ${NormalReplicateId}_bqsr3.table
-        """
-    }
-
-    process 'PrintReadsNormal' {
-    // PrintReads (GATK3): write out sequence read data for filtering, merging, subsetting
-
-        tag "$NormalReplicateId"
-
-        publishDir "$params.outputDir/$NormalReplicateId/05_varscan/processing/",
-            mode: params.publishDirMode
-
-        input:
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file(bam),
-            file(bai),
-            file(bqsr3)
-        ) from FixMateBaseRecalNormal
-
-        set(
-            file(RefFasta),
-            file(RefIdx),
-            file(RefDict),
-            file(IntervalsList)
-        ) from Channel.value(
-            [ reference.RefFasta,
-              reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsList ]
-        )
-
-        output:
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file("${NormalReplicateId}_printreads.bam"),
-            file("${NormalReplicateId}_printreads.bai")
-        ) into (
-            PrintReadsNormal1,
-            PrintReadsNormal2
-        )
-
-        script:
-        """
-        mkdir -p ${params.tmpDir}
-
-        $JAVA8 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3  \
-            -T PrintReads \
-            -R ${RefFasta} \
-            -L ${IntervalsList} \
-            -I ${bam} \
-            -BQSR ${bqsr3} \
-            -nct ${task.cpus} \
-            -o ${NormalReplicateId}_printreads.bam
-        """
-    }
-
-    process 'ReorderSam' {
-    // ReorderSam (Picard): reorders reads to match the contig order in a reference file
-
-        tag "$TumorReplicateId"
-
-        publishDir "$params.outputDir/$TumorReplicateId/05_varscan/processing/",
-            mode: params.publishDirMode
-
-        input:
-        set(
-            TumorReplicateId,
-            file(bamTumor),
-            file(baiTumor)
-        ) from PrintReadsTumor1
-
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file(bamNormal),
-            file(baiNormal)
-        ) from PrintReadsNormal1
-
-        set(
-            file(RefFasta),
-            file(RefIdx),
-            file(RefDict)
-        ) from Channel.value(
-            [ reference.RefFasta,
-              reference.RefIdx,
-              reference.RefDict ]
-        )
-
-        output:
-        set(
-            TumorReplicateId,
-            file("${TumorReplicateId}_reorder_tumor.bam"),
-            file("${TumorReplicateId}_reorder_tumor.bai")
-        ) into (
-            ReorderSamTumor1,
-            ReorderSamTumor2
-        )
-
-        set(
-            NormalReplicateId,
-            TumorReplicateId,
-            file("${NormalReplicateId}_reorder_normal.bam"),
-            file("${NormalReplicateId}_reorder_normal.bai")
-        ) into ReorderSamNormal
-
-        script:
-        """
-        mkdir -p ${params.tmpDir}
-
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ReorderSam \
-            TMP_DIR=${params.tmpDir} \
-            SEQUENCE_DICTIONARY=${RefDict} \
-            INPUT=${bamTumor} \
-            MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \
-            CREATE_INDEX=true \
-            OUTPUT=${TumorReplicateId}_reorder_tumor.bam &
-        tumor_process_id=\$!
-
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ReorderSam \
-            TMP_DIR=${params.tmpDir} \
-            SEQUENCE_DICTIONARY=${RefDict} \
-            INPUT=${bamNormal} \
-            CREATE_INDEX=true \
-            OUTPUT=${NormalReplicateId}_reorder_normal.bam &
-            normal_process_id=\$!
-
-        wait \$tumor_process_id
-        wait \$normal_process_id
-        """
-    }
-} // end RUNTHIS
-
     process 'BaseRecalNormal' {
     /*
     FixMateInformation (Picard): verify mate-pair information between mates; ensure that
@@ -2132,14 +1828,14 @@ if(params.RUNTHIS) {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict),
-            file(IntervalsList)
+            file(RefDict)
         ) from Channel.value(
             [ reference.RefFasta,
             reference.RefIdx,
-            reference.RefDict,
-            reference.IntervalsList ]
+            reference.RefDict ]
         )
+
+        file(IntervalsList) from intervals_merged_padded_ch10
 
         set(
             file(DBSNP),
@@ -2220,14 +1916,13 @@ if(params.RUNTHIS) {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict),
-            file(IntervalsBed)
+            file(RefDict)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsBed ]
+              reference.RefDict ]
         )
+        file(IntervalsBed) from IntervalsBed_ch
 
         output:
         set(
@@ -2443,13 +2138,13 @@ if (readsNormal != "NO_FILE") {
             file(RefFasta),
             file(RefIdx),
             file(RefDict),
-            file(IntervalsList)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsList ]
+              reference.RefDict ]
         )
+
+        file(IntervalsList) from intervals_merged_padded_ch11
 
         set(
             file(DBSNP),
@@ -2527,14 +2222,15 @@ if (readsNormal != "NO_FILE") {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict),
-            file(IntervalsList)
+            file(RefDict)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict,
-              reference.IntervalsList ]
+              reference.RefDict ]
         )
+        
+        file(IntervalsList) from intervals_merged_padded_ch12
+
         set(
             file(DBSNP),
             file(DBSNPIdx),
@@ -2785,7 +2481,7 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 9) exit 1, """
+    if (params.references.size() != 7) exit 1, """
     ERROR: Not all References needed found in configuration
     Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
     """
@@ -2794,10 +2490,8 @@ def defineReference() {
         'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
         'RefDict'           : checkParamReturnFileReferences("RefDict"),
         'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-        'IntervalsList'     : checkParamReturnFileReferences("IntervalsList"),
-        'BaitIntervalsList' : checkParamReturnFileReferences("BaitIntervalsList"),
         'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-        'IntervalsBed'      : checkParamReturnFileReferences("IntervalsBed"),
+        'BaitIntervalsList' : checkParamReturnFileReferences("BaitIntervalsList"),
         'RegionsBed'        : checkParamReturnFileReferences("RegionsBed")
     ]
 }
@@ -2827,7 +2521,7 @@ def helpMessage() {
     log.info "--        U S A G E       --"
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--IntervalsList" "--IntervalsBed" [--single_end]'
+    log.info ' nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--RegionsBed" "--BaitIntervalsList" [--single_end]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
@@ -2856,8 +2550,8 @@ def helpMessage() {
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
-    log.info "--IntervalsList \t intervals.list \t\t interval.list file for targeting"
-    log.info "--IntervalsBed \t\t intervals.bed \t\t\t interval.bed file for targeting"
+    log.info "--RegionsBed \t\t regions.bed \t\t\t regions.bed file for Exon targets"
+    log.info "--BaitsIntervalsList \t\t baits.list \t\t\t baits.list file for Exon baits"
     log.info ""
     log.info " Optional argument:"
     log.info " ------------------"
