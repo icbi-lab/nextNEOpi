@@ -61,7 +61,7 @@ Every parameter can be edited in the params file or with the command lind by usi
 References, Databases and Software should be edited in the params.config.
 
 ```
-nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--IntervalsList" "--IntervalsBed" [--single_end]
+nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--BaitsBed" "--RegionsBed" [--single_end]
 ```
 #### Singularity
 The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
@@ -91,7 +91,7 @@ or
  ...
  sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,NO_FILE,groupX
 
-**--BaitsIntervalsList:** 	 baits.list; 		 baits.list file for Exon baits
+**--BaitsBed:** 	 baits.bed; 		 baits.bed file for Exon baits
 
 **--RegionsBed:** 		 regions.bed; 			 regions.bed file for Exon targeting
 

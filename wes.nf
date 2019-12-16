@@ -82,7 +82,7 @@ if (! params.batchFile) {
         // attention: if one of the samples is no-Normal or single end, all others
         // will be handled as such. You might want to process mixed sample data as
         // separate batches.
-        batchCSV  = file(params.batchFile).splitCsv(header:true)
+        batchCSV = file(params.batchFile).splitCsv(header:true)
         for ( row in batchCSV ) {
             if (row.readsTumorREV == "None") {
                 single_end = true
@@ -147,9 +147,9 @@ ________________________________________________________________________________
 **       P R E P R O C E S S I N G         **
 *********************************************
 */
-process 'BedToIntervalList' {
+process 'RegionsBedToIntervalList' {
 
-    tag 'BedToIntervalList'
+    tag 'RegionsBedToIntervalList'
 
     publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
 
@@ -165,13 +165,45 @@ process 'BedToIntervalList' {
     output:
     file(
         "${RegionsBed.baseName}.list"
-    ) into intervals_from_bed_ch0
+    ) into regions_intervals_from_bed_ch0
 
     script:
     """
     $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \
         I=${RegionsBed} \
         O=${RegionsBed.baseName}.list \
+        SD=$RefDict
+    """
+}
+
+process 'BaitsBedToIntervalList' {
+
+    tag 'BaitsBedToIntervalList'
+
+    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefDict),
+        file(BaitsBed)
+    ) from Channel.value(
+        [ reference.RefDict,
+          reference.BaitsBed ]
+    )
+
+    output:
+    file(
+        "${BaitsBed.baseName}.list"
+    ) into (
+        baits_intervals_from_bed_ch0,
+        baits_intervals_from_bed_ch1
+    )
+
+    script:
+    """
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \
+        I=${BaitsBed} \
+        O=${BaitsBed.baseName}.list \
         SD=$RefDict
     """
 }
@@ -192,7 +224,7 @@ process 'preprocessIntervalList' {
           reference.RefIdx,
           reference.RefDict ]
     )
-    file(interval_list) from intervals_from_bed_ch0
+    file(interval_list) from regions_intervals_from_bed_ch0
 
     output:
     file(
@@ -449,14 +481,13 @@ process 'alignmentMetrics' {
     
     set(
         file(RefFasta),
-        file(RefIdx),
-        file(BaitIntervalsList)
+        file(RefIdx)
     ) from Channel.value(
         [ reference.RefFasta,
-          reference.RefIdx,
-          reference.BaitIntervalsList ]
+          reference.RefIdx ]
     )
 
+    file(BaitIntervalsList) from baits_intervals_from_bed_ch0
     file(IntervalsList) from intervals_merged_padded_ch2
 
 
@@ -650,14 +681,13 @@ if (readsNormal != "NO_FILE" && single_end) {
 
         set(
             file(RefFasta),
-            file(RefIdx),
-            file(BaitIntervalsList)
+            file(RefIdx)
         ) from Channel.value(
             [ reference.RefFasta,
-              reference.RefIdx,
-              reference.BaitIntervalsList ]
+              reference.RefIdx ]
         )
 
+        file(BaitIntervalsList) from baits_intervals_from_bed_ch1
         file(IntervalsList) from intervals_merged_padded_ch3
 
 
@@ -1905,13 +1935,13 @@ if (readsNormal != "NO_FILE") {
             TumorReplicateId,
             file(bamTumor),
             file(baiTumor)
-        ) from BaseRecalTumor1 // from ReorderSamTumor1
+        ) from BaseRecalTumor1 // fromBaseRecalTumor1
 
         set(
             NormalReplicateId,
             file(bamNormal),
             file(baiNormal)
-        ) from BaseRecalNormal1 // ReorderSamNormal
+        ) from BaseRecalNormal1 // BaseRecalNormal1
 
         set(
             file(RefFasta),
@@ -2491,7 +2521,7 @@ def defineReference() {
         'RefDict'           : checkParamReturnFileReferences("RefDict"),
         'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
         'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-        'BaitIntervalsList' : checkParamReturnFileReferences("BaitIntervalsList"),
+        'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
         'RegionsBed'        : checkParamReturnFileReferences("RegionsBed")
     ]
 }
@@ -2521,7 +2551,7 @@ def helpMessage() {
     log.info "--        U S A G E       --"
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--RegionsBed" "--BaitIntervalsList" [--single_end]'
+    log.info ' nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--RegionsBed" "--BaitsBed" [--single_end]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
@@ -2551,7 +2581,7 @@ def helpMessage() {
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
     log.info "--RegionsBed \t\t regions.bed \t\t\t regions.bed file for Exon targets"
-    log.info "--BaitsIntervalsList \t\t baits.list \t\t\t baits.list file for Exon baits"
+    log.info "--BaitsBed \t\t baits.bed \t\t\t baits.bed file for Exon baits"
     log.info ""
     log.info " Optional argument:"
     log.info " ------------------"
