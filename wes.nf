@@ -2228,7 +2228,7 @@ if (readsNormal != "NO_FILE") {
             --tmp-dir ${params.tmpDir} \
             --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_pass.vcf \
             -R ${RefFasta} \
-            --genotype-filter-expression "g.getAD().1 < 2" \
+            --genotype-filter-expression "g.getAD().1 < ${params.minAD}" \
             --genotype-filter-name "AD.1_2" \
             --output ${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz
         """
@@ -2310,7 +2310,7 @@ if (readsNormal != "NO_FILE") {
             --tmp-dir ${params.tmpDir} \
             --variant ${TumorReplicateId}_mutect1_pass.vcf \
             -R ${RefFasta} \
-            --genotype-filter-expression "g.getAD().1 < 2" \
+            --genotype-filter-expression "g.getAD().1 < ${params.minAD}" \
             --genotype-filter-name "AD.1_2" \
             --output ${TumorReplicateId}_mutect1_final.vcf.gz
         """
