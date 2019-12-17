@@ -77,7 +77,7 @@ or
 **--batchFile:**
 * CSV-file, paired-end T/N reads:
 
- sampleId,readsTumorFWD,readsTumorREV,readsNormalFWD,readsNormalREV,group
+ tumorSampleName,sampleId,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
  sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,Normal1_reads_1.fastq,Normal1_reads_2.fastq,group1
  sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,Normal2_reads_1.fastq,Normal2_reads_2.fastq,group1
  ...
@@ -85,7 +85,7 @@ or
 
 * CSV-file, single-end T only reads:
 
- sampleId,readsTumorFWD,readsTumorREV,readsNormalFWD,readsNormalREV,group
+ tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
  sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,NO_FILE,NO_FILE,group1
  sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,NO_FILE,NO_FILE,group1
  ...
@@ -97,9 +97,9 @@ or
 
 #### Optional argument:
 **--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
-**--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
+**--tumorSampleName**          tumor sample name. If not specified samples will be named according to the fastq filenames.  
 
-**--sampleName**          sample name. If not specified samples will be named according to the fastq filenames.  
+**--normalSampleName**          normal sample name. If not specified samples will be named according to the fastq filenames.  
 
 ## 3. Output
 The Pipeline creates an ouput directory with the following structure:
