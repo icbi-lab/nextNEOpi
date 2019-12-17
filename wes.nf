@@ -460,6 +460,7 @@ process 'MarkDuplicatesTumor' {
         -M ${TumorReplicateId}_aligned_sort_mkdp.txt \
         --create-output-bam-index true \
         --read-validation-stringency LENIENT \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
     """
 }
@@ -659,6 +660,7 @@ if (readsNormal != "NO_FILE" && single_end) {
             -M ${NormalReplicateId}_aligned_sort_mkdp.txt \
             --create-output-bam-index true \
             --read-validation-stringency LENIENT \
+            --spark-master local[${task.cpus}] \
             --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
         """
     }
@@ -813,6 +815,7 @@ process 'BaseRecalApplyTumor' {
         --known-sites ${DBSNP} \
         --known-sites ${KnownIndels} \
         --known-sites ${MillsGold} \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}' && \
     $GATK4 ApplyBQSRSpark \
         --tmp-dir ${params.tmpDir} \
@@ -821,6 +824,7 @@ process 'BaseRecalApplyTumor' {
         -L ${IntervalsList} \
         -O ${TumorReplicateId}_recal4.bam \
         --bqsr-recal-file ${TumorReplicateId}_bqsr.table \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}'
     """
 }
@@ -942,6 +946,7 @@ process 'AnalyzeCovariates' {
         --known-sites ${DBSNP} \
         --known-sites ${KnownIndels} \
         --known-sites ${MillsGold} \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}' && \
     $GATK4 AnalyzeCovariates \
         --tmp-dir ${params.tmpDir} \
@@ -1262,6 +1267,7 @@ if (readsNormal != 'NO_FILE') {
             --known-sites ${DBSNP} \
             --known-sites ${KnownIndels} \
             --known-sites ${MillsGold} \
+            --spark-master local[${task.cpus}] \
             --conf 'spark.executor.cores=${task.cpus}'&& \
          $GATK4 ApplyBQSRSpark \
             --tmp-dir ${params.tmpDir} \
@@ -1270,6 +1276,7 @@ if (readsNormal != 'NO_FILE') {
             -L ${IntervalsList} \
             -O ${NormalReplicateId}_recal4.bam \
             --bqsr-recal-file ${NormalReplicateId}_bqsr.table \
+            --spark-master local[${task.cpus}] \
             --conf 'spark.executor.cores=${task.cpus}'
         """
     }
@@ -1707,6 +1714,7 @@ process 'BaseRecalTumor' {
         --known-sites ${DBSNP} \
         --known-sites ${KnownIndels} \
         --known-sites ${MillsGold} \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}'&& \
     $GATK4 ApplyBQSRSpark \
         --tmp-dir ${params.tmpDir} \
@@ -1715,6 +1723,7 @@ process 'BaseRecalTumor' {
         -L ${IntervalsList} \
         -O ${TumorReplicateId}_recal4.bam \
         --bqsr-recal-file ${TumorReplicateId}_bqsr4.table \
+        --spark-master local[${task.cpus}] \
         --conf 'spark.executor.cores=${task.cpus}'
     """
 }
@@ -1909,6 +1918,7 @@ if (readsNormal != "NO_FILE") {
             --known-sites ${DBSNP} \
             --known-sites ${KnownIndels} \
             --known-sites ${MillsGold} \
+            --spark-master local[${task.cpus}] \
             --conf 'spark.executor.cores=${task.cpus}'&& \
         $GATK4 ApplyBQSRSpark \
             --tmp-dir ${params.tmpDir} \
@@ -1917,6 +1927,7 @@ if (readsNormal != "NO_FILE") {
             -L ${IntervalsList} \
             -O ${NormalReplicateId}_recal4.bam \
             --bqsr-recal-file ${NormalReplicateId}_bqsr4.table \
+            --spark-master local[${task.cpus}] \
             --conf 'spark.executor.cores=${task.cpus}'
         """
     }
