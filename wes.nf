@@ -46,27 +46,32 @@ readsNormal = params.readsNormal
 
 // did not get a CSV batch file: just run a single sample
 if (! params.batchFile) {
-        // create channel with sampleName/reads file set
+        // create channel with tumorSampleName/reads file set
         if (params.readsTumor != "NO_FILE") {
             // Sample name and reads file is passed via cmd line options
             // Sample name to use, if not given uses fastq file simpleName
-            params.sampleName = "undefined"
+            params.tumorSampleName  = "undefined"
+            params.normalSampleName = "undefined"
             if(!params.single_end) {
-                sampleName = params.sampleName != "undefined" ? params.sampleName : file(params.readsTumor)[0].simpleName
+                tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor)[0].simpleName
             } else {
-                sampleName = params.sampleName != "undefined" ? params.sampleName : file(params.readsTumor).simpleName
+                tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
             }
 
             Channel
                    .fromFilePairs(params.readsTumor)
-                   .map { reads -> tuple(sampleName, reads[1][0], reads[1][1], "None") }
+                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .set { tumor_ch }
 
             if (params.readsNormal != "NO_FILE") {
-                sampleNameNormal = sampleName + "_Normal"
+                if(!params.single_end) {
+                    normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal)[0].simpleName
+                } else {
+                    normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
+                }
                 Channel
                        .fromFilePairs(params.readsNormal)
-                       .map { reads -> tuple(sampleNameNormal, sampleName, reads[1][0], reads[1][1], "None") }
+                       .map { reads -> tuple(normalSampleName, tumorSampleName, reads[1][0], reads[1][1], "None") }
                        .set { normal_ch }
             }
         } else  {
@@ -95,7 +100,7 @@ if (! params.batchFile) {
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
-                .map { row -> tuple(row.sampleId, 
+                .map { row -> tuple(row.tumorSampleName,
                                     file(row.readsTumorFWD),
                                     file(row.readsTumorREV),
                                     row.group) }
@@ -105,8 +110,8 @@ if (! params.batchFile) {
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
-                .map { row -> tuple(row.sampleId + "_Normal",
-                                    row.sampleId,
+                .map { row -> tuple(row.normalSampleName,
+                                    row.tumorSampleName,
                                     file(row.readsNormalFWD),
                                     file(row.readsNormalREV),
                                     row.group) }
@@ -1359,20 +1364,20 @@ if (readsNormal != 'NO_FILE') {
             file(Normalbai),
             file(intervals)
         ) from ApplyTumor5
-            .combine(ApplyNormal2)
+            .merge(ApplyNormal2)
             .combine(
                 split_interval_ch2.flatten()
             )
 
         output:
-        file("${intervals}.vcf.gz") into Mutect2Vcf
-        file("${intervals}.vcf.gz.stats") into Mutect2Stats
-
         set(
             TumorReplicateId,
             NormalReplicateId,
-            file("${intervals}.vcf.gz.tbi")
-        ) into Mutect2Idx
+            file("${TumorReplicateId}_${intervals}.vcf.gz"),
+            file("${TumorReplicateId}_${intervals}.vcf.gz.stats"),
+            file("${TumorReplicateId}_${intervals}.vcf.gz.tbi")
+        ) into Mutect2Vcf_ch
+
 
         script:
         """
@@ -1384,7 +1389,7 @@ if (readsNormal != 'NO_FILE') {
             -I ${Tumorbam} -tumor ${TumorReplicateId} \
             -I ${Normalbam} -normal ${NormalReplicateId} \
             -L ${intervals} --native-pair-hmm-threads ${task.cpus} \
-            -O ${intervals}.vcf.gz
+            -O ${TumorReplicateId}_${intervals}.vcf.gz
         """
     }
 
@@ -1397,15 +1402,15 @@ if (readsNormal != 'NO_FILE') {
             mode: params.publishDirMode
 
         input:
-        file(vcf) from Mutect2Vcf.collect()
-        file (stats) from Mutect2Stats.collect()
-        
         set(
             TumorReplicateId,
             NormalReplicateId,
+            file(vcf),
+            file(stats),
             file(idx)
-        ) from Mutect2Idx
-            .groupTuple(by: [0,1])
+        ) from Mutect2Vcf_ch
+            .groupTuple(by: [0, 1])
+
 
         output:
         set(
@@ -1822,7 +1827,7 @@ if (readsNormal != "NO_FILE") {
             .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
             .flatten()
             .collate(4)
-            .groupTuple(by: 0)
+            .groupTuple(by: [0,1])
 
         output:
         set(
@@ -2597,7 +2602,7 @@ def helpMessage() {
     log.info " Optional argument:"
     log.info " ------------------"
     log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ file (can be zipped)"
-    log.info "--sampleName \t\t  sample name. If not specified samples will be named according to the fastq filenames."
+    log.info "--tumorSampleName \t\t  sample name. If not specified samples will be named according to the fastq filenames."
     log.info ""
     log.info " All references, databases, software should be edited in the nextflow.config file"
     log.info ""
