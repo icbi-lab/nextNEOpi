@@ -139,6 +139,7 @@ BAMREADCOUNT  = file(params.BAMREADCOUNT)
 JAVA8         = file(params.JAVA8)
 JAVA7         = file(params.JAVA7)
 PERL          = file(params.PERL)
+VARIANTSORT   = file(params.VARIANTSORT)
 
 /*
 ________________________________________________________________________________
@@ -2429,7 +2430,7 @@ if (readsNormal != "NO_FILE") {
             --cache --dir_cache ${params.vep_cache} \
             --format "vcf" \
             --tab && \
-        variant_sort.sh  \
+        $VARIANTSORT  \
             -1 ${TumorReplicateId}_${NormalReplicateId}_mutect1_vep.txt \
             -2 ${TumorReplicateId}_${NormalReplicateId}_mutect2_vep.txt \
             -S ${TumorReplicateId}_${NormalReplicateId}_varscanSnp_vep.txt \
@@ -2494,7 +2495,7 @@ if (readsNormal != "NO_FILE") {
             --fasta ${VepFasta} \
             --format "vcf" \
             --tab  && \
-        variant_sort.sh \
+        $VARIANTSORT \
             -1 ${TumorReplicateId}_mutect1_vep.txt \
             -2 ${TumorReplicateId}_mutect2_vep.txt \
             -t ${TumorReplicateId}
