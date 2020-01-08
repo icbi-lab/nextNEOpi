@@ -77,19 +77,19 @@ or
 **--batchFile:**
 * CSV-file, paired-end T/N reads:
 
- tumorSampleName,sampleId,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
- sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,Normal1_reads_1.fastq,Normal1_reads_2.fastq,group1
- sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,Normal2_reads_1.fastq,Normal2_reads_2.fastq,group1
+ tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
+ sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,group1
+ sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,group1
  ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NormalN_reads_1.fastq,NormalN_reads_2.fastq,groupX
+ sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,groupX
 
 * CSV-file, single-end T only reads:
 
  tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
- sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,NO_FILE,NO_FILE,group1
- sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,NO_FILE,NO_FILE,group1
+ sample1,Tumor1_reads_1.fastq,None,None,None,None,group1
+ sample2,Tumor2_reads_1.fastq,None,None,None,None,group1
  ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NO_FILE,NO_FILE,groupX
+ sampleN,TumorN_reads_1.fastq,None,None,None,None,groupX
 
 **--BaitsBed:** 	 baits.bed; 		 baits.bed file for Exon baits
 
