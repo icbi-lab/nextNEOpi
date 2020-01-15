@@ -24,8 +24,9 @@ The singularity mode has to be enabled in the params.config file and the path to
 --single_end: sets parameter to TRUE (default false)
 
 ## 2. Output
-'''
-.
+
+```
+/output/dir/
 ├── NeoFuse
 │   ├── Sample_name
 │   │   ├── Arriba
@@ -37,4 +38,5 @@ The singularity mode has to be enabled in the params.config file and the path to
 └── pVACseq
     └── Sample_name
         └── MHC_Class_I
-'''
+```
+
