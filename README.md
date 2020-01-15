@@ -24,3 +24,17 @@ The singularity mode has to be enabled in the params.config file and the path to
 --single_end: sets parameter to TRUE (default false)
 
 ## 2. Output
+'''
+.
+├── NeoFuse
+│   ├── Sample_name
+│   │   ├── Arriba
+│   │   ├── LOGS
+│   │   ├── NeoFuse
+│   │   ├── OptiType
+│   │   └── TPM
+│   └── STAR_idx
+└── pVACseq
+    └── Sample_name
+        └── MHC_Class_I
+'''
