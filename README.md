@@ -1,4 +1,4 @@
-Pipeline for RNA-seq FASTQ files processing
+Pipeline for RNA-seq FASTQ and VCF files processing
 
 The pipeline takes as input:
 
