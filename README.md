@@ -18,7 +18,7 @@ References, Databases and Software should be edited in the params.config.
 `nextflow run rna.nf --reads1 --reads2 --tsv_file --vcf_file --single_end --phased_vcf --phased_vcf_tbi`
 
 ### Singularity
-The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
+The singularity mode has to be enabled in the params.config file and the path to the image has to be edited.
 
 ### Single-end reads:
 --single_end: sets parameter to TRUE (default false)
