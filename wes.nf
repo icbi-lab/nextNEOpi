@@ -293,7 +293,8 @@ process 'SplitIntervals' {
         split_interval_ch1,
         split_interval_ch2,
         split_interval_ch3,
-        split_interval_ch4
+        split_interval_ch4,
+        split_interval_ch5
     )
 
     script:
@@ -1055,12 +1056,17 @@ if (readsNormal == "NO_FILE") {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict)
+            file(RefDict),
+            file(gnomADfull),
+            file(gnomADfullIdx)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict ]
+              reference.RefDict,
+              reference.GnomADfull,
+              reference.GnomADfullIdx ]
         )
+
 
         set(
             TumorReplicateId,
@@ -1090,7 +1096,9 @@ if (readsNormal == "NO_FILE") {
             --tmp-dir ${params.tmpDir} \
             -R ${RefFasta} \
             -I ${Tumorbam} -tumor ${TumorReplicateId} \
-            -L ${IntervalsList} --native-pair-hmm-threads ${task.cpus} \
+            -L ${IntervalsList} \
+            --germline-resource ${gnomADfull} \
+            --native-pair-hmm-threads ${task.cpus} \
             -O ${IntervalsList}.vcf.gz
         """
     }
@@ -1362,7 +1370,8 @@ if (readsNormal != 'NO_FILE') {
             file("${NormalReplicateId}_recal4.bam.bai")
         ) into (
             ApplyNormal1,
-            ApplyNormal2
+            ApplyNormal2,
+            ApplyNormal3,  // for HaploTypeCaller
         )
 
         script:
@@ -1461,11 +1470,15 @@ if (readsNormal != 'NO_FILE') {
         set(
             file(RefFasta),
             file(RefIdx),
-            file(RefDict)
+            file(RefDict),
+            file(gnomADfull),
+            file(gnomADfullIdx)
         ) from Channel.value(
             [ reference.RefFasta,
               reference.RefIdx,
-              reference.RefDict ]
+              reference.RefDict,
+              database.GnomADfull,
+              database.GnomADfullIdx ]
         )
 
         set(
@@ -1502,7 +1515,9 @@ if (readsNormal != 'NO_FILE') {
             -R ${RefFasta} \
             -I ${Tumorbam} -tumor ${TumorReplicateId} \
             -I ${Normalbam} -normal ${NormalReplicateId} \
-            -L ${intervals} --native-pair-hmm-threads ${task.cpus} \
+            --germline-resource ${gnomADfull} \
+            -L ${intervals} \
+            --native-pair-hmm-threads ${task.cpus} \
             -O ${TumorReplicateId}_${intervals}.vcf.gz
         """
     }
@@ -1652,8 +1667,8 @@ if (readsNormal != 'NO_FILE') {
                 file(RefDict)
             ) from Channel.value(
                 [ reference.RefFasta,
-                reference.RefIdx,
-                reference.RefDict ]
+                  reference.RefIdx,
+                  reference.RefDict ]
             )
 
             set(
@@ -1716,6 +1731,246 @@ if (readsNormal != 'NO_FILE') {
             """
         }
     }
+
+    // HaploTypeCaller
+    process 'HaploTypeCaller' {
+    /* 
+     Call germline SNPs and indels via local re-assembly of haplotypes; normal sample
+     germline variants are needed for generating phased vcfs for pVACtools
+    */
+
+        tag "$TumorReplicateId"
+
+        // publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/processing",
+        // mode: params.publishDirMode
+
+        input:
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+            file(DBSNP),
+            file(DBSNPIdx)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict,
+              database.DBSNP,
+              database.DBSNPIdx ]
+        )
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(Normalbam),
+            file(Normalbai),
+            file(intervals)
+        ) from ApplyNormal3
+            .combine(
+                split_interval_ch5.flatten()
+            )
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_germline_${intervals}.vcf.gz"),
+            file("${TumorReplicateId}_germline_${intervals}.vcf.gz.tbi"),
+            file(Normalbam),
+            file(Normalbai)
+        ) into (
+            HaploTypeCallerVCF_ch,
+            HaploTypeCallerVCF_ch2
+        )
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $GATK4 --java-options ${params.JAVA_Xmx} HaplotypeCaller \
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -I ${Normalbam} \
+            -L ${intervals} \
+            --native-pair-hmm-threads ${task.cpus} \
+            --dbsnp ${DBSNP} \
+            -O ${TumorReplicateId}_germline_${intervals}.vcf.gz
+        """
+    }
+
+
+    // Run a Convolutional Neural Net to filter annotated germline variants
+    process 'CNNScoreVariants' {
+    /* 
+     Run a Convolutional Neural Net to filter annotated germline variants; normal sample
+     germline variants are needed for generating phased vcfs for pVACtools
+    */
+
+        // TODO: deal with this smarter
+        conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+
+        tag "$TumorReplicateId"
+
+        // publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/processing",
+        // mode: params.publishDirMode
+
+        input:
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(raw_germline_vcf),
+            file(raw_germline_vcf_tbi),
+            file(Normalbam),
+            file(Normalbai)
+        ) from HaploTypeCallerVCF_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${raw_germline_vcf.baseName}_CNNScored.vcf.gz"),
+            file("${raw_germline_vcf.baseName}_CNNScored.vcf.gz.tbi")
+        ) into CNNScoreVariants_ch
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $GATK4 CNNScoreVariants \
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -I ${Normalbam} \
+            -V ${raw_germline_vcf} \
+            -tensor-type read_tensor \
+            --inter-op-threads ${task.cpus/2} \
+            --intra-op-threads ${task.cpus/2} \
+            -O ${raw_germline_vcf.baseName}_CNNScored.vcf.gz
+        """
+    }
+
+
+    process 'MergeGermlineVCF' {
+    // Merge scattered filtered germline vcfs
+    // TODO: filtering does not work -> GATK bug
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/processing",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(filtered_germline_vcf),
+            file(filtered_germline_vcf_tbi)
+        ) from CNNScoreVariants_ch
+            .groupTuple(by: [0, 1])
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_germline_CNNscored.vcf.gz"),
+            file("${TumorReplicateId}_germline_CNNscored.vcf.gz.tbi"),
+        ) into HaploTypeCaller_scored_merged_ch
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+        
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+            TMP_DIR=${params.tmpDir} \
+            I=${filtered_germline_vcf.join(" I=")} \
+            O=${TumorReplicateId}_germline_CNNscored.vcf.gz
+        """
+    }
+
+
+
+/////////////////////////////////////////
+    // Apply a Convolutional Neural Net to filter annotated germline variants
+    process 'FilterVariantTranches' {
+    /* 
+     Apply a Convolutional Neural Net to filter annotated germline variants; normal sample
+     germline variants are needed for generating phased vcfs for pVACtools
+    */
+
+        // TODO: deal with this smarter
+        conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/",
+         mode: params.publishDirMode
+
+        input:
+        set(
+            file(MillsGold),
+            file(MillsGoldIdx),
+            file(HapMap),
+            file(HapMapIdx),
+            file(hcSNPS1000G),
+            file(hcSNPS1000GIdx)
+        ) from Channel.value(
+            [ database.MillsGold,
+            database.MillsGoldIdx,
+            database.HapMap,
+            database.HapMapIdx,
+            database.hcSNPS1000G,
+            database.hcSNPS1000GIdx ]
+        )
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(scored_germline_vcf),
+            file(scored_germline_vcf_tbi)
+        ) from HaploTypeCaller_scored_merged_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${scored_germline_vcf.simpleName}_Filtered.vcf.gz"),
+            file("${scored_germline_vcf.simpleName}_Filtered.vcf.gz.tbi")
+        ) into germline_FilteredVariants_ch
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $GATK4 FilterVariantTranches \
+            --tmp-dir ${params.tmpDir} \
+            -V ${scored_germline_vcf} \
+            --resource ${hcSNPS1000G} \
+            --resource ${HapMap} \
+            --resource ${MillsGold} \
+            --info-key CNN_2D \
+            --snp-tranche 99.95 \
+            --indel-tranche 99.4 \
+            --invalidate-previous-filters \
+            -O ${scored_germline_vcf.simpleName}_Filtered.vcf.gz
+        """
+    }
+
+/////////////////////////////////////////
+
+
+    // END HTC
 }
 
 /*
@@ -2736,19 +2991,25 @@ def defineReference() {
 }
 
 def defineDatabases() {
-    if (params.databases.size() != 10) exit 1, """
+    if (params.databases.size() != 16) exit 1, """
     ERROR: Not all Databases needed found in configuration
     Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
     """
     return [
         'MillsGold'      : checkParamReturnFileDatabases("MillsGold"),
         'MillsGoldIdx'   : checkParamReturnFileDatabases("MillsGoldIdx"),
+        'hcSNPS1000G'    : checkParamReturnFileDatabases("hcSNPS1000G"),
+        'hcSNPS1000GIdx' : checkParamReturnFileDatabases("hcSNPS1000GIdx"),
+        'HapMap'         : checkParamReturnFileDatabases("HapMap"),
+        'HapMapIdx'      : checkParamReturnFileDatabases("HapMapIdx"),
         'Cosmic'         : checkParamReturnFileDatabases("Cosmic"),
         'CosmicIdx'      : checkParamReturnFileDatabases("CosmicIdx"),
         'DBSNP'          : checkParamReturnFileDatabases("DBSNP"),
         'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
         'GnomAD'         : checkParamReturnFileDatabases("GnomAD"),
         'GnomADIdx'      : checkParamReturnFileDatabases("GnomADIdx"),
+        'GnomADfull'     : checkParamReturnFileDatabases("GnomADfull"),
+        'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
         'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
         'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
     ]
