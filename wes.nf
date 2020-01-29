@@ -141,6 +141,8 @@ JAVA8         = file(params.JAVA8)
 JAVA7         = file(params.JAVA7)
 PERL          = file(params.PERL)
 VARIANTSORT   = file(params.VARIANTSORT)
+BGZIP         = file(params.BGZIP)
+TABIX         = file(params.TABIX)
 
 /*
 ________________________________________________________________________________
@@ -817,7 +819,8 @@ process 'BaseRecalApplyTumor' {
         ApplyTumor2,
         ApplyTumor3,
         ApplyTumor4,
-        ApplyTumor5
+        ApplyTumor5,
+        ApplyTumor6
     )
 
 
@@ -1181,7 +1184,7 @@ if (readsNormal == "NO_FILE") {
                 file(vcfIdx),
                 file(vcfStats)
             ) from PileupTumor1
-            .combine(mutect2Tumor, by :0)
+                .combine(mutect2Tumor, by :0)
 
             output:
             set(
@@ -1256,7 +1259,7 @@ if (readsNormal == "NO_FILE") {
                 file(vcfIdx),
                 file(vcfStats)
             ) from PileupTumor1
-            .combine(mutect2Tumor, by :0)
+                .combine(mutect2Tumor, by :0)
 
             file(preAdapterDetail) from CollectSequencingArtifactMetrics1
 
@@ -1693,7 +1696,10 @@ if (readsNormal != 'NO_FILE') {
                 NormalReplicateId,
                 file("${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz"),
                 file("${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz.tbi")
-            ) into FilterMutect2
+            ) into (
+                FilterMutect2,
+                tumor_FilteredVariants_ch // TODO: tumor_FilteredVariants_ch might be moved to the majority voted vcf channel
+            )
 
             script:
             """
@@ -1863,7 +1869,6 @@ if (readsNormal != 'NO_FILE') {
 
     process 'MergeGermlineVCF' {
     // Merge scattered filtered germline vcfs
-    // TODO: filtering does not work -> GATK bug
 
         tag "$TumorReplicateId"
 
@@ -1898,9 +1903,6 @@ if (readsNormal != 'NO_FILE') {
         """
     }
 
-
-
-/////////////////////////////////////////
     // Apply a Convolutional Neural Net to filter annotated germline variants
     process 'FilterVariantTranches' {
     /* 
@@ -1971,6 +1973,118 @@ if (readsNormal != 'NO_FILE') {
 
 
     // END HTC
+
+    // CREATE phased VCF
+    process 'mkPhasedVCF' {
+    /* 
+     make phased vcf for pVACseq using tumor and germliine variants:
+     based on https://pvactools.readthedocs.io/en/latest/pvacseq/input_file_prep/proximal_vcf.html
+    */
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/04_PhasedVCF",
+          mode: params.publishDirMode
+
+        input:
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+              reference.RefIdx,
+              reference.RefDict ]
+        )
+
+        file(VepFasta) from Channel.value([reference.VepFasta])
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(tumorBAM),
+            file(tumorBAI),
+            file(germlineVCF),
+            file(germlineVCFidx),
+            file(tumorVCF),
+            file(tumorVCFidx)
+        ) from ApplyTumor6
+            .combine(germline_FilteredVariants_ch, by: [0,1])
+            .combine(tumor_FilteredVariants_ch, by: [0,1])
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_vep_phased.vcf.gz"),
+            file("${TumorReplicateId}_vep_phased.vcf.gz.tbi"),
+        ) into (
+            phasedVCF_ch
+        )
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $GATK4 --java-options ${params.JAVA_Xmx} SelectVariants \
+            --tmp-dir ${params.tmpDir} \
+            -R ${RefFasta} \
+            -V ${tumorVCF} \
+            --sample-name ${TumorReplicateId} \
+            -O ${TumorReplicateId}_tumor.vcf.gz
+
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD RenameSampleInVcf \
+            TMP_DIR=${params.tmpDir} \
+            I=${germlineVCF} \
+            NEW_SAMPLE_NAME=${TumorReplicateId} \
+            O=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
+
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+            TMP_DIR=${params.tmpDir} \
+            I=${TumorReplicateId}_tumor.vcf.gz \
+            I=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \
+            O=${TumorReplicateId}_germlineVAR_combined.vcf.gz
+
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \
+            TMP_DIR=${params.tmpDir} \
+            I=${TumorReplicateId}_germlineVAR_combined.vcf.gz \
+            O=${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
+            SEQUENCE_DICTIONARY=${RefDict}
+
+        $PERL $VEP -i ${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
+            -o ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
+            --fork ${task.cpus} \
+            --stats_file ${TumorReplicateId}_germlineVAR_combined_sorted_vep_summary.html \
+            --species ${params.vep_species} \
+            --assembly ${params.vep_assembly} \
+            --offline \
+            --cache \
+            --dir ${params.vep_dir} \
+            --dir_cache ${params.vep_cache} \
+            --fasta ${VepFasta} \
+            --pick --plugin Downstream --plugin Wildtype \
+            --symbol --terms SO --transcript_version --tsl \
+            --vcf
+
+        $BGZIP -c ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
+            > ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+        
+        $TABIX -p vcf ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+            -T ReadBackedPhasing \
+            -R ${RefFasta} \
+            -I ${tumorBAM} \
+            -V ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
+            -L ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
+            -o ${TumorReplicateId}_vep_phased.vcf.gz 
+        """
+    }
+    // END CREATE phased VCF
+
+
+
 }
 
 /*

@@ -33,6 +33,8 @@ To run the pipeline local, the required software has to be installed:
 * MUTECT1 		 (Version 1.1.7)
 * BAMREADCOUNT 		 (Version 0.8.0)
 * VEP 			 (Version 2.0)
+* BGZIP
+* TABIX
 
 
 ## 1.2 References
