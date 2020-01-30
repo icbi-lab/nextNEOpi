@@ -49,10 +49,18 @@ References:
 
 Databases:
 * MillsGold/Idx - Mills_and_1000G_gold_standard.indels.vcf/idx -  Gold standard Indels database, VCF file, IDX File
+* 1000G high confidence SNPs - VCF + IDX
+* HapMap VCF + IDF 
 * Cosmic/Idx - CosmicCodingMuts.vcf - Cosmic conding mutations, VCF file, IDX file
 * DBSNP/Idx - Homo_sapiens_assembly.dbsnp.vcf/idx - SNPS, microsatellites, and small-scale insertions and deletions, VCF file, IDX file
 * GnomAD/Idx - small_exac_common_3.vcf/idx - exonix sites only for contamination estimation from GATK, VCF file, IDX file
+* GnomADfull VCF + IDX
 * KnownIdenls/Idx - Homo_sapiens_assembly.known_indels.vcf/idx - Known Indels from GATK resource Bundle, VCF file, IDX file
+
+see also:
+<https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle>
+<https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/>
+<ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/>
 
 ## 2. Usage
 Before running the pipeline, the config files has to be edited. In the
@@ -63,7 +71,7 @@ Every parameter can be edited in the params file or with the command lind by usi
 References, Databases and Software should be edited in the params.config.
 
 ```
-nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--BaitsBed" "--RegionsBed" [--single_end]
+nextflow run wes.nf "--readsTumor <tumorFastq> --readsNormal <nomralFastq>"|--batchFile <batchFile.csv>" "--BaitsBed" "--RegionsBed" [--single_end]
 ```
 #### Singularity
 The singularity mode has to be anabled in the params.config file and the path to the image has to be edited.
@@ -72,7 +80,8 @@ The singularity mode has to be anabled in the params.config file and the path to
 **--single_end:** sets parameter to TRUE (default false)
 
 #### Mandatory arguments:
-**--readsTumor:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
+**--readsTumor:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA 
+**--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA files (can be zipped)
 
 or
 
@@ -85,20 +94,19 @@ or
  ...
  sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,groupX
 
-* CSV-file, single-end T only reads:
+* CSV-file, single-end T/N reads:
 
  tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
- sample1,Tumor1_reads_1.fastq,None,None,None,None,group1
- sample2,Tumor2_reads_1.fastq,None,None,None,None,group1
+ sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,group1
+ sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,group1
  ...
- sampleN,TumorN_reads_1.fastq,None,None,None,None,groupX
+ sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,groupX
 
 **--BaitsBed:** 	 baits.bed; 		 baits.bed file for Exon baits
 
 **--RegionsBed:** 		 regions.bed; 			 regions.bed file for Exon targeting
 
 #### Optional argument:
-**--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA file (can be zipped)
 **--tumorSampleName**          tumor sample name. If not specified samples will be named according to the fastq filenames.  
 
 **--normalSampleName**          normal sample name. If not specified samples will be named according to the fastq filenames.  
@@ -113,9 +121,12 @@ RESULTS
 └── <SampleId>
     ├── 01_preprocessing
     ├── 02_QC
+    ├── 03_haplotypeCaller
+    │   └── processing
     ├── 03_mutect2
     │   └── processing
     ├── 04_mutect1
+    ├── 04_PhasedVCF
     ├── 05_varscan
     │   └── processing
     └── 06_vep
