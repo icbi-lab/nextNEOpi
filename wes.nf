@@ -1714,115 +1714,6 @@ process 'FilterVariantTranches' {
 
 // END HTC
 
-// CREATE phased VCF
-process 'mkPhasedVCF' {
-/* 
-    make phased vcf for pVACseq using tumor and germliine variants:
-    based on https://pvactools.readthedocs.io/en/latest/pvacseq/input_file_prep/proximal_vcf.html
-*/
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/04_PhasedVCF",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
-    )
-
-    file(VepFasta) from Channel.value([reference.VepFasta])
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(tumorBAM),
-        file(tumorBAI),
-        file(germlineVCF),
-        file(germlineVCFidx),
-        file(tumorVCF),
-        file(tumorVCFidx)
-    ) from ApplyTumor6
-        .combine(germline_FilteredVariants_ch, by: [0,1])
-        .combine(somatic_hcVCF_ch1, by: [0,1])             // uses confirmed mutect2 variants
-        // .combine(tumor_FilteredVariants_ch, by: [0,1])  // would use filtered mutect2 variants
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_vep_phased.vcf.gz"),
-        file("${TumorReplicateId}_vep_phased.vcf.gz.tbi"),
-    ) into (
-        phasedVCF_ch
-    )
-
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $GATK4 --java-options ${params.JAVA_Xmx} SelectVariants \
-        --tmp-dir ${params.tmpDir} \
-        -R ${RefFasta} \
-        -V ${tumorVCF} \
-        --sample-name ${TumorReplicateId} \
-        -O ${TumorReplicateId}_tumor.vcf.gz
-
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD RenameSampleInVcf \
-        TMP_DIR=${params.tmpDir} \
-        I=${germlineVCF} \
-        NEW_SAMPLE_NAME=${TumorReplicateId} \
-        O=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
-
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
-        TMP_DIR=${params.tmpDir} \
-        I=${TumorReplicateId}_tumor.vcf.gz \
-        I=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \
-        O=${TumorReplicateId}_germlineVAR_combined.vcf.gz
-
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \
-        TMP_DIR=${params.tmpDir} \
-        I=${TumorReplicateId}_germlineVAR_combined.vcf.gz \
-        O=${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
-        SEQUENCE_DICTIONARY=${RefDict}
-
-    $PERL $VEP -i ${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
-        -o ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
-        --fork ${task.cpus} \
-        --stats_file ${TumorReplicateId}_germlineVAR_combined_sorted_vep_summary.html \
-        --species ${params.vep_species} \
-        --assembly ${params.vep_assembly} \
-        --offline \
-        --cache \
-        --dir ${params.vep_dir} \
-        --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
-        --pick --plugin Downstream --plugin Wildtype \
-        --symbol --terms SO --transcript_version --tsl \
-        --vcf
-
-    $BGZIP -c ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
-        > ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
-    
-    $TABIX -p vcf ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
-
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
-        -T ReadBackedPhasing \
-        -R ${RefFasta} \
-        -I ${tumorBAM} \
-        -V ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
-        -L ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
-        -o ${TumorReplicateId}_vep_phased.vcf.gz 
-    """
-}
-// END CREATE phased VCF
 
 
 /*
@@ -2645,8 +2536,11 @@ process 'mkHCsomaticVCF' {
         TumorReplicateId,
         NormalReplicateId,
         Mutect2_VCF,
+        Mutect2_Idx,
         Mutect1_VCF,
+        Mutect1_Idx,
         VarScan_VCF,
+        VarScan_Idx
     ) from FilterMutect2_ch2
         .combine(varscanFilteredCombined_ch2, by: [0, 1])
         .combine(Mutect1filter_ch2, by: [0, 1])
@@ -2658,12 +2552,13 @@ process 'mkHCsomaticVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz.tbi")
     ) into (
-        somatic_hcVCF_ch1
+        somatic_hcVCF_ch1,
+        somatic_hcVCF_ch2
     ) 
 
     script:
     """
-    make_hc_vcf.py --priority ${parmas.priorityCaller} \
+    make_hc_vcf.py --priority ${params.priorityCaller} \
         --m2_vcf ${Mutect2_VCF} \
         --m1_vcf ${Mutect1_VCF} \
         --vs_vcf ${VarScan_VCF} \
@@ -2764,9 +2659,142 @@ process 'Vep' {
         --dir ${params.vep_dir} \
         --cache --dir_cache ${params.vep_cache} \
         --format "vcf" \
-        --tab && \
+        --tab
     """
 }
+
+// CREATE phased VCF
+process 'mkPhasedVCF' {
+/* 
+    make phased vcf for pVACseq using tumor and germliine variants:
+    based on https://pvactools.readthedocs.io/en/latest/pvacseq/input_file_prep/proximal_vcf.html
+*/
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/04_PhasedVCF",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+    )
+
+    file(VepFasta) from Channel.value([reference.VepFasta])
+
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(tumorBAM),
+        file(tumorBAI),
+        file(germlineVCF),
+        file(germlineVCFidx),
+        file(tumorVCF),
+        file(tumorVCFidx)
+    ) from ApplyTumor6
+        .combine(germline_FilteredVariants_ch, by: [0,1])
+        .combine(somatic_hcVCF_ch2, by: [0,1])             // uses confirmed mutect2 variants
+        // .combine(tumor_FilteredVariants_ch, by: [0,1])  // would use filtered mutect2 variants
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_vep_phased.vcf.gz"),
+        file("${TumorReplicateId}_vep_phased.vcf.gz.tbi"),
+        file("${TumorReplicateId}_tumor_vep.vcf.gz"),
+        file("${TumorReplicateId}_tumor_vep.vcf.gz.tbi")
+    ) into (
+        phasedVCF_ch
+    )
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $GATK4 --java-options ${params.JAVA_Xmx} SelectVariants \
+        --tmp-dir ${params.tmpDir} \
+        -R ${RefFasta} \
+        -V ${tumorVCF} \
+        --sample-name ${TumorReplicateId} \
+        -O ${TumorReplicateId}_tumor.vcf.gz
+
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD RenameSampleInVcf \
+        TMP_DIR=${params.tmpDir} \
+        I=${germlineVCF} \
+        NEW_SAMPLE_NAME=${TumorReplicateId} \
+        O=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
+
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+        TMP_DIR=${params.tmpDir} \
+        I=${TumorReplicateId}_tumor.vcf.gz \
+        I=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \
+        O=${TumorReplicateId}_germlineVAR_combined.vcf.gz
+
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \
+        TMP_DIR=${params.tmpDir} \
+        I=${TumorReplicateId}_germlineVAR_combined.vcf.gz \
+        O=${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
+        SEQUENCE_DICTIONARY=${RefDict}
+
+    $PERL $VEP -i ${TumorReplicateId}_germlineVAR_combined_sorted.vcf.gz \
+        -o ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
+        --fork ${task.cpus} \
+        --stats_file ${TumorReplicateId}_germlineVAR_combined_sorted_vep_summary.html \
+        --species ${params.vep_species} \
+        --assembly ${params.vep_assembly} \
+        --offline \
+        --cache \
+        --dir ${params.vep_dir} \
+        --dir_cache ${params.vep_cache} \
+        --fasta ${VepFasta} \
+        --pick --plugin Downstream --plugin Wildtype \
+        --symbol --terms SO --transcript_version --tsl \
+        --vcf
+
+    $PERL $VEP -i ${TumorReplicateId}_tumor.vcf.gz \
+        -o ${TumorReplicateId}_tumor_vep.vcf \
+        --fork ${task.cpus} \
+        --stats_file ${TumorReplicateId}_tumor_vep_summary.html \
+        --species ${params.vep_species} \
+        --assembly ${params.vep_assembly} \
+        --offline \
+        --cache \
+        --dir ${params.vep_dir} \
+        --dir_cache ${params.vep_cache} \
+        --fasta ${VepFasta} \
+        --pick --plugin Downstream --plugin Wildtype \
+        --symbol --terms SO --transcript_version --tsl \
+        --vcf
+
+    $BGZIP -c ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf \
+        > ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+    
+    $TABIX -p vcf ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+
+    $BGZIP -c ${TumorReplicateId}_tumor_vep.vcf \
+        > ${TumorReplicateId}_tumor_vep.vcf.gz
+    
+    $TABIX -p vcf ${TumorReplicateId}_tumor_vep.vcf.gz
+
+
+    $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \
+        -T ReadBackedPhasing \
+        -R ${RefFasta} \
+        -I ${tumorBAM} \
+        -V ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
+        -L ${TumorReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \
+        -o ${TumorReplicateId}_vep_phased.vcf.gz 
+    """
+}
+// END CREATE phased VCF
 
 
 /*
