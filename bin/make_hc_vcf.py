@@ -84,7 +84,7 @@ def make_hc_somatic_vars(fm2, fm1, fvs, fst, fout, fout_single, priority):
     priority_reader.infos['VariantCalledBy'] = _Info('VariantCalledBy', '.', 'String', 'variant callers that called the variant', 'caller ', '0.1')
 
     # some sanity checks
-    if priority_reader.samples != confirming1_reader.samples != confirming2_reader.sample != confirming3_reader.sample:
+    if priority_reader.samples != confirming1_reader.samples != confirming2_reader.samples != confirming3_reader.samples:
         raise ValueError("Input VCF files must have the same sample column "
                 "headers.")
     if sorted(priority_reader.contigs.keys()) != sorted(confirming1_reader.contigs.keys()) != sorted(confirming2_reader.contigs.keys()) != sorted(confirming3_reader.contigs.keys()):

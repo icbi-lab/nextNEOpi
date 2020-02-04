@@ -1435,7 +1435,9 @@ process 'CNNScoreVariants' {
 */
 
     // TODO: deal with this smarter
-    conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    gatkcondaenv.yml
+    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    // conda 'bioconda::gatk4-spark=4.1.4.1'
 
     tag "$TumorReplicateId"
 
@@ -1532,7 +1534,8 @@ process 'FilterGermlineVariantTranches' {
 */
 
     // TODO: deal with this smarter
-    conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    conda 'gatkcondaenv.yml'
+    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
 
     tag "$TumorReplicateId"
 
@@ -2575,7 +2578,8 @@ process 'mkHCsomaticVCF' {
 */
 
     // TODO: deal with this smarter
-    conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    conda 'gatkcondaenv.yml'
+    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
 
     tag "$TumorReplicateId"
 
@@ -2676,6 +2680,7 @@ process 'VepTab' {
         --cache --dir_cache ${params.vep_cache} \
         --fasta ${VepFasta} \
         --format "vcf" \
+        ${params.vep_options} \
         --tab
     """
 }    
