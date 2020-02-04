@@ -394,9 +394,9 @@ process 'BwaTumor' {
         file(BwaRef)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict,
-            reference.BwaRef ]
+          reference.RefIdx,
+          reference.RefDict,
+          reference.BwaRef ]
     )
 
     output:
@@ -552,10 +552,9 @@ process 'BwaNormal' {
         file(BwaRef)
     ) from Channel.value(
         [ reference.RefFasta,
-        reference.RefIdx,
-        reference.RefDict,
-        reference.BwaRef
-        ]
+          reference.RefIdx,
+          reference.RefDict,
+          reference.BwaRef ]
     )
 
     output:
@@ -654,7 +653,7 @@ process 'alignmentMetricsNormal' {
         file(RefIdx)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx ]
+          reference.RefIdx ]
     )
 
     file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch1
@@ -866,9 +865,9 @@ process 'AnalyzeCovariates' {
         file(RefIdx),
         file(RefDict)
     ) from Channel.value(
-         [reference.RefFasta,
-         reference.RefIdx,
-         reference.RefDict ]
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     file(IntervalsList) from preprocessIntervalList_out_ch6
@@ -881,12 +880,12 @@ process 'AnalyzeCovariates' {
         file(MillsGold),
         file(MillsGoldIdx)
     ) from Channel.value(
-         [database.DBSNP,
-         database.DBSNPIdx,
-         database.KnownIndels,
-         database.KnownIndelsIdx,
-         database.MillsGold,
-         database.MillsGoldIdx ]
+        [ database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
     )
 
     set(
@@ -956,8 +955,8 @@ If single-end reads are used, do nothing, just create an empty file!!!
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-        reference.RefIdx,
-        reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     set(
@@ -1381,10 +1380,10 @@ process 'HaploTypeCaller' {
         file(DBSNPIdx)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict,
-            database.DBSNP,
-            database.DBSNPIdx ]
+          reference.RefIdx,
+          reference.RefDict,
+          database.DBSNP,
+          database.DBSNPIdx ]
     )
 
     set(
@@ -1451,8 +1450,8 @@ process 'CNNScoreVariants' {
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     set(
@@ -1552,11 +1551,11 @@ process 'FilterGermlineVariantTranches' {
         file(hcSNPS1000GIdx)
     ) from Channel.value(
         [ database.MillsGold,
-        database.MillsGoldIdx,
-        database.HapMap,
-        database.HapMapIdx,
-        database.hcSNPS1000G,
-        database.hcSNPS1000GIdx ]
+          database.MillsGoldIdx,
+          database.HapMap,
+          database.HapMapIdx,
+          database.hcSNPS1000G,
+          database.hcSNPS1000GIdx ]
     )
 
     set(
@@ -1836,8 +1835,8 @@ IndelRealigner (GATK3): perform local realignment of reads around indels
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     set(
@@ -1847,9 +1846,9 @@ IndelRealigner (GATK3): perform local realignment of reads around indels
         file(MillsGoldIdx)
     ) from Channel.value(
         [ database.KnownIndels,
-            database.KnownIndelsIdx,
-            database.MillsGold,
-            database.MillsGoldIdx ]
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
     )
 
     each file(interval) from SplitIntervals_out_ch4.flatten()
@@ -1958,8 +1957,8 @@ all mate-pair information is in sync between reads and its pairs
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-        reference.RefIdx,
-        reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     file(IntervalsList) from preprocessIntervalList_out_ch10
@@ -1973,11 +1972,11 @@ all mate-pair information is in sync between reads and its pairs
         file(MillsGoldIdx)
     ) from Channel.value(
         [ database.DBSNP,
-        database.DBSNPIdx,
-        database.KnownIndels,
-        database.KnownIndelsIdx,
-        database.MillsGold,
-        database.MillsGoldIdx ]
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx,
+          database.MillsGold,
+          database.MillsGoldIdx ]
     )
 
     output:
@@ -2052,8 +2051,8 @@ process 'VarscanSomatic' {
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
     file(IntervalsBed) from IntervalListToBed_out_ch0
 
@@ -2186,8 +2185,8 @@ process 'FilterVarscan' {
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     output:
@@ -2496,8 +2495,8 @@ process StrelkaSomatic {
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-        reference.RefIdx,
-        reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     output:
@@ -2704,8 +2703,8 @@ process 'mkPhasedVCF' {
         file(RefDict)
     ) from Channel.value(
         [ reference.RefFasta,
-            reference.RefIdx,
-            reference.RefDict ]
+          reference.RefIdx,
+          reference.RefDict ]
     )
 
     file(VepFasta) from Channel.value([reference.VepFasta])
