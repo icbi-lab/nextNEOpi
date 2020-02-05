@@ -295,12 +295,15 @@ process 'SplitIntervals' {
     file(
         "${IntervalName}/*-scattered.interval_list"
     ) into (
+        SplitIntervals_out_ch0,
         SplitIntervals_out_ch1,
         SplitIntervals_out_ch2,
         SplitIntervals_out_ch3,
         SplitIntervals_out_ch4,
-        SplitIntervals_out_ch5
+        SplitIntervals_out_ch5,
+        SplitIntervals_out_ch6,
     )
+    val("${IntervalName}") into SplitIntervals_out_ch0_Name
 
     script:
     IntervalName = IntervalsList.baseName
@@ -315,11 +318,13 @@ process 'SplitIntervals' {
         --subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW \
         -L ${IntervalsList} \
         -O ${IntervalName}
+
     """
 }
 
 process 'IntervalListToBed' {
     // convert padded interval list to Bed file (used by varscan)
+    // generate a padded tabix indexed region BED file for strelka
 
     tag 'BedFromIntervalList'
 
@@ -331,29 +336,12 @@ process 'IntervalListToBed' {
     output:
     file(
         "${paddedIntervalList.baseName}.bed"
-    ) into IntervalListToBed_out_ch0
-
-    script:
-    """
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \
-        I=${paddedIntervalList} \
-        O=${paddedIntervalList.baseName}.bed
-    """
-}
-
-process 'RegionsBedToTabix' {
-    // generate a padded tabix indexed region BED file for strelka
-    tag 'preprocessBeds'
-
-    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
-
-    input:
-    file(RegionsBed) from Channel.value(reference.RegionsBed)
-
-    output:
+    ) into (
+        IntervalListToBed_out_ch0
+    )
     tuple(
-        file("${RegionsBed}.gz"),
-        file("${RegionsBed}.gz.tbi")
+        file("${paddedIntervalList.baseName}.bed.gz"),
+        file("${paddedIntervalList.baseName}.bed.gz.tbi")
     ) into (
         RegionsBedToTabix_out_ch0,
         RegionsBedToTabix_out_ch1
@@ -361,12 +349,45 @@ process 'RegionsBedToTabix' {
 
     script:
     """
-    awk 'BEGIN {OFS="\t"}  \$1 !~ /^track|^browser/ {print \$1,\$2-'${padding}',\$3+'${padding}'}' <${RegionsBed} \
-        | sort -k1,1 -k2,2n -k3,3n \
-        | bgzip >${RegionsBed}.gz &&
-    tabix -p bed ${RegionsBed}.gz
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \
+        I=${paddedIntervalList} \
+        O=${paddedIntervalList.baseName}.bed
+    
+    ${BGZIP} -c ${paddedIntervalList.baseName}.bed > ${paddedIntervalList.baseName}.bed.gz &&
+    ${TABIX} -p bed ${paddedIntervalList.baseName}.bed.gz
     """
+}
 
+process 'ScatteredIntervalListToBed' {
+    // convert scattered padded interval list to Bed file (used by varscan)
+
+    tag 'ScatteredIntervalListToBed'
+
+    publishDir "$params.outputDir/00_preprare_Intervals/SplitIntervals/${IntervalName}", mode: params.publishDirMode
+
+    input:
+    set(
+        val(IntervalName),
+        file(IntervalsList)
+    ) from SplitIntervals_out_ch0_Name
+        .combine(
+            SplitIntervals_out_ch0.flatten()
+        )
+
+
+    output:
+    file(
+        "*.bed"
+    ) into (
+        ScatteredIntervalListToBed_out_ch0
+    )
+
+    script:
+    """
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \
+        I=${IntervalsList} \
+        O=${IntervalsList.baseName}.bed
+    """
 }
 
 
@@ -2022,7 +2043,7 @@ all mate-pair information is in sync between reads and its pairs
     """
 }
 
-
+if (true == false) {
 process 'VarscanSomatic' {
 // somatic (Varscan): calls somatic variants (SNPS and indels)
 
@@ -2032,8 +2053,6 @@ process 'VarscanSomatic' {
         mode: params.publishDirMode
 
     input:
-    // critical passage use merge
-
     set(
         TumorReplicateId,
         NormalReplicateId,
@@ -2088,6 +2107,136 @@ process 'VarscanSomatic' {
     rm -f ${TumorReplicateId}_${NormalReplicateId}_mpileup.fifo
     """
 }
+}
+if (true == true) {
+////////////
+process 'VarscanSomaticScatterd' {
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(Tumorbam),
+        file(Tumorbai),
+        _,                    // unused TumorReplicateId from BaseRecalNormal_out_ch2
+        file(Normalbam),
+        file(Normalbai),
+        file(intervals)
+    ) from BaseRecalTumorGATK3_out_ch0
+        .combine(BaseRecalNormalGATK3_out_ch0, by: 0)
+        .combine(
+            ScatteredIntervalListToBed_out_ch0.flatten()
+        )
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan.snp.vcf"),
+        file("${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan.indel.vcf")
+    ) into VarscanSomaticScattered_out_ch0
+
+    script:
+    """
+    mkfifo ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
+    $SAMTOOLS mpileup \
+        -q ${params.q} \
+        -f ${RefFasta} \
+        -l ${intervals} \
+        ${Normalbam} ${Tumorbam} > ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo &
+    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN somatic \
+        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo \
+        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan \
+        --output-vcf 1 \
+        --mpileup 1 \
+        --min-coverage ${params.min_cov} \
+        --min-coverage-normal ${params.min_cov_normal} \
+        --min-coverage-tumor ${params.min_cov_tumor} \
+        --min-freq-for-hom ${params.min_freq_for_hom} \
+        --tumor-purity ${params.tumor_purity} \
+        --p-value ${params.somatic_pvalue} \
+        --somatic-p-value ${params.somatic_somaticpvalue} \
+        --strand-filter ${params.strand_filter} && \
+    rm -f ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
+    """
+
+
+}
+
+process 'gatherVarscanVCFs' {
+// Merge scattered Varscan vcfs
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_varscan/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(snp_vcf),
+        file(indel_vcf)
+    ) from VarscanSomaticScattered_out_ch0
+        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+        .flatten()
+        .collate(4)
+        .groupTuple(by: [0,1])
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf"),
+        file("${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf")
+    ) into gatherVarscanVCFs_out_ch0
+ 
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+    
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+        TMP_DIR=${params.tmpDir} \
+        I=${snp_vcf.join(" I=")} \
+        O=${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \
+        SEQUENCE_DICTIONARY=${RefDict}
+
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+        TMP_DIR=${params.tmpDir} \
+        I=${indel_vcf.join(" I=")} \
+        O=${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \
+        SEQUENCE_DICTIONARY=${RefDict}
+
+    """
+}
+
+
+
+}
+////////////
 
 process 'ProcessVarscan' {
 // Filter variants by somatic status and confidences
@@ -2103,7 +2252,7 @@ process 'ProcessVarscan' {
         NormalReplicateId,
         file(snp),
         file(indel)
-    ) from VarscanSomatic_out_ch0
+    ) from gatherVarscanVCFs_out_ch0 // VarscanSomatic_out_ch0
 
     output:
     set(
@@ -2309,27 +2458,26 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
 *********************************************
 */
 
-process 'Mutect1' {
+process 'Mutect1scatterd' {
 // Mutect1: calls SNPS from tumor and matched normal sample
 
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect1/",
-        mode: params.publishDirMode
-
     input:
-    // critical step
-
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(bamTumor),
-        file(baiTumor),
-        _,                    // unused TumorReplicateId from BaseRecalNormalGATK3_out_ch_out_ch1
-        file(bamNormal),
-        file(baiNormal)
+        file(Tumorbam),
+        file(Tumorbai),
+        _,                    // unused TumorReplicateId from BaseRecalNormal_out_ch2
+        file(Normalbam),
+        file(Normalbai),
+        file(intervals)
     ) from BaseRecalTumorGATK3_out_ch3
         .combine(BaseRecalNormalGATK3_out_ch1, by: 0)
+        .combine(
+            SplitIntervals_out_ch6.flatten()
+        )
 
     set(
         file(RefFasta),
@@ -2341,7 +2489,6 @@ process 'Mutect1' {
           reference.RefDict ]
     )
 
-    file(IntervalsList) from preprocessIntervalList_out_ch11
 
     set(
         file(DBSNP),
@@ -2356,9 +2503,67 @@ process 'Mutect1' {
     )
 
     output:
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.vcf.gz.idx")
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.stats.txt")
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${intervals}.raw.vcf.gz"),
+        file("${TumorReplicateId}_${intervals}.raw.stats.txt"),
+        file("${TumorReplicateId}_${intervals}.raw.vcf.gz.idx")
+    ) into Mutect1scattered_out_ch0
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
+        --analysis_type MuTect \
+        --reference_sequence ${RefFasta} \
+        --cosmic ${Cosmic} \
+        --dbsnp ${DBSNP} \
+        -L ${intervals} \
+        --input_file:normal ${Normalbam} \
+        --input_file:tumor ${Tumorbam} \
+        --out ${TumorReplicateId}_${intervals}.raw.stats.txt \
+        --vcf ${TumorReplicateId}_${intervals}.raw.vcf.gz
+    """
+}
+
+process 'gatherMutect1VCFs' {
+// Merge scattered Mutect1 vcfs
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_mutect1/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(vcf),
+        file(stats),
+        file(idx)
+    ) from Mutect1scattered_out_ch0
+        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+        .flatten()
+        .collate(5)
+        .groupTuple(by: [0,1])
+
+
+    output:
+    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz")
+    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz.tbi")
+    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt")
 
     set(
         TumorReplicateId,
@@ -2371,27 +2576,27 @@ process 'Mutect1' {
         Mutect1_out_ch1
     )
 
+
     script:
     """
     mkdir -p ${params.tmpDir}
+    
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \
+        TMP_DIR=${params.tmpDir} \
+        I=${vcf.join(" I=")} \
+        O=${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
 
-    $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \
-        --analysis_type MuTect \
-        --reference_sequence ${RefFasta} \
-        --cosmic ${Cosmic} \
-        --dbsnp ${DBSNP} \
-        -L ${IntervalsList} \
-        --input_file:normal ${bamNormal} \
-        --input_file:tumor ${bamTumor} \
-        --out ${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.stats.txt \
-        --vcf ${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.vcf.gz && \
     $GATK4 SelectVariants \
         --tmp-dir ${params.tmpDir} \
-        --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1.raw.vcf.gz \
+        --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz \
         -R ${RefFasta} \
         --exclude-filtered true \
         --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \
         --output ${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz
+
+
+    head -2 ${stats[0]} > ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
+    tail -q -n +3 ${stats.join(" ")} >> ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
     """
 }
 
@@ -2617,7 +2822,8 @@ process 'mkHCsomaticVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz.tbi")
     ) into (
         mkHCsomaticVCF_out_ch0,
-        mkHCsomaticVCF_out_ch1
+        mkHCsomaticVCF_out_ch1,
+        mkHCsomaticVCF_out_ch2
     ) 
 
     script:
@@ -2660,8 +2866,6 @@ process 'VepTab' {
         .flatten()
         .collate(5)
 
-    file(VepFasta) from Channel.value([reference.VepFasta])
-
     output:
     file("${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep.txt")
     file("${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep_summary.html")
@@ -2677,7 +2881,7 @@ process 'VepTab' {
         --offline \
         --dir ${params.vep_dir} \
         --cache --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
+        --fasta ${params.VepFasta} \
         --format "vcf" \
         ${params.vep_options} \
         --tab
@@ -2706,8 +2910,6 @@ process 'mkPhasedVCF' {
           reference.RefIdx,
           reference.RefDict ]
     )
-
-    file(VepFasta) from Channel.value([reference.VepFasta])
 
     set(
         TumorReplicateId,
@@ -2775,7 +2977,7 @@ process 'mkPhasedVCF' {
         --cache \
         --dir ${params.vep_dir} \
         --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
+        --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
@@ -2790,7 +2992,7 @@ process 'mkPhasedVCF' {
         --cache \
         --dir ${params.vep_dir} \
         --dir_cache ${params.vep_cache} \
-        --fasta ${VepFasta} \
+        --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
