@@ -2110,7 +2110,7 @@ process 'VarscanSomatic' {
 }
 if (true == true) {
 ////////////
-process 'VarscanSomaticScatterd' {
+process 'VarscanSomaticScattered' {
 
     tag "$TumorReplicateId"
 
@@ -2149,6 +2149,8 @@ process 'VarscanSomaticScatterd' {
     ) into VarscanSomaticScattered_out_ch0
 
     script:
+    // awk filters at the end needed, found at least one occurence of "W" in Ref field of
+    // varscan vcf (? wtf). Non ACGT seems to cause MergeVCF (picard) crashing
     """
     mkfifo ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
     $SAMTOOLS mpileup \
@@ -2158,7 +2160,7 @@ process 'VarscanSomaticScatterd' {
         ${Normalbam} ${Tumorbam} > ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo &
     $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN somatic \
         ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo \
-        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan \
+        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan_tmp \
         --output-vcf 1 \
         --mpileup 1 \
         --min-coverage ${params.min_cov} \
@@ -2169,7 +2171,15 @@ process 'VarscanSomaticScatterd' {
         --p-value ${params.somatic_pvalue} \
         --somatic-p-value ${params.somatic_somaticpvalue} \
         --strand-filter ${params.strand_filter} && \
-    rm -f ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
+    rm -f ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo && \
+    awk '{OFS=FS="\t"} { if(\$0 !~ /^#/) { if (\$4 ~ /[ACGT]/) { print } } else { print } }' \
+        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan_tmp.snp.vcf \
+        > ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan.snp.vcf && \
+    awk '{OFS=FS="\t"} { if(\$0 !~ /^#/) { if (\$4 ~ /[ACGT]+/) { print } } else { print } }' \
+        ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan_tmp.indel.vcf \
+        > ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan.indel.vcf
+
+    rm -f ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan_tmp.*
     """
 
 
@@ -2458,7 +2468,7 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
 *********************************************
 */
 
-process 'Mutect1scatterd' {
+process 'Mutect1scattered' {
 // Mutect1: calls SNPS from tumor and matched normal sample
 
     tag "$TumorReplicateId"
@@ -2672,7 +2682,7 @@ process StrelkaSomatic {
     conda 'bioconda::strelka=2.9.10'
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_strelka_somatic/processing",
+    publishDir "$params.outputDir/$TumorReplicateId/03_strelka_somatic/",
         mode: params.publishDirMode
 
     input:
@@ -2715,10 +2725,7 @@ process StrelkaSomatic {
         StrelkaSomatic_out_ch0,
         StrelkaSomatic_out_ch1
     )
-    file("${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz.tbi")
+    file("${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz")
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.tsv")
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.xml")
     
@@ -2755,14 +2762,14 @@ process StrelkaSomatic {
     $BCFTOOLS reheader \
         -s vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp \
         ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \
-        > ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted_reheader.vcf.gz
+        > ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz
 
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted_reheader.vcf.gz
+    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz
     rm -f vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
     $GATK4 SelectVariants \
         --tmp-dir ${params.tmpDir} \
-        --variant ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted_reheader.vcf.gz \
+        --variant ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz \
         -R ${RefFasta} \
         --exclude-filtered true \
         --output ${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz
