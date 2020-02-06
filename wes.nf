@@ -2043,73 +2043,6 @@ all mate-pair information is in sync between reads and its pairs
     """
 }
 
-if (true == false) {
-process 'VarscanSomatic' {
-// somatic (Varscan): calls somatic variants (SNPS and indels)
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_varscan/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bamTumor),
-        file(baiTumor),
-        _,                    // unused NormalReplicateId from BaseRecalNormalGATK3_out_ch0
-        file(bamNormal),
-        file(baiNormal)
-    ) from BaseRecalTumorGATK3_out_ch0
-        .combine(BaseRecalNormalGATK3_out_ch0, by: 0)
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-    file(IntervalsBed) from IntervalListToBed_out_ch0
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf"),
-        file("${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf")
-    ) into VarscanSomatic_out_ch0
-
-    script:
-    """
-    mkfifo ${TumorReplicateId}_${NormalReplicateId}_mpileup.fifo
-    $SAMTOOLS mpileup \
-        -q ${params.q} \
-        -f ${RefFasta} \
-        -l ${IntervalsBed} \
-        ${bamNormal} ${bamTumor} > ${TumorReplicateId}_${NormalReplicateId}_mpileup.fifo &
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN somatic \
-        ${TumorReplicateId}_${NormalReplicateId}_mpileup.fifo \
-        ${TumorReplicateId}_${NormalReplicateId}_varscan \
-        --output-vcf 1 \
-        --mpileup 1 \
-        --min-coverage ${params.min_cov} \
-        --min-coverage-normal ${params.min_cov_normal} \
-        --min-coverage-tumor ${params.min_cov_tumor} \
-        --min-freq-for-hom ${params.min_freq_for_hom} \
-        --tumor-purity ${params.tumor_purity} \
-        --p-value ${params.somatic_pvalue} \
-        --somatic-p-value ${params.somatic_somaticpvalue} \
-        --strand-filter ${params.strand_filter} && \
-    rm -f ${TumorReplicateId}_${NormalReplicateId}_mpileup.fifo
-    """
-}
-}
-if (true == true) {
-////////////
 process 'VarscanSomaticScattered' {
 
     tag "$TumorReplicateId"
@@ -2242,11 +2175,6 @@ process 'gatherVarscanVCFs' {
 
     """
 }
-
-
-
-}
-////////////
 
 process 'ProcessVarscan' {
 // Filter variants by somatic status and confidences
