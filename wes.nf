@@ -1599,8 +1599,8 @@ process 'CNNScoreVariants' {
         -I ${Normalbam} \
         -V ${raw_germline_vcf} \
         -tensor-type read_tensor \
-        --inter-op-threads ${task.cpus/2} \
-        --intra-op-threads ${task.cpus/2} \
+        --inter-op-threads ${task.cpus} \
+        --intra-op-threads ${task.cpus} \
         -O ${raw_germline_vcf.baseName}_CNNScored.vcf.gz
     """
 }
