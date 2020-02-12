@@ -2967,7 +2967,16 @@ process 'mkPhasedVCF' {
     ) into (
         mkPhasedVCF_out_ch0
     )
-
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa"),
+        file("${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa"),
+        file("${TumorReplicatedId}_${NormalReplicateId}_tumor_reference.fa"),
+        file("${TumorReplicatedId}_${NormalReplicateId}_tumor_mutated.fa")
+    ) into (
+        mkPhasedVCFproteinSeq_out_ch0
+    )
 
     script:
     """
@@ -3010,6 +3019,7 @@ process 'mkPhasedVCF' {
         --dir_cache ${params.vep_cache} \
         --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
+        --plugin ProteinSeqs,${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa,${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
 
@@ -3025,6 +3035,7 @@ process 'mkPhasedVCF' {
         --dir_cache ${params.vep_cache} \
         --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
+        --plugin ProteinSeqs,${TumorReplicatedId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicatedId}_${NormalReplicateId}_tumor_mutated.fa \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
 
