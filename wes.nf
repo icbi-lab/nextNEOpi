@@ -40,6 +40,7 @@ params.batchFile = false
 
 // set single_end variable to supplied param
 single_end = params.single_end
+single_end_RNA = params.single_end_RNA
 
 // set Normal reads variable to supplied param
 readsNormal = params.readsNormal
@@ -62,6 +63,16 @@ if (! params.batchFile) {
                    .fromFilePairs(params.readsTumor)
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .set { reads_tumor_ch }
+			
+			Channel
+                   .fromFilePairs(params.readsTumor)
+                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
+                   .set { reads_tumor_hla_ch }
+
+			Channel
+                   .fromFilePairs(params.readsTumor)
+                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
+                   .set { reads_tumor_hlaHD_ch }
 
         } else  {
             exit 1, "No tumor sample defined"
@@ -97,7 +108,10 @@ if (! params.batchFile) {
             }
             if (row.readsNormalFWD == "None") {
                 exit 1, "No normal sample defined for " + row.readsTumorFWD
-            }               
+            }
+			if (row.readsRNAseqREV == "None") {
+                single_end_RNA = true
+            }          
         }
 
         Channel
@@ -108,8 +122,16 @@ if (! params.batchFile) {
                                     file(row.readsTumorFWD),
                                     file(row.readsTumorREV),
                                     row.group) }
-                .set { reads_tumor_ch }
-
+				.into { reads_tumor_ch; reads_tumor_hla_ch; reads_tumor_hlaHD_ch }
+		
+		Channel
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    row.normalSampleName,
+                                    file(row.readsRNAseqFWD),
+									file(row.readsRNAseqREV)) }
+                .set { reads_tumor_neofuse_ch }
 
         Channel
                 .fromPath(params.batchFile)
@@ -146,6 +168,10 @@ PERL          = file(params.PERL)
 BGZIP         = file(params.BGZIP)
 TABIX         = file(params.TABIX)
 BCFTOOLS      = file(params.BCFTOOLS)
+YARA			=file(params.YARA)
+PYTHON			=file(params.PYTHON)
+OPTITYPE		=file(params.OPTITYPE)
+HLAHD			=file(params.HLAHD)
 
 /*
 ________________________________________________________________________________
@@ -2732,7 +2758,7 @@ process 'mkPhasedVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
-        mkPhasedVCF_out_ch0
+        mkPhasedVCF_out_ch0,mkPhasedVCF_out_pVACseqch0
     )
 
 
@@ -2817,6 +2843,283 @@ process 'mkPhasedVCF' {
 }
 // END CREATE phased VCF
 
+// HLA TYPING
+
+/*
+*********************************************
+**             O P T I T Y P E             **
+*********************************************
+*/
+
+/*
+ * Preparation Step - Pre-mapping against HLA
+ *
+ * In order to avoid the internal usage of RazerS from within OptiType when
+ * the input files are of type `fastq`, we perform a pre-mapping step
+ * here with the `yara` mapper, and map against the HLA reference only.
+ *
+ */
+
+process 'pre_map_hla' {
+	tag "$TumorReplicateId"
+
+    input:
+	set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsFWD),
+        file(readsREV),
+        sampleGroup,      // unused so far
+    ) from reads_tumor_hla_ch
+	val yaraIdx from Channel.value(reference.YaraIndex)
+
+	output:
+	file("mapped_{1,2}.bam") into fished_reads
+	val("$TumorReplicateId") into tag_id
+	
+	script:
+	if (single_end)
+	"""
+	$YARA -e 3 -t ${params.cpus} -f bam ${yaraIdx} ${readsFWD} > output_1.bam
+    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -b1 ${params.tmpDir}/output_1.bam > mapped_1.bam
+	"""
+	else
+	"""
+	$YARA -e 3 -t ${params.cpus} -f bam ${yaraIdx} ${readsFWD} ${readsREV} > output.bam
+    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -f 0x40 -b1 output.bam > mapped_1.bam
+    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -f 0x80 -b1 output.bam > mapped_2.bam
+	"""
+}
+
+/*
+ * STEP 2 - Run Optitype
+ *
+ * This is the major process, that formulates the IP and calls the selected
+ * IP solver.
+ *
+ * Ouput formats: <still to enter>
+ */
+
+process 'OptiType' {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
+        mode: params.publishDirMode
+
+	input:
+	val(TumorReplicateId) from tag_id
+	file reads from fished_reads
+
+	output:
+	file("**")
+
+	script:
+	"""
+	$PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
+	"""
+}
+
+/*
+*********************************************
+**             H L A - H D                 **
+*********************************************
+*/
+
+process 'run_hla_hd' {
+
+	tag "$TumorReplicateId"
+
+	conda 'assets/hlahdenv.yml'
+
+    publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
+        mode: params.publishDirMode
+
+    input:
+	set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsFWD),
+        file(readsREV),
+        sampleGroup,      // unused so far
+    ) from reads_tumor_hlaHD_ch
+	val frData from Channel.value(reference.HLAHDFreqData)
+	file gSplit from Channel.value(reference.HLAHDGeneSplit)
+	val dict from Channel.value(reference.HLAHDDict)
+
+	output:
+	file("**")
+
+	script:
+	if (single_end)
+	"""
+	export PATH=$PATH:/home/fotakis/myScratch/neoAG_pipeline/HLA_HD/hlahd.1.2.1/bin/
+	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsFWD} \
+	${gSplit} ${dict} $TumorReplicateId .
+	"""
+	else
+	"""
+	export PATH=$PATH:/home/fotakis/myScratch/neoAG_pipeline/HLA_HD/hlahd.1.2.1/bin/
+	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsREV} \
+	${gSplit} ${dict} $TumorReplicateId .
+	"""
+}
+
+
+// END HLA TYPING
+
+// NeoAntigen predictions
+
+/*
+*********************************************
+**      N E O F U S E / P V A C S E Q      **
+*********************************************
+*/
+
+/*
+Prediction of gene fusion neoantigens with Neofuse and calculation of TPM
+*/
+
+process Neofuse_single {
+	// container = '/home/fotakis/myScratch/neoAG_pipeline/NeoFuse_v1.1/NeoFuse.sif'
+
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/10_NeoFuse/",
+        mode: params.publishDirMode
+
+	input:
+	set(
+        TumorReplicateId,
+        NormalReplicateId,
+		readRNAFWD,
+		readRNAREV
+    ) from reads_tumor_neofuse_ch
+	file STARidx from file(reference.STARidx)
+	file RefFASTA from file(reference.RefFASTA)
+	file AnnoFile from file(reference.AnnoFile)
+
+	output:
+	file("**/*.tpm.txt") into tpm_file
+	file("**")
+
+	script:
+	if(single_end_RNA)
+	"""
+	NeoFuse_single -1 ${readRNAFWD} -d ${TumorReplicateId} -o . -m ${params.pepMin_length} -M ${params.pepMax_length} \
+	-n 10 -t ${params.IC50_Threshold} -T ${params.rank} -c ${params.conf_lvl} -s ${STARidx} -g ${RefFASTA} -a ${AnnoFile} \
+	-N ${params.netMHCpan}
+	"""
+	else
+	"""
+	NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} -d ${TumorReplicateId} -o . -m ${params.pepMin_length} -M ${params.pepMax_length} \
+	-n 10 -t ${params.IC50_Threshold} -T ${params.rank} -c ${params.conf_lvl} -s ${STARidx} -g ${RefFASTA} -a ${AnnoFile} \
+	-N ${params.netMHCpan}
+	"""
+		
+}
+
+/*
+Add the gene ID (required by vcf-expression-annotator) to the TPM file
+*/
+
+process add_geneID {
+	
+	input:
+	file tpm from tpm_file
+	file AnnoFile from file(reference.AnnoFile)
+
+	output:
+	file("*.tpm_final.txt") into final_file
+
+	script:
+	"""
+	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/NameToID.py -i ${tpm} -a ${AnnoFile}
+	"""
+}
+
+/*
+Add gene expression info to the VEP annotated, phased VCF file
+*/
+
+process gene_annotator {
+
+	tag "$TumorReplicateId"
+
+	input:
+	set(
+        TumorReplicateId,
+        NormalReplicateId,
+        vep_phased_vcf_gz,
+        vep_phased_vcf_gz_tbi,
+        tumor_vep_vcf_gz,
+        tumor_vep_vcf_gz_tbi
+    ) from mkPhasedVCF_out_ch0
+	file final_tpm from final_file
+
+	output:
+	file("*vep_phased_gx.vcf") into (vcf_vep_gx_ch1, vcf_vep_gx_ch2)
+
+	script:
+	"""
+	vcf-expression-annotator -i GeneID -e TPM -s $TumorReplicateId \
+	${vep_phased_vcf_gz} ${final_tpm} custom gene -o ./$TumorReplicateId"_vep_phased_gx.vcf"
+	"""
+}
+
+/*
+gzip and tabix the output files
+*/
+
+process bgzip {
+
+	input:
+	file(anno_vcf) from vcf_vep_gx_ch1
+
+	output:
+	file("*gx.vcf.gz") into vcf_vep_ex_gz
+	file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
+
+	script:
+	"""
+	bgzip -f ${anno_vcf}
+	tabix -p vcf "${anno_vcf}.gz"
+	"""
+
+}
+
+/*
+Run pVACseq
+*/
+
+process pVACseq {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/10_pVACseq/",
+        mode: params.publishDirMode
+
+	input:
+	set(
+        TumorReplicateId,
+        NormalReplicateId,
+        vep_phased_vcf_gz,
+        vep_phased_vcf_gz_tbi,
+        tumor_vep_vcf_gz,
+        tumor_vep_vcf_gz_tbi
+    ) from mkPhasedVCF_out_pVACseqch0
+	file(anno_vcf) from vcf_vep_ex_gz
+	file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
+
+	output:
+	file("**")
+
+	script:
+	"""
+	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} \
+	${anno_vcf} $TumorReplicateId ${params.HLA_types} ${params.baff_tools} .
+	"""
+}
 
 /*
 ________________________________________________________________________________
@@ -2843,7 +3146,7 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 7) exit 1, """
+    if (params.references.size() != 14) exit 1, """
     ERROR: Not all References needed found in configuration
     Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
     """
@@ -2854,7 +3157,15 @@ def defineReference() {
         'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
         'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
         'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
-        'RegionsBed'        : checkParamReturnFileReferences("RegionsBed")
+        'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
+        'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
+        'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
+        'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
+        'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
+        'STARidx'       	: checkParamReturnFileReferences("STARidx"),
+        'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
+        'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA")
+
     ]
 }
 
