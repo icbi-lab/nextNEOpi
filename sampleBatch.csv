@@ -1,0 +1,3 @@
+tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,group
+MyTumorTest1,/data/scratch/rieder/testdata/tumor_chr22_r1.fastq,/data/scratch/rieder/testdata/tumor_chr22_r2.fastq,MyNormalTest,/data/scratch/rieder/testdata/control_chr22_r1.fastq,/data/scratch/rieder/testdata/control_chr22_r2.fastq,test
+MyTumorTest2,/data/scratch/rieder/testdata/CRC15_Torg_chr22_r1.fq,/data/scratch/rieder/testdata/CRC15_Torg_chr22_r2.fq,MyNormalTest,/data/scratch/rieder/testdata/control_chr22_r1.fastq,/data/scratch/rieder/testdata/control_chr22_r2.fastq,test
