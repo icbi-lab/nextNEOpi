@@ -2996,10 +2996,10 @@ process 'mkPhasedVCF' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa"),
-        file("${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa"),
-        file("${TumorReplicatedId}_${NormalReplicateId}_tumor_reference.fa"),
-        file("${TumorReplicatedId}_${NormalReplicateId}_tumor_mutated.fa")
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
     ) into (
         mkPhasedVCFproteinSeq_out_ch0
     )
@@ -3045,7 +3045,7 @@ process 'mkPhasedVCF' {
         --dir_cache ${params.vep_cache} \
         --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
-        --plugin ProteinSeqs,${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa,${TumorReplicatedId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa \
+        --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa,${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
 
@@ -3061,7 +3061,7 @@ process 'mkPhasedVCF' {
         --dir_cache ${params.vep_cache} \
         --fasta ${params.VepFasta} \
         --pick --plugin Downstream --plugin Wildtype \
-        --plugin ProteinSeqs,${TumorReplicatedId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicatedId}_${NormalReplicateId}_tumor_mutated.fa \
+        --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \
         --symbol --terms SO --transcript_version --tsl \
         --vcf
 
@@ -3156,6 +3156,7 @@ process 'OptiType' {
 
 	output:
 	file("**")
+	file("**/*_result.tsv") into optitype_output
 
 	script:
 	"""
@@ -3192,6 +3193,7 @@ process 'run_hla_hd' {
 
 	output:
 	file("**")
+	file("**/*_final.result.txt") into hlahd_output
 
 	script:
 	if (single_end)
@@ -3334,6 +3336,25 @@ process bgzip {
 }
 
 /*
+Get the HLA types from OptiType and HLA-HD ouput as a coma seperated list.
+To be used as arguent for pVACseq
+*/
+
+process get_hla {
+	input:
+	file(opti_out) from optitype_output
+	file(hlahd_out) from hlahd_output
+	
+	output:
+	stdout hlas
+
+	script:
+	"""
+	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out}
+	"""
+}
+
+/*
 Run pVACseq
 */
 
@@ -3354,6 +3375,7 @@ process pVACseq {
     ) from mkPhasedVCF_out_pVACseqch0
 	file(anno_vcf) from vcf_vep_ex_gz
 	file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
+	val(hla_types) from hlas
 
 	output:
 	file("**")
@@ -3361,7 +3383,7 @@ process pVACseq {
 	script:
 	"""
 	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} \
-	${anno_vcf} $TumorReplicateId ${params.HLA_types} ${params.baff_tools} .
+	${anno_vcf} $TumorReplicateId ${hla_types} ${params.baff_tools} .
 	"""
 }
 

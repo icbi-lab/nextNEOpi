@@ -12,7 +12,7 @@ import os
 import sys
 import csv
 
-def parse_opti(inFile, hlas=[]):
+def parse_hlahd(inFile, hlas=[]):
 	with open(inFile) as in_file:
 		csv_reader = csv.reader(in_file, delimiter='\t')
 		in_file.readline()
@@ -23,7 +23,7 @@ def parse_opti(inFile, hlas=[]):
 				hlas.append(line[2].split(":")[0]+":"+line[2].split(":")[1])
 	return hlas
 
-def parse_hlahd(inFile, hlas=[]):
+def parse_opti(inFile, hlas=[]):
 	with open(inFile) as in_file:
 		csv_reader = csv.reader(in_file, delimiter='\t')
 		in_file.readline()
@@ -44,8 +44,8 @@ def parse_hlahd(inFile, hlas=[]):
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parse the output files of OptiType and HLA-HD for all HLA types and alleles')
-	parser.add_argument('--opti_out', required=True, type=_file_read, help='output file produced by OptiType')
-    parser.add_argument('--hlahd_out', required=True, type=_file_read, help='output file produced by HLA-HD')
+	parser.add_argument('--opti_out', required=True, help='output file produced by OptiType')
+	parser.add_argument('--hlahd_out', required=True, help='output file produced by HLA-HD')
 	args = parser.parse_args()
 	# infile = "/data/projects/2019/NeoAG/VCF-phasing/RESULTS/CRC19/09_HLA_HD/CRC19/result/CRC19_final.result.txt"
 	infile = args.opti_out
