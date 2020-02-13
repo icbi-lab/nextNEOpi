@@ -4,7 +4,7 @@
 Parse the output of OptiType and HLA-HD and get HLA types (I and II) at 4 digit resolution
 
 Requirements:
-    * Python >= 3.6.2
+    * Python >= 2.7
 
 """
 import argparse
