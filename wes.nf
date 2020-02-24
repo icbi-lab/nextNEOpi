@@ -3347,7 +3347,6 @@ process get_vhla {
 	
 	output:
 	stdout hlas
-	// file("hlas.txt") into hlas
 
 	script:
 	"""
@@ -3401,7 +3400,6 @@ process create_final_file {
 	tag "$TumorReplicateId"
 
 	input:
-	// val TumorReplicateId from ffile_tag_id
 	set(
         TumorReplicateId,
         _,
@@ -3425,8 +3423,6 @@ process create_final_file {
 	echo "$header2" > ${TumorReplicateId}_final_MHCI_filtered.tsv
 	echo "$header2" > ${TumorReplicateId}_final_MHCII_filtered.tsv
 	"""
-	// echo Gene "Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
-	// echo Gene "Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
 }
 
 process concat_mhcI_files {
@@ -3459,13 +3455,7 @@ process concat_mhcI_files {
 	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ./${mhcI_final_f}
 	cat ./${mhcI_final_f} > ./${TumorReplicateId}_MHCI_filtered.tsv
 	"""
-	// cat ${in_file_f} | sed 1d >> ./${mhcI_final_f}
-	// cat ${mhcI_final_f} > ./${TumorReplicateId}_MHCI_filtered.tsv
-	// cat ${in_file_fc} | sed 1d >> ./${mhcI_final_fc}
-	// cat ${mhcI_final_fc} > ./${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
-
 }
-header="Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
 
 process concat_mhcII_files {
 	tag "$TumorReplicateId"
@@ -3474,7 +3464,7 @@ process concat_mhcII_files {
         mode: params.publishDirMode
 
 	input:
-	// val TumorReplicateId from con_mhcII_id
+	
 	set(
         TumorReplicateId,
         _,
@@ -3497,22 +3487,7 @@ process concat_mhcII_files {
 	cat *.filtered.tsv sed -e '/^Chromosome/d' >> ./${mhcII_final_f}
 	cat ./${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
 	"""
-	// cat ${in_file_f} | sed 1d >> ./${mhcII_final_f}
-	// cat ${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
-	// cat ${in_file_fc} | sed 1d >> ./${mhcII_final_fc}
-	// cat ${mhcII_final_fc} > ./${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
 }
-
-// myFile = Channel.from(MHCII_final)
-
-// Channel.from(MHCII_final).withReader { source ->
-//     targetFile.withWriter { target ->
-//         String line
-//         while( line=source.readLine() ) {
-//             target << line.replaceAll('${header2}','')
-//         }
-//     }
-// }
 
 /*
 ________________________________________________________________________________
