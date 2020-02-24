@@ -2991,7 +2991,7 @@ process 'mkPhasedVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
-        mkPhasedVCF_out_ch0,mkPhasedVCF_out_pVACseqch0
+        mkPhasedVCF_out_ch0, mkPhasedVCF_out_ch1, mkPhasedVCF_out_ch2, mkPhasedVCF_out_ch3, mkPhasedVCF_out_pVACseqch0
     )
     set(
         TumorReplicateId,
@@ -3224,7 +3224,7 @@ process 'run_hla_hd' {
 */
 
 /*
-Prediction of gene fusion neoantigens with Neofuse and calculation of TPM
+Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 */
 
 process Neofuse_single {
@@ -3299,8 +3299,8 @@ process gene_annotator {
         NormalReplicateId,
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
-        tumor_vep_vcf_gz,
-        tumor_vep_vcf_gz_tbi
+        _,
+        _
     ) from mkPhasedVCF_out_ch0
 	file final_tpm from final_file
 
@@ -3309,13 +3309,13 @@ process gene_annotator {
 
 	script:
 	"""
-	vcf-expression-annotator -i GeneID -e TPM -s $TumorReplicateId \
-	${vep_phased_vcf_gz} ${final_tpm} custom gene -o ./$TumorReplicateId"_vep_phased_gx.vcf"
+	vcf-expression-annotator -i GeneID -e TPM -s ${TumorReplicateId} \
+	${vep_phased_vcf_gz} ${final_tpm} custom gene -o ./${TumorReplicateId}_vep_phased_gx.vcf
 	"""
 }
 
 /*
-gzip and tabix the output files
+gzip and tabix the output files (required by pVACseq)
 */
 
 process bgzip {
@@ -3336,21 +3336,22 @@ process bgzip {
 }
 
 /*
-Get the HLA types from OptiType and HLA-HD ouput as a coma seperated list.
-To be used as arguent for pVACseq
+Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
+To be used as input for pVACseq
 */
 
-process get_hla {
+process get_vhla {
 	input:
 	file(opti_out) from optitype_output
 	file(hlahd_out) from hlahd_output
 	
 	output:
 	stdout hlas
+	// file("hlas.txt") into hlas
 
 	script:
 	"""
-	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out}
+	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
 	"""
 }
 
@@ -3361,8 +3362,8 @@ Run pVACseq
 process pVACseq {
 	tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/10_pVACseq/",
-        mode: params.publishDirMode
+	// publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    //     mode: params.publishDirMode
 
 	input:
 	set(
@@ -3370,22 +3371,148 @@ process pVACseq {
         NormalReplicateId,
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
-        tumor_vep_vcf_gz,
-        tumor_vep_vcf_gz_tbi
+        _,
+        _
     ) from mkPhasedVCF_out_pVACseqch0
 	file(anno_vcf) from vcf_vep_ex_gz
 	file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
-	val(hla_types) from hlas
+	each hla_types from hlas.splitText()
 
 	output:
-	file("**")
+	// file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
+	// file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
+	// val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
+	file("**/MHC_Class_I/*.filtered.tsv") into mhcI_out_f optional true
+	file("**/MHC_Class_II/*.filtered.tsv") into mhcII_out_f optional true
+
+	script:
+	hla_type = (hla_types - ~/\n/)
+	"""
+	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} \
+	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
+	"""
+}
+
+header1 = "Gene Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank"
+header2 = "Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
+
+process create_final_file {
+	cache false
+	tag "$TumorReplicateId"
+
+	input:
+	// val TumorReplicateId from ffile_tag_id
+	set(
+        TumorReplicateId,
+        _,
+        _,
+        _,
+        _,
+        _
+    ) from mkPhasedVCF_out_ch1
+
+	
+	output:
+	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
+	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
+	file("*_MHCI_filtered.tsv") into mhcI_filtered_file
+	file("*_MHCII_filtered.tsv") into mhcII_filtered_file
 
 	script:
 	"""
-	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} \
-	${anno_vcf} $TumorReplicateId ${hla_types} ${params.baff_tools} .
+	echo "$header1" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
+	echo "$header1" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
+	echo "$header2" > ${TumorReplicateId}_final_MHCI_filtered.tsv
+	echo "$header2" > ${TumorReplicateId}_final_MHCII_filtered.tsv
 	"""
+	// echo Gene "Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
+	// echo Gene "Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
 }
+
+process concat_mhcI_files {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+        mode: params.publishDirMode
+
+	input:
+	// val TumorReplicateId from con_mhcI_id
+	set(
+        TumorReplicateId,
+        _,
+        _,
+        _,
+        _,
+        _
+    ) from mkPhasedVCF_out_ch2
+	// each file(in_file_fc) from mhcI_out_fc
+	file '*.filtered.tsv' from mhcI_out_f.collect()
+	// file(mhcI_final_fc) from mhcI_filteredCon_file
+	file(mhcI_final_f) from mhcI_filtered_file
+
+	output:
+	// file("*_MHCI_filtered.condensed.ranked.tsv")
+	file("*_MHCI_filtered.tsv") optional true into MHCI_final
+
+	script:
+	"""
+	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ./${mhcI_final_f}
+	cat ./${mhcI_final_f} > ./${TumorReplicateId}_MHCI_filtered.tsv
+	"""
+	// cat ${in_file_f} | sed 1d >> ./${mhcI_final_f}
+	// cat ${mhcI_final_f} > ./${TumorReplicateId}_MHCI_filtered.tsv
+	// cat ${in_file_fc} | sed 1d >> ./${mhcI_final_fc}
+	// cat ${mhcI_final_fc} > ./${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+
+}
+header="Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
+
+process concat_mhcII_files {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
+        mode: params.publishDirMode
+
+	input:
+	// val TumorReplicateId from con_mhcII_id
+	set(
+        TumorReplicateId,
+        _,
+        _,
+        _,
+        _,
+        _
+    ) from mkPhasedVCF_out_ch3
+	// file(in_file_fc) from mhcII_out_fc
+	file '*.filtered.tsv' from mhcII_out_f.collect()
+	// file(mhcII_final_fc) from mhcII_filteredCon_file
+	file(mhcII_final_f) from mhcII_filtered_file
+
+	output:
+	// file("*_MHCII_filtered.condensed.ranked.tsv")
+	file("*_MHCII_filtered.tsv") optional true into MHCII_final
+
+	script:
+	"""
+	cat *.filtered.tsv sed -e '/^Chromosome/d' >> ./${mhcII_final_f}
+	cat ./${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
+	"""
+	// cat ${in_file_f} | sed 1d >> ./${mhcII_final_f}
+	// cat ${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
+	// cat ${in_file_fc} | sed 1d >> ./${mhcII_final_fc}
+	// cat ${mhcII_final_fc} > ./${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+}
+
+// myFile = Channel.from(MHCII_final)
+
+// Channel.from(MHCII_final).withReader { source ->
+//     targetFile.withWriter { target ->
+//         String line
+//         while( line=source.readLine() ) {
+//             target << line.replaceAll('${header2}','')
+//         }
+//     }
+// }
 
 /*
 ________________________________________________________________________________
