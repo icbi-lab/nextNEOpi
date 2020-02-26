@@ -3281,7 +3281,7 @@ process add_geneID {
 
 	script:
 	"""
-	$PYTHON NameToID.py -i ${tpm} -a ${AnnoFile}
+	NameToID.py -i ${tpm} -a ${AnnoFile}
 	"""
 }
 
@@ -3350,7 +3350,7 @@ process get_vhla {
 
 	script:
 	"""
-	$PYTHON HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
+	HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
 	"""
 }
 
