@@ -3281,7 +3281,7 @@ process add_geneID {
 
 	script:
 	"""
-	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/NameToID.py -i ${tpm} -a ${AnnoFile}
+	$PYTHON NameToID.py -i ${tpm} -a ${AnnoFile}
 	"""
 }
 
@@ -3350,7 +3350,7 @@ process get_vhla {
 
 	script:
 	"""
-	$PYTHON /data/projects/2019/NeoAG/VCF-phasing/bin/HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
+	$PYTHON HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
 	"""
 }
 
