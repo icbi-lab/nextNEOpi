@@ -285,7 +285,7 @@ process 'RegionsBedToIntervalList' {
 
     tag 'RegionsBedToIntervalList'
 
-    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
     input:
     set(
@@ -314,7 +314,7 @@ process 'BaitsBedToIntervalList' {
 
     tag 'BaitsBedToIntervalList'
 
-    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
     input:
     set(
@@ -346,7 +346,7 @@ process 'preprocessIntervalList' {
 
     tag 'preprocessIntervalList'
 
-    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
     input:
     set(
@@ -396,7 +396,7 @@ process 'SplitIntervals' {
 
     tag "SplitIntervals"
 
-    publishDir "$params.outputDir/00_preprare_Intervals/SplitIntervals/", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/SplitIntervals/", mode: params.publishDirMode
 
     input:
     set(
@@ -450,7 +450,7 @@ process 'IntervalListToBed' {
 
     tag 'BedFromIntervalList'
 
-    publishDir "$params.outputDir/00_preprare_Intervals/", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
     input:
         file(paddedIntervalList) from preprocessIntervalList_out_ch1
@@ -485,7 +485,7 @@ process 'ScatteredIntervalListToBed' {
 
     tag 'ScatteredIntervalListToBed'
 
-    publishDir "$params.outputDir/00_preprare_Intervals/SplitIntervals/${IntervalName}", mode: params.publishDirMode
+    publishDir "$params.outputDir/00_prepare_Intervals/SplitIntervals/${IntervalName}", mode: params.publishDirMode
 
     input:
     set(
@@ -3248,7 +3248,7 @@ process Neofuse_single {
 
 	output:
 	file("**/*.tpm.txt") into tpm_file
-	file("**")
+	file("${TumorReplicateId}/**")
 
 	script:
 	if(single_end_RNA)
@@ -3484,7 +3484,7 @@ process concat_mhcII_files {
 
 	script:
 	"""
-	cat *.filtered.tsv sed -e '/^Chromosome/d' >> ./${mhcII_final_f}
+	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ./${mhcII_final_f}
 	cat ./${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
 	"""
 }
