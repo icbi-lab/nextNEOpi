@@ -3248,7 +3248,7 @@ process Neofuse_single {
 
 	output:
 	file("**/*.tpm.txt") into tpm_file
-	file("${TumorReplicateId}/**")
+	// file("/${TumorReplicateId}/**") optional true
 
 	script:
 	if(single_end_RNA)
@@ -3448,7 +3448,8 @@ process concat_mhcI_files {
 
 	output:
 	// file("*_MHCI_filtered.condensed.ranked.tsv")
-	file("*_MHCI_filtered.tsv") optional true into MHCI_final
+	file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
+	val("${TumorReplicateId}") into mhcI_tag
 
 	script:
 	"""
@@ -3464,7 +3465,6 @@ process concat_mhcII_files {
         mode: params.publishDirMode
 
 	input:
-	
 	set(
         TumorReplicateId,
         _,
@@ -3481,11 +3481,59 @@ process concat_mhcII_files {
 	output:
 	// file("*_MHCII_filtered.condensed.ranked.tsv")
 	file("*_MHCII_filtered.tsv") optional true into MHCII_final
+	
 
 	script:
 	"""
 	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ./${mhcII_final_f}
 	cat ./${mhcII_final_f} > ./${TumorReplicateId}_MHCII_filtered.tsv
+	"""
+}
+
+process ranked_reports {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+        mode: params.publishDirMode
+
+	input:
+	val TumorReplicateId from mhcI_tag
+	file pvacseq_file from MHCI_final_ranked
+	
+
+	output:
+	file("*_MHCII_filtered.condensed.ranked.tsv")
+
+	script:
+	"""
+	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_file ./${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+	"""
+}
+
+process immunogenicity_scoring {
+	tag "$TumorReplicateId"
+
+	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+        mode: params.publishDirMode
+
+	input:
+	set(
+        TumorReplicateId,
+        _,
+        _,
+        _,
+        _,
+        _
+    ) from mkPhasedVCFproteinSeq_out_ch0
+	file pvacseq_file from MHCI_final_immunogenicity
+
+	output:
+	file("*_immunogenicity.tsv") optional true
+
+	script:
+	"""
+	get_epitopes.py --pvacseq_out $pvacseq_file --sample_id $TumorReplicateId --output ./${TumorReplicateId}_epitopes.tsv
+	NeoAg_immunogenicity_predicition_GBM.R ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
 	"""
 }
 

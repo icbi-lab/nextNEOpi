@@ -1,0 +1,16 @@
+COPYRIGHT AND PERMISSION NOTICE
+UNC Software Neoantigen Immunogenicity Prediction Model
+Copyright (C) 2018 The University of North Carolina at Chapel Hill
+All rights reserved.
+ 
+Neoantigen Immunogenicity Prediction Model software (Program) is the property
+of The University of North Carolina at Chapel Hill (UNC). UNC grants to
+RECIPIENT a royalty-free, nonexclusive, and nontransferable license to use the
+Program for non-commercial research purposes only. Title and copyright to the
+Program and any associated documentation shall at all times remain with UNC.
+RECIPIENT acknowledges that the Program is a research tool still in the
+development stage and that it is being supplied "as is," without any
+accompanying services or improvements from UNC. RECIPIENT agrees to use the
+Program solely for internal purposes and shall not distribute or transfer it
+to another location or to any other person without prior written permission
+from UNC.

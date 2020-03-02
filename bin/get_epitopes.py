@@ -34,11 +34,11 @@ def write_output(outFile, sample_id, epitopes=[]):
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Parse the output files of pVACseq for all MHC I epitopes')
 	parser.add_argument('--pvacseq_out', required=True, help='output file produced by pvacseq')
-	parser.add_argument('--parser_out', required=True, help='output file produced by tis script')
+	parser.add_argument('--output', required=True, help='output file produced by tis script')
 	parser.add_argument('--sample_id', required=True, help='sample name')
 	args = parser.parse_args()
 	infile = args.pvacseq_out
-	outfile = args.parser_out
+	outfile = args.output
 	sample = args.sample_id
 	epitope_array = []
 
