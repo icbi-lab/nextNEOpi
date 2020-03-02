@@ -3387,7 +3387,11 @@ process pVACseq {
 	script:
 	hla_type = (hla_types - ~/\n/)
 	"""
-	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} \
+	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} -m ${params.top_sc_metric} \
+	--tdna-cov ${params.tdna_cov} --trna-cov ${params.trna_cov} \
+	--normal-vaf ${params.nrm_vaf} --tdna-vaf ${params.tdna_vaf} --trna-vaf ${params.trna_vaf} \
+	--expn-val ${params.exp_val} --maximum-transcript-support-level ${params.max_sup_lvl} \
+	-c ${params.min_fc} --normal-cov ${params.nrm_cov} --exclude-NAs --pass-only \
 	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
 	"""
 }
@@ -3480,7 +3484,7 @@ process concat_mhcII_files {
 
 	output:
 	// file("*_MHCII_filtered.condensed.ranked.tsv")
-	file("*_MHCII_filtered.tsv") optional true into MHCII_final
+	file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
 	
 
 	script:
@@ -3493,20 +3497,23 @@ process concat_mhcII_files {
 process ranked_reports {
 	tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
         mode: params.publishDirMode
 
 	input:
 	val TumorReplicateId from mhcI_tag
-	file pvacseq_file from MHCI_final_ranked
+	file pvacseq_mhcI_file from MHCI_final_ranked
+	file pvacseq_mhcII_file from MHCII_final_ranked
 	
 
 	output:
-	file("*_MHCII_filtered.condensed.ranked.tsv")
+	file("/MCH_Class_I/*_MHCI_filtered.condensed.ranked.tsv")
+	file("/MCH_Class_II/*_MHCII_filtered.condensed.ranked.tsv")
 
 	script:
 	"""
-	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_file ./${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_mhcI_file ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_mhcII_file ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
 	"""
 }
 
