@@ -3297,31 +3297,12 @@ process gene_annotator {
 	set(
         TumorReplicateId,
         NormalReplicateId,
-        vep_phased_vcf_gz,
-        vep_phased_vcf_gz_tbi,
         _,
-        _
+        _,
+        vep_somatic_vcf_gz,
+        vep_somatic_vcf_gz_tbi
     ) from mkPhasedVCF_out_ch0
 	file final_tpm from final_file
-
-	output:
-	file("*vep_phased_gx.vcf") into (vcf_vep_gx_ch1, vcf_vep_gx_ch2)
-
-	script:
-	"""
-	vcf-expression-annotator -i GeneID -e TPM -s ${TumorReplicateId} \\
-	${vep_phased_vcf_gz} ${final_tpm} custom gene -o ./${TumorReplicateId}_vep_phased_gx.vcf
-	"""
-}
-
-/*
-gzip and tabix the output files (required by pVACseq)
-*/
-
-process bgzip {
-
-	input:
-	file(anno_vcf) from vcf_vep_gx_ch1
 
 	output:
 	file("*gx.vcf.gz") into vcf_vep_ex_gz
@@ -3329,11 +3310,33 @@ process bgzip {
 
 	script:
 	"""
-	bgzip -f ${anno_vcf}
-	tabix -p vcf "${anno_vcf}.gz"
+	vcf-expression-annotator -i GeneID -e TPM -s ${TumorReplicateId} \\
+	${vep_somatic_vcf_gz} ${final_tpm} custom gene -o ./${TumorReplicateId}_vep_somatic_gx.vcf
+	bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
+	tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
 	"""
-
 }
+
+/*
+gzip and tabix the output files (required by pVACseq)
+*/
+
+// process bgzip {
+
+// 	input:
+// 	file(anno_vcf) from vcf_vep_gx_ch1
+
+// 	output:
+// 	file("*gx.vcf.gz") into vcf_vep_ex_gz
+// 	file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
+
+// 	script:
+// 	"""
+// 	bgzip -f ${anno_vcf}
+// 	tabix -p vcf "${anno_vcf}.gz"
+// 	"""
+
+// }
 
 /*
 Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
@@ -3453,7 +3456,7 @@ process concat_mhcI_files {
 	output:
 	// file("*_MHCI_filtered.condensed.ranked.tsv")
 	file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
-	val("${TumorReplicateId}") into mhcI_tag
+	val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
 
 	script:
 	"""
@@ -3526,14 +3529,7 @@ process immunogenicity_scoring {
         mode: params.publishDirMode
 
 	input:
-	set(
-        TumorReplicateId,
-        _,
-        _,
-        _,
-        _,
-        _
-    ) from mkPhasedVCFproteinSeq_out_ch0
+	val(TumorReplicateId) from mhCI_tag_immunogenicity
 	file pvacseq_file from MHCI_final_immunogenicity
 
 	output:
