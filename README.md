@@ -1,14 +1,18 @@
 # Whole-Exome Sequencing Nextflow Pipeline
-Pipeline takes fastq file from tumor (and Normal) sampels for indels and SNPs 
+Pipeline takes fastq file from Tumor and Normal samples for indels and SNPs 
 predictions. 
 
-Therefore 3 different callers are used, depending on input:
+The pipeline uses 5 different somatic variant callers:
 * MuTect2
 * MuTect1
-* VarScan2 (only when matched Normal sample is given)
+* VarScan2
+* Strekla2/Manta
 
-It outputs a txt file with the annotated and filtered SNPs and Indels, which
-where called with a minimum of 2 of the callers.
+It outputs a vcf files with the annotated and filtered SNPs and Indels, which
+where called with each of the callers and a high confidence vcf file (hc) in
+which only variants that were called by a minimum of 2 of the callers are listed.
+All vcf files are annotatd with VEP. In addition the germline variants are called
+using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
 
 ![Beschreibung](img/flowchart.png)
 
@@ -22,6 +26,8 @@ singularity build coolNameHere.sif docker://icbi/wes
 ```
 ## 1.2 Software
 To run the pipeline local, the required software has to be installed:
+* FASTQC        (Version >= 0.11.8)
+* FLEXBAR        (Version 3.5)
 * JAVA7 			 (Version 1.7)
 * JAVA8 			 (Version 1.8)
 * BWA 			 (Version 0.7.17)
@@ -35,6 +41,9 @@ To run the pipeline local, the required software has to be installed:
 * VEP 			 (Version 2.0)
 * BGZIP
 * TABIX
+* BCFTOOLS
+* MANTA
+* STRELKA
 
 
 ## 1.2 References
@@ -111,24 +120,39 @@ or
 
 **--normalSampleName**          normal sample name. If not specified samples will be named according to the fastq filenames.  
 
+**--trim_adapters**          If true Illumina universal adpter (AGATCGGAAGAG) will be trimmed from reads unless
+                             --adapterSeq (string of atapter sequence) or --adapterSeqFile (fasta file with adapter sequences) is provided.
+
+**--adapterSeq**             String of atapter sequence (see --trim_adapers)
+**--adapterSeqFile**         Fasta file with atapter sequence(s) (see --trim_adapers)
+
 ## 3. Output
 The Pipeline creates an ouput directory with the following structure:
 ```
 RESULTS
-├── 00_preprare_Intervals
+├── 00_prepare_Intervals
+│   ├── S07604514_Covered.list
+│   ├── S07604514_Regions.list
+│   ├── S07604514_Regions_merged_padded.bed
+│   ├── S07604514_Regions_merged_padded.bed.gz
+│   ├── S07604514_Regions_merged_padded.bed.gz.tbi
+│   ├── S07604514_Regions_merged_padded.list
 │   └── SplitIntervals
-│       └── <RegionsBed>_merged_padded
-└── <SampleId>
-    ├── 01_preprocessing
-    ├── 02_QC
-    ├── 03_haplotypeCaller
-    │   └── processing
-    ├── 03_mutect2
-    │   └── processing
-    ├── 04_mutect1
-    ├── 04_PhasedVCF
-    ├── 05_varscan
-    │   └── processing
-    └── 06_vep
-
+├── CRC26
+│   ├── 01_preprocessing
+│   ├── 02_QC
+│   ├── 03_manta_somatic
+│   ├── 03_mutect1
+│   ├── 03_mutect2
+│   ├── 03_strelka_somatic
+│   ├── 03_varscan
+│   ├── 04_haplotypeCaller
+│   ├── 05_hcVCF
+│   ├── 06_vep
+│   └── 07_PhasedVCF
+├── Documentation
+│   ├── pipeline_report.html
+│   └── pipeline_report.txt
+└── pipeline_info
+    └── icbi
 ```
