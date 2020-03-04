@@ -262,10 +262,10 @@ PERL          = file(params.PERL)
 BGZIP         = file(params.BGZIP)
 TABIX         = file(params.TABIX)
 BCFTOOLS      = file(params.BCFTOOLS)
-YARA			=file(params.YARA)
-PYTHON			=file(params.PYTHON)
-OPTITYPE		=file(params.OPTITYPE)
-HLAHD			=file(params.HLAHD)
+YARA		  = file(params.YARA)
+PYTHON		  = file(params.PYTHON)
+OPTITYPE	  = file(params.OPTITYPE)
+HLAHD		  = file(params.HLAHD)
 
 /*
 ________________________________________________________________________________
@@ -3430,14 +3430,14 @@ process 'pre_map_hla' {
 	script:
 	if (single_end)
 	"""
-	$YARA -e 3 -t ${params.cpus} -f bam ${yaraIdx} ${readsFWD} > output_1.bam
-    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -b1 ${params.tmpDir}/output_1.bam > mapped_1.bam
+	$YARA -e 3 -t ${task.cpus} -f bam ${yaraIdx} ${readsFWD} > output_1.bam
+    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -b1 ${params.tmpDir}/output_1.bam > mapped_1.bam
 	"""
 	else
 	"""
-	$YARA -e 3 -t ${params.cpus} -f bam ${yaraIdx} ${readsFWD} ${readsREV} > output.bam
-    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -f 0x40 -b1 output.bam > mapped_1.bam
-    $SAMTOOLS view -@ ${params.cpus} -h -F 4 -f 0x80 -b1 output.bam > mapped_2.bam
+	$YARA -e 3 -t ${task.cpus} -f bam ${yaraIdx} ${readsFWD} ${readsREV} > output.bam
+    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -f 0x40 -b1 output.bam > mapped_1.bam
+    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -f 0x80 -b1 output.bam > mapped_2.bam
 	"""
 }
 
