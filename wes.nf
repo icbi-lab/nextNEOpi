@@ -3730,8 +3730,16 @@ process pVACseq {
 	// file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
 	// file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
 	// val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
-	file("**/MHC_Class_I/*.filtered.tsv") into mhcI_out_f optional true
-	file("**/MHC_Class_II/*.filtered.tsv") into mhcII_out_f optional true
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+	    file("**/MHC_Class_I/*.filtered.tsv") 
+    ) into mhcI_out_f optional true
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("**/MHC_Class_II/*.filtered.tsv") 
+    ) into mhcII_out_f optional true
 
 	script:
 	hla_type = (hla_types - ~/\n/)
@@ -3757,38 +3765,38 @@ process pVACseq {
 	"""
 }
 
-header1 = "Gene Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank"
-header2 = "Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
+// process create_final_file {
+// 	cache false
+// 	tag "$TumorReplicateId"
 
-process create_final_file {
-	cache false
-	tag "$TumorReplicateId"
-
-	input:
-	set(
-        TumorReplicateId,
-        _,
-        _,
-        _,
-        _,
-        _
-    ) from mkPhasedVCF_out_ch1
+// 	input:
+// 	set(
+//         TumorReplicateId,
+//         _,
+//         _,
+//         _,
+//         _,
+//         _
+//     ) from mkPhasedVCF_out_ch1
 
 	
-	output:
-	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
-	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
-	file("*_MHCI_filtered.tsv") into mhcI_filtered_file
-	file("*_MHCII_filtered.tsv") into mhcII_filtered_file
+// 	output:
+// 	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
+// 	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
+// 	file("*_MHCI_filtered.tsv") into mhcI_filtered_file
+// 	file("*_MHCII_filtered.tsv") into mhcII_filtered_file
 
-	script:
-	"""
-	echo "$header1" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
-	echo "$header1" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
-	echo "$header2" > ${TumorReplicateId}_final_MHCI_filtered.tsv
-	echo "$header2" > ${TumorReplicateId}_final_MHCII_filtered.tsv
-	"""
-}
+// 	script:
+//     header1 = "Gene Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank"
+//     header2 = "Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
+
+// 	"""
+// 	echo "$header1" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
+// 	echo "$header1" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
+// 	echo "$header2" > ${TumorReplicateId}_final_MHCI_filtered.tsv
+// 	echo "$header2" > ${TumorReplicateId}_final_MHCII_filtered.tsv
+// 	"""
+// }
 
 process concat_mhcI_files {
 	tag "$TumorReplicateId"
@@ -3800,16 +3808,13 @@ process concat_mhcI_files {
 	// val TumorReplicateId from con_mhcI_id
 	set(
         TumorReplicateId,
-        _,
-        _,
-        _,
-        _,
-        _
-    ) from mkPhasedVCF_out_ch2
+        NormalReplicateId,
+        file('*.filtered.tsv')
+    ) from mhcI_out_f.collect()
 	// each file(in_file_fc) from mhcI_out_fc
-	file '*.filtered.tsv' from mhcI_out_f.collect()
+	// file '*.filtered.tsv' from mhcI_out_f.collect()
 	// file(mhcI_final_fc) from mhcI_filteredCon_file
-	file(mhcI_final_f) from mhcI_filtered_file
+	//file(mhcI_final_f) from mhcI_filtered_file
 
 	output:
 	// file("*_MHCI_filtered.condensed.ranked.tsv")
@@ -3817,9 +3822,55 @@ process concat_mhcI_files {
 	val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
 
 	script:
+    headerFields = ['Chromosome',
+                    'Start',
+                    'Stop',
+                    'Reference',
+                    'Variant',
+                    'Transcript',
+                    'Transcript Support Level',
+                    'Ensembl Gene ID',
+                    'Variant Type',
+                    'Mutation',
+                    'Protein Position',
+                    'Gene Name',
+                    'HGVSc',
+                    'HGVSp',
+                    'HLA Allele',
+                    'Peptide Length',
+                    'Sub-peptide Position',
+                    'Mutation Position',
+                    'MT Epitope Seq',
+                    'WT Epitope Seq',
+                    'Best MT Score Method',
+                    'Best MT Score',
+                    'Corresponding WT Score',
+                    'Corresponding Fold Change',
+                    'Tumor DNA Depth',
+                    'Tumor DNA VAF',
+                    'Tumor RNA Depth',
+                    'Tumor RNA VAF',
+                    'Normal Depth',
+                    'Normal VAF',
+                    'Gene Expression',
+                    'Transcript Expression',
+                    'Median MT Score',
+                    'Median WT Score',
+                    'Median Fold Change',
+                    'NetMHCpan WT Score',
+                    'NetMHCpan MT Score',
+                    'cterm_7mer_gravy_score',
+                    'max_7mer_gravy_score',
+                    'difficult_n_terminal_residue',
+                    'c_terminal_cysteine',
+                    'c_terminal_proline',
+                    'cysteine_count',
+                    'n_terminal_asparagine',
+                    'asparagine_proline_bond_count']
+
 	"""
-	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ./${mhcI_final_f}
-	cat ./${mhcI_final_f} > ./${TumorReplicateId}_MHCI_filtered.tsv
+ 	printf \"${header2.join("\t")}\\n\" > ${TumorReplicateId}_final_MHCI_filtered.tsv
+	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_final_MHCI_filtered.tsv
 	"""
 }
 
