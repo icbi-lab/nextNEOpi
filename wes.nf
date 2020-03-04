@@ -3922,9 +3922,14 @@ process ranked_reports {
 	script:
 	"""
 	mkdir ./MCH_Class_I/
-	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_mhcI_file ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+	pvacseq generate_condensed_ranked_report \\
+        -m lowest \\
+        $pvacseq_mhcI_file \\
+        ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
 	mkdir ./MCH_Class_II/
-	pvacseq generate_condensed_ranked_report -m lowest $pvacseq_mhcII_file ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+	pvacseq generate_condensed_ranked_report \\
+        -m lowest $pvacseq_mhcII_file \\
+        ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
 	"""
 }
 
@@ -3943,8 +3948,12 @@ process immunogenicity_scoring {
 
 	script:
 	"""
-	get_epitopes.py --pvacseq_out $pvacseq_file --sample_id $TumorReplicateId --output ./${TumorReplicateId}_epitopes.tsv
-	NeoAg_immunogenicity_predicition_GBM.R ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
+	get_epitopes.py \
+        --pvacseq_out $pvacseq_file \\
+        --sample_id $TumorReplicateId \\
+        --output ./${TumorReplicateId}_epitopes.tsv
+	NeoAg_immunogenicity_predicition_GBM.R \\
+        ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
 	"""
 }
 
