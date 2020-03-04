@@ -3576,24 +3576,42 @@ process Neofuse_single {
 
 	script:
 	if(single_end_RNA)
-	"""
-	NeoFuse_single -1 ${readRNAFWD} -d ${TumorReplicateId} -o . -m ${params.pepMin_length} -M ${params.pepMax_length} \\
-	-n 10 -t ${params.IC50_Threshold} -T ${params.rank} -c ${params.conf_lvl} -s ${STARidx} -g ${RefFASTA} -a ${AnnoFile} \\
-	-N ${params.netMHCpan}
-	"""
+        """
+        NeoFuse_single -1 ${readRNAFWD} \\
+            -d ${TumorReplicateId} \\
+            -o . \\
+            -m ${params.pepMin_length} \\
+            -M ${params.pepMax_length} \\
+            -n ${task.cpus} \\
+            -t ${params.IC50_Threshold} \\
+            -T ${params.rank} \\
+            -c ${params.conf_lvl} \\
+            -s ${STARidx} \\
+            -g ${RefFASTA} \\
+            -a ${AnnoFile} \\
+            -N ${params.netMHCpan}
+        """
 	else
-	"""
-	NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} -d ${TumorReplicateId} -o . -m ${params.pepMin_length} -M ${params.pepMax_length} \\
-	-n 10 -t ${params.IC50_Threshold} -T ${params.rank} -c ${params.conf_lvl} -s ${STARidx} -g ${RefFASTA} -a ${AnnoFile} \\
-	-N ${params.netMHCpan}
-	"""
-		
+        """
+        NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} \\
+            -d ${TumorReplicateId} \\
+            -o . \\
+            -m ${params.pepMin_length} \\
+            -M ${params.pepMax_length} \\
+            -n ${task.cpus} \\
+            -t ${params.IC50_Threshold} \\
+            -T ${params.rank} \\
+            -c ${params.conf_lvl} \\
+            -s ${STARidx} \\
+            -g ${RefFASTA} \\
+            -a ${AnnoFile} \\
+            -N ${params.netMHCpan}
+        """		
 }
 
 /*
 Add the gene ID (required by vcf-expression-annotator) to the TPM file
 */
-
 process add_geneID {
 	
 	input:
@@ -3634,7 +3652,10 @@ process gene_annotator {
 
 	script:
 	"""
-	vcf-expression-annotator -i GeneID -e TPM -s ${TumorReplicateId} \\
+	vcf-expression-annotator \\
+        -i GeneID \\
+        -e TPM \ß
+        -s ${TumorReplicateId} \\
 	    ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
         -o ./${TumorReplicateId}_vep_somatic_gx.vcf
 	bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
@@ -3715,11 +3736,23 @@ process pVACseq {
 	script:
 	hla_type = (hla_types - ~/\n/)
 	"""
-	pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} -m ${params.top_sc_metric} \\
-	    --tdna-cov ${params.tdna_cov} --trna-cov ${params.trna_cov} \\
-	    --normal-vaf ${params.nrm_vaf} --tdna-vaf ${params.tdna_vaf} --trna-vaf ${params.trna_vaf} \\
-	    --expn-val ${params.exp_val} --maximum-transcript-support-level ${params.max_sup_lvl} \\
-	    -c ${params.min_fc} --normal-cov ${params.nrm_cov} --exclude-NAs --pass-only \\
+	pvacseq run \\
+        --iedb-install-directory /opt/iedb \\
+        -t ${task.cpus} \\
+        -p ${vep_phased_vcf_gz} \\
+        -e ${params.epitope_len} \\
+        -m ${params.top_sc_metric} \\
+	    --tdna-cov ${params.tdna_cov} \\
+        --trna-cov ${params.trna_cov} \\
+	    --normal-vaf ${params.nrm_vaf} \\
+        --tdna-vaf ${params.tdna_vaf} \\
+        --trna-vaf ${params.trna_vaf} \\
+	    --expn-val ${params.exp_val} \\
+        --maximum-transcript-support-level ${params.max_sup_lvl} \\
+	    -c ${params.min_fc} \\
+        --normal-cov ${params.nrm_cov} \\
+        --exclude-NAs \\
+        --pass-only \\
 	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
 	"""
 }
