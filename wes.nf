@@ -3502,16 +3502,18 @@ process 'run_hla_hd' {
 	file("**/*_final.result.txt") into hlahd_output
 
 	script:
+    hlahd_p = Channel.value(params.HLAHD_PATH)
+    HLAHD_PATH = hlahd_p.getVal()
 	if (single_end)
 	"""
-	export PATH=$PATH:/home/fotakis/myScratch/neoAG_pipeline/HLA_HD/hlahd.1.2.1/bin/
+	export PATH=\$PATH:$HLAHD_PATH
 	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
 	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsFWD} \\
 	${gSplit} ${dict} $TumorReplicateId .
 	"""
 	else
 	"""
-	export PATH=$PATH:/home/fotakis/myScratch/neoAG_pipeline/HLA_HD/hlahd.1.2.1/bin/
+	export PATH=\$PATH:$HLA_HD_PATH
 	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
 	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsREV} \\
 	${gSplit} ${dict} $TumorReplicateId .
@@ -3617,7 +3619,8 @@ process gene_annotator {
 	script:
 	"""
 	vcf-expression-annotator -i GeneID -e TPM -s ${TumorReplicateId} \\
-	${vep_somatic_vcf_gz} ${final_tpm} custom gene -o ./${TumorReplicateId}_vep_somatic_gx.vcf
+	    ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
+        -o ./${TumorReplicateId}_vep_somatic_gx.vcf
 	bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
 	tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
 	"""
