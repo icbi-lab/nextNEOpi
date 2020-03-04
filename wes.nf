@@ -3428,17 +3428,29 @@ process 'pre_map_hla' {
 	val("$TumorReplicateId") into tag_id
 	
 	script:
+    if(single_end) {
+        yara_cpus = max((task.cpus - 2), 2)
+        samtools_cpus = max(1, (task.cpus - yara_cpus))
+    } else {
+        yara_cpus = max((task.cpus - 6), 2)
+        samtools_cpus = max(1, ((task.cpus - yara_cpus)/3))
+    }
 	if (single_end)
-	"""
-	$YARA -e 3 -t ${task.cpus} -f bam ${yaraIdx} ${readsFWD} > output_1.bam
-    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -b1 ${params.tmpDir}/output_1.bam > mapped_1.bam
-	"""
+        """
+        $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
+            $SAMTOOLS view -@ ${task.cpus/2} -h -F 4 -b1 - > mapped_1.bam
+        """
 	else
-	"""
-	$YARA -e 3 -t ${task.cpus} -f bam ${yaraIdx} ${readsFWD} ${readsREV} > output.bam
-    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -f 0x40 -b1 output.bam > mapped_1.bam
-    $SAMTOOLS view -@ ${task.cpus} -h -F 4 -f 0x80 -b1 output.bam > mapped_2.bam
-	"""
+        """
+        mkfifo R1 R2
+        $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
+            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
+            tee R1 R2 > /dev/null &
+        $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
+        $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
+        wait
+        rm -f R1 R2
+        """
 }
 
 /*
@@ -3504,20 +3516,25 @@ process 'run_hla_hd' {
 	script:
     hlahd_p = Channel.value(params.HLAHD_PATH)
     HLAHD_PATH = hlahd_p.getVal()
+
 	if (single_end)
-	"""
-	export PATH=\$PATH:$HLAHD_PATH
-	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
-	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsFWD} \\
-	${gSplit} ${dict} $TumorReplicateId .
-	"""
+	    """
+        export PATH=\$PATH:$HLAHD_PATH
+        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+        $HLAHD -t ${params.cpus} \\
+            -m \$COVERAGE \\
+            -f ${frData} ${readsFWD} ${readsFWD} \\
+            ${gSplit} ${dict} $TumorReplicateId .
+	    """
 	else
-	"""
-	export PATH=\$PATH:$HLA_HD_PATH
-	COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
-	$HLAHD -t ${params.cpus} -m \$COVERAGE -f ${frData} ${readsFWD} ${readsREV} \\
-	${gSplit} ${dict} $TumorReplicateId .
-	"""
+        """
+        export PATH=\$PATH:$HLA_HD_PATH
+        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+        $HLAHD -t ${params.cpus} \\
+            -m \$COVERAGE \\
+            -f ${frData} ${readsFWD} ${readsREV} \\
+            ${gSplit} ${dict} $TumorReplicateId .
+        """
 }
 
 
@@ -3536,7 +3553,6 @@ Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 */
 
 process Neofuse_single {
-	// container = '/home/fotakis/myScratch/neoAG_pipeline/NeoFuse_v1.1/NeoFuse.sif'
 
 	tag "$TumorReplicateId"
 
