@@ -160,8 +160,8 @@ if (! params.batchFile) {
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .into { raw_reads_tumor_ch;
                            fastqc_reads_tumor_ch;
-                           reads_tumor_hla_ch;
-                           reads_tumor_hlaHD_ch }
+                           raw_reads_tumor_hla_ch;
+                           raw_reads_tumor_hlaHD_ch }
             
         } else  {
             exit 1, "No tumor sample defined"
@@ -213,8 +213,8 @@ if (! params.batchFile) {
                                     row.group) }
                 .into { raw_reads_tumor_ch;
                         fastqc_reads_tumor_ch;
-                        reads_tumor_hla_ch;
-                        reads_tumor_hlaHD_ch }
+                        raw_reads_tumor_hla_ch;
+                        raw_reads_tumor_hlaHD_ch }
         
         Channel
                 .fromPath(params.batchFile)
@@ -617,6 +617,8 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_tumor_ch,
+            reads_tumor_hla_ch,
+            reads_tumor_hlaHD_ch,
             fastqc_reads_tumor_trimmed_ch
         )
         set(
@@ -800,11 +802,13 @@ if (params.trim_adapters) {
             """
     }
 } else { // no adapter trimming
-    reads_tumor_ch = raw_reads_tumor_ch 
-    reads_normal_ch = raw_reads_normal_ch
-    ch_fastqc_trimmed = Channel.empty()
-    ch_flexbar_tumor = Channel.empty()
-    ch_flexbar_normal =  Channel.empty()
+    reads_tumor_ch       = raw_reads_tumor_ch 
+    reads_normal_ch      = raw_reads_normal_ch
+    reads_tumor_hla_ch   = raw_reads_tumor_hla_ch
+    reads_tumor_hlaHD_ch = raw_reads_tumor_hlaHD_ch
+    ch_fastqc_trimmed    = Channel.empty()
+    ch_flexbar_tumor     = Channel.empty()
+    ch_flexbar_normal    = Channel.empty()
 }
 
 /// start processing reads
