@@ -3424,21 +3424,25 @@ process 'pre_map_hla' {
 	val yaraIdx from Channel.value(reference.YaraIndex)
 
 	output:
-	file("mapped_{1,2}.bam") into fished_reads
-	val("$TumorReplicateId") into tag_id
+	set (
+		TumorReplicateId,
+		file("mapped_{1,2}.bam")
+	) into fished_reads
+	// file("mapped_{1,2}.bam") into fished_reads
+	// val("$TumorReplicateId") into tag_id
 	
 	script:
     if(single_end) {
-        yara_cpus = max((task.cpus - 2), 2)
-        samtools_cpus = max(1, (task.cpus - yara_cpus))
+        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
     } else {
-        yara_cpus = max((task.cpus - 6), 2)
-        samtools_cpus = max(1, ((task.cpus - yara_cpus)/3))
+        yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
+        samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
     }
 	if (single_end)
         """
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
-            $SAMTOOLS view -@ ${task.cpus/2} -h -F 4 -b1 - > mapped_1.bam
+            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 - > mapped_1.bam
         """
 	else
         """
@@ -3469,12 +3473,20 @@ process 'OptiType' {
         mode: params.publishDirMode
 
 	input:
-	val(TumorReplicateId) from tag_id
-	file reads from fished_reads.collect()
+	set (
+		TumorReplicateId,
+		file(reads)
+	) from fished_reads.collect()
+	// val(TumorReplicateId) from tag_id
+	// file reads from fished_reads.collect()
 
 	output:
+	set (
+		TumorReplicateId,
+		file("**/*_result.tsv")
+	) into optitype_output
 	file("**")
-	file("**/*_result.tsv") into optitype_output
+	// file("**/*_result.tsv") into optitype_output
 
 	script:
 	"""
@@ -3510,8 +3522,12 @@ process 'run_hla_hd' {
 	val dict from Channel.value(reference.HLAHDDict)
 
 	output:
+	set (
+		TumorReplicateId,
+		file("**/*_final.result.txt")
+	) into hlahd_output
 	file("**")
-	file("**/*_final.result.txt") into hlahd_output
+	// file("**/*_final.result.txt") into hlahd_output
 
 	script:
     hlahd_p = Channel.value(params.HLAHD_PATH)
@@ -3521,16 +3537,16 @@ process 'run_hla_hd' {
 	    """
         export PATH=\$PATH:$HLAHD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
-        $HLAHD -t ${params.cpus} \\
+        $HLAHD -t ${task.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsFWD} \\
             ${gSplit} ${dict} $TumorReplicateId .
 	    """
 	else
         """
-        export PATH=\$PATH:$HLA_HD_PATH
+        export PATH=\$PATH:$HLAHD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
-        $HLAHD -t ${params.cpus} \\
+        $HLAHD -t ${task.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsREV} \\
             ${gSplit} ${dict} $TumorReplicateId .
@@ -3647,14 +3663,18 @@ process gene_annotator {
 	file final_tpm from final_file
 
 	output:
-	file("*gx.vcf.gz") into vcf_vep_ex_gz
-	file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
+	set(
+		file("*gx.vcf.gz"),
+		file("*gx.vcf.gz.tbi")
+	) into vcf_vep_ex_gz
+	// file("*gx.vcf.gz") into vcf_vep_ex_gz
+	// file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
 
 	script:
 	"""
 	vcf-expression-annotator \\
         -i GeneID \\
-        -e TPM \ß
+        -e TPM \\
         -s ${TumorReplicateId} \\
 	    ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
         -o ./${TumorReplicateId}_vep_somatic_gx.vcf
@@ -3690,12 +3710,24 @@ To be used as input for pVACseq
 */
 
 process get_vhla {
+	tag "$TumorReplicateId"
+
 	input:
-	file(opti_out) from optitype_output
-	file(hlahd_out) from hlahd_output
+	set (
+		TumorReplicateId,
+		opti_out,
+		hlahd_out
+	) from optitype_output
+		.combine(hlahd_output, by: [0,1])
+	// file(opti_out) from optitype_output
+	// file(hlahd_out) from hlahd_output
 	
 	output:
-	stdout hlas
+	set (
+		TumorReplicateId,
+		stdout
+	) into hlas
+	// stdout hlas
 
 	script:
 	"""
@@ -3716,15 +3748,20 @@ process pVACseq {
 	input:
 	set(
         TumorReplicateId,
-        NormalReplicateId,
+        _,
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
         _,
-        _
+        _,
+		anno_vcf,
+		anno_vcf_tbi,
+		hla_types
     ) from mkPhasedVCF_out_pVACseqch0
-	file(anno_vcf) from vcf_vep_ex_gz
-	file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
-	each hla_types from hlas.splitText()
+		.combine(vcf_vep_ex_gz, by: [0,1])
+		.combine(hlas.splitText(), by: [0,1])
+	// file(anno_vcf) from vcf_vep_ex_gz
+	// file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
+	// each hla_types from hlas.splitText()
 
 	output:
 	// file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
@@ -3732,12 +3769,10 @@ process pVACseq {
 	// val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
     set(
         TumorReplicateId,
-        NormalReplicateId,
 	    file("**/MHC_Class_I/*.filtered.tsv") 
     ) into mhcI_out_f optional true
     set(
         TumorReplicateId,
-        NormalReplicateId,
         file("**/MHC_Class_II/*.filtered.tsv") 
     ) into mhcII_out_f optional true
 
@@ -3854,7 +3889,6 @@ process concat_mhcI_files {
 	// val TumorReplicateId from con_mhcI_id
 	set(
         TumorReplicateId,
-        NormalReplicateId,
         file('*.filtered.tsv')
     ) from mhcI_out_f.collect()
 	// each file(in_file_fc) from mhcI_out_fc
@@ -3883,7 +3917,6 @@ process concat_mhcII_files {
 	input:
 	set(
         TumorReplicateId,
-        NormalReplicateId,
         file('*.filtered.tsv')
     ) from mhcII_out_f.collect()
 	// file(in_file_fc) from mhcII_out_fc
