@@ -524,9 +524,9 @@ process FastQC {
 
     if (!single_end && !single_end_RNA) {
         cpus = 6
-    } else (!single_end && single_end_RNA) {
+    } else if (!single_end && single_end_RNA) {
         cpus = 5
-    } else (single_end && !single_end_RNA) {
+    } else if (single_end && !single_end_RNA) {
         cpus = 4
     } else if (single_end && single_end_RNA) {
         cpus = 3
