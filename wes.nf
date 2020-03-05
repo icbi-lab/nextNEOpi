@@ -160,9 +160,13 @@ if (! params.batchFile) {
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .into { raw_reads_tumor_ch;
                            fastqc_reads_tumor_ch;
-                           reads_tumor_hla_ch;
-                           reads_tumor_hlaHD_ch }
-			
+                           raw_reads_tumor_hla_ch;
+                           raw_reads_tumor_hlaHD_ch }
+            Channel
+                   .fromFilePairs(params.readsRNAseq)
+                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
+                   .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+            
         } else  {
             exit 1, "No tumor sample defined"
         }
@@ -198,7 +202,7 @@ if (! params.batchFile) {
             if (row.readsNormalFWD == "None") {
                 exit 1, "No normal sample defined for " + row.readsTumorFWD
             }
-	        if (row.readsRNAseqREV == "None") {
+            if (row.readsRNAseqREV == "None") {
                 single_end_RNA = true
             }          
         }
@@ -211,11 +215,11 @@ if (! params.batchFile) {
                                     file(row.readsTumorFWD),
                                     file(row.readsTumorREV),
                                     row.group) }
-				.into { raw_reads_tumor_ch;
+                .into { raw_reads_tumor_ch;
                         fastqc_reads_tumor_ch;
-                        reads_tumor_hla_ch;
-                        reads_tumor_hlaHD_ch }
-		
+                        raw_reads_tumor_hla_ch;
+                        raw_reads_tumor_hlaHD_ch }
+        
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
@@ -226,14 +230,14 @@ if (! params.batchFile) {
                                     row.group) }
                 .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
-		Channel
+        Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     row.normalSampleName,
                                     file(row.readsRNAseqFWD),
-									file(row.readsRNAseqREV)) }
-                .set { reads_tumor_neofuse_ch }
+                                    file(row.readsRNAseqREV)) }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 
 }
 
@@ -518,11 +522,16 @@ process FastQC {
         mode: params.publishDirMode,
         saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
-    if (single_end) {
-        cpus = 2
-    } else {
+    if (!single_end && !single_end_RNA) {
+        cpus = 6
+    } else (!single_end && single_end_RNA) {
+        cpus = 5
+    } else (single_end && !single_end_RNA) {
         cpus = 4
+    } else if (single_end && single_end_RNA) {
+        cpus = 3
     }
+
 
     input:
     set(
@@ -541,6 +550,13 @@ process FastQC {
         sampleGroup,      // unused so far
     ) from fastqc_reads_normal_ch
 
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsRNAseq_FWD),
+        file(readsRNAseq_REV),
+        sampleGroup,      // unused so far
+    ) from fastqc_readsRNAseq_ch
 
     output:
     set(
@@ -555,8 +571,13 @@ process FastQC {
     tumor_readsFWD_ext = tumor_readsFWD.getExtension()
     normal_readsFWD_ext = normal_readsFWD.getExtension()
 
+    readsRNAseq_FWD_simpleName = readsRNAseq_FWD.getSimpleName()
+    readsRNAseq_FWD_ext = readsRNAseq_FWD.getExtension()
+
     tumor_readsFWD_ext = (tumor_readsFWD_ext == "gz") ? "fastq.gz" : tumor_readsFWD_ext
     normal_readsFWD_ext = (normal_readsFWD_ext == "gz") ? "fastq.gz" : normal_readsFWD_ext
+
+    readsRNAseq_FWD_ext = (readsRNAseq_FWD_ext == "gz") ? "fastq.gz" : readsRNAseq_FWD_ext
 
 
     if (! single_end) {
@@ -568,26 +589,67 @@ process FastQC {
         tumor_readsREV_ext = (tumor_readsREV_ext == "gz") ? "fastq.gz" : tumor_readsREV_ext
         normal_readsREV_ext = (normal_readsREV_ext == "gz") ? "fastq.gz" : normal_readsREV_ext
     }
-    if (single_end)
+    if (! single_end_RNA) {
+        readsRNAseq_REV_simpleName = readsRNAseq_REV.getSimpleName()
+        readsRNAseq_REV_ext = readsRNAseq_REV.getExtension()
+
+        readsRNAseq_REV_ext = (readsRNAseq_REV_ext == "gz") ? "fastq.gz" : readsRNAseq_REV_ext
+    }
+
+    if (single_end && single_end_RNA)
         """
         ln -s $tumor_readsFWD ${TumorReplicateId}.${tumor_readsFWD_ext}
         ln -s $normal_readsFWD ${NormalReplicateId}.${normal_readsFWD_ext}
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
 
         fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}.${tumor_readsFWD_ext} \\
-            ${NormalReplicateId}.${normal_readsFWD_ext}
+            ${NormalReplicateId}.${normal_readsFWD_ext} \\
+            ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
         """
-    else
+    else if (!single_end && !single_end_RNA)
         """
         ln -s $tumor_readsFWD ${TumorReplicateId}_R1.${tumor_readsFWD_ext}
         ln -s $normal_readsFWD ${NormalReplicateId}_R1.${normal_readsFWD_ext}
         ln -s $tumor_readsREV ${TumorReplicateId}_R2.${tumor_readsREV_ext}
         ln -s $normal_readsREV ${NormalReplicateId}_R2.${normal_readsREV_ext}
 
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
+        ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+
         $FASTQC --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
-            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext}
+            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
+            ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
         """
+    else if (!single_end && single_end_RNA)
+        """
+        ln -s $tumor_readsFWD ${TumorReplicateId}_R1.${tumor_readsFWD_ext}
+        ln -s $normal_readsFWD ${NormalReplicateId}_R1.${normal_readsFWD_ext}
+        ln -s $tumor_readsREV ${TumorReplicateId}_R2.${tumor_readsREV_ext}
+        ln -s $normal_readsREV ${NormalReplicateId}_R2.${normal_readsREV_ext}
+
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
+
+        $FASTQC --quiet --threads ${task.cpus} \\
+            ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
+            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
+            ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
+        """
+    else if (single_end && !single_end_RNA)
+        """
+        ln -s $tumor_readsFWD ${TumorReplicateId}.${tumor_readsFWD_ext}
+        ln -s $normal_readsFWD ${NormalReplicateId}.${normal_readsFWD_ext}
+
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
+        ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+
+        $FASTQC --quiet --threads ${task.cpus} \\
+            ${TumorReplicateId}.${tumor_readsFWD_ext} \\
+            ${NormalReplicateId}.${normal_readsFWD_ext} \\
+            ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+        """
+
 }
 
 // adapter trimming Tumor
@@ -617,6 +679,8 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_tumor_ch,
+            reads_tumor_hla_ch,
+            reads_tumor_hlaHD_ch,
             fastqc_reads_tumor_trimmed_ch
         )
         set(
@@ -800,12 +864,145 @@ if (params.trim_adapters) {
             """
     }
 } else { // no adapter trimming
-    reads_tumor_ch = raw_reads_tumor_ch 
-    reads_normal_ch = raw_reads_normal_ch
-    ch_fastqc_trimmed = Channel.empty()
-    ch_flexbar_tumor = Channel.empty()
-    ch_flexbar_normal =  Channel.empty()
+    reads_tumor_ch       = raw_reads_tumor_ch 
+    reads_normal_ch      = raw_reads_normal_ch
+    reads_tumor_hla_ch   = raw_reads_tumor_hla_ch
+    reads_tumor_hlaHD_ch = raw_reads_tumor_hlaHD_ch
+    ch_fastqc_trimmed    = Channel.empty()
+    ch_flexbar_tumor     = Channel.empty()
+    ch_flexbar_normal    = Channel.empty()
 }
+
+// adapter trimming RNAseq
+if (params.trim_adapters_RNAseq) {
+    process flexbar_RNAseq {
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+            sampleGroup,      // unused so far
+        ) from raw_reads_tumor_neofuse_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_RNA_trimmed_1.fastq.gz"),
+            file("${trimmedReads_2}"),
+            sampleGroup
+        ) into (
+            reads_tumor_neofuse_ch,
+            fastqc_readsRNAseq_trimmed_ch
+        )
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("*.log")
+        ) into ch_flexbar_RNAseq // multiQC
+
+
+        script:
+        trimmedReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "RNA_trimmed_2.fastq.gz"
+
+        if(params.adapterSeqFileRNAseq != false) {
+            val adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
+            flexbarAdapter = "-a $adapterSeqFile"
+        } else {
+            adapterSeq = Channel.value(params.adapterSeqRNAseq)
+            flexbarAdapter = "-as " + adapterSeq.getVal()
+        }
+
+        if(single_end_RNA)
+            """
+            $FLEXBAR --threads ${task.cpus} \\
+                -r ${readsRNAseq_FWD} \\
+                ${flexbarAdapter} \\
+                -z GZ \\
+                --target ${TumorReplicateId}_RNA_trimmed
+            """
+        else
+            """
+            $FLEXBAR --threads ${task.cpus} \\
+                -r ${readsRNAseq_FWD} -p ${readsRNAseq_REV} \\
+                ${flexbarAdapter} -ap ON \\
+                -z GZ \\
+                --target ${TumorReplicateId}_RNA_trimmed
+            """
+    }
+
+    // FastQC after RNAseq adapter trimming
+    process FastQC_trimmed_RNAseq {
+        tag "$TumorReplicateId"
+
+        publishDir "${params.outputDir}/$TumorReplicateId/02_QC/",
+            mode: params.publishDirMode,
+            saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+
+        if (single_end_RNA) {
+            cpus = 1
+        } else {
+            cpus = 2
+        }
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+            sampleGroup,      // unused so far
+        ) from fastqc_readsRNAseq_trimmed_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("*_fastqc*")
+        ) into ch_fastqc_trimmed_RNAseq // multiQC
+
+        script:
+        readsRNAseq_FWD_simpleName = readsRNAseq_FWD.getSimpleName()
+        readsRNAseq_FWD_ext = readsRNAseq_FWD.getExtension()
+
+        readsRNAseq_FWD_ext = (readsRNAseq_FWD_ext == "gz") ? "fastq.gz" : readsRNAseq_FWD_ext
+
+        if (! single_end_RNA) {
+            readsRNAseq_REV_simpleName = readsRNAseq_REV.getSimpleName()
+            readsRNAseq_REV_ext = readsRNAseq_REV.getExtension()
+
+            readsRNAseq_REV_ext = (readsRNAseq_REV_ext == "gz") ? "fastq.gz" : readsRNAseq_REV_ext
+        }
+        if (single_end_RNA)
+            """
+            ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_trimmed.${readsRNAseq_FWD_ext}
+
+            fastqc --quiet --threads ${task.cpus} ${TumorReplicateId}_RNA_trimmed.${tumor_readsFWD_ext}
+            """
+        else
+            """
+            ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_trimmed_R1.${readsRNAseq_FWD_ext}
+            ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_trimmed_R2.${readsRNAseq_REV_ext}
+
+            $FASTQC --quiet --threads ${task.cpus} \\
+                ${TumorReplicateId}_RNA_trimmed_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_trimmed_R2.${readsRNAseq_REV_ext}
+            """
+    }
+
+} else { // no adapter trimming for RNAseq
+    reads_tumor_neofuse_ch        = raw_reads_tumor_neofuse_ch
+    fastqc_readsRNAseq_trimmed_ch = Channel.empty()
+    ch_flexbar_RNAseq             = Channel.empty()
+    ch_fastqc_trimmed_RNAseq      = Channel.empty()
+}
+
 
 /// start processing reads
 process 'BwaTumor' {
@@ -3411,17 +3608,17 @@ process 'mkPhasedVCF' {
  */
 
 process 'pre_map_hla' {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
     input:
-	set(
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
     ) from reads_tumor_hla_ch
-	val yaraIdx from Channel.value(reference.YaraIndex)
+    val yaraIdx from Channel.value(reference.YaraIndex)
 
 	output:
 	set (
@@ -3439,12 +3636,12 @@ process 'pre_map_hla' {
         yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
         samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
     }
-	if (single_end)
+    if (single_end)
         """
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
             $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 - > mapped_1.bam
         """
-	else
+    else
         """
         mkfifo R1 R2
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
@@ -3467,9 +3664,9 @@ process 'pre_map_hla' {
  */
 
 process 'OptiType' {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
+    publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
         mode: params.publishDirMode
 
 	input:
@@ -3488,10 +3685,10 @@ process 'OptiType' {
 	file("**")
 	// file("**/*_result.tsv") into optitype_output
 
-	script:
-	"""
-	$PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
-	"""
+    script:
+    """
+    $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
+    """
 }
 
 /*
@@ -3502,24 +3699,24 @@ process 'OptiType' {
 
 process 'run_hla_hd' {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	conda 'assets/hlahdenv.yml'
+    conda 'assets/hlahdenv.yml'
 
     publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
         mode: params.publishDirMode
 
     input:
-	set(
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
     ) from reads_tumor_hlaHD_ch
-	val frData from Channel.value(reference.HLAHDFreqData)
-	file gSplit from Channel.value(reference.HLAHDGeneSplit)
-	val dict from Channel.value(reference.HLAHDDict)
+    val frData from Channel.value(reference.HLAHDFreqData)
+    file gSplit from Channel.value(reference.HLAHDGeneSplit)
+    val dict from Channel.value(reference.HLAHDDict)
 
 	output:
 	set (
@@ -3529,20 +3726,20 @@ process 'run_hla_hd' {
 	file("**")
 	// file("**/*_final.result.txt") into hlahd_output
 
-	script:
+    script:
     hlahd_p = Channel.value(params.HLAHD_PATH)
     HLAHD_PATH = hlahd_p.getVal()
 
-	if (single_end)
-	    """
+    if (single_end)
+        """
         export PATH=\$PATH:$HLAHD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
         $HLAHD -t ${task.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsFWD} \\
             ${gSplit} ${dict} $TumorReplicateId .
-	    """
-	else
+        """
+    else
         """
         export PATH=\$PATH:$HLAHD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
@@ -3570,28 +3767,28 @@ Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 
 process Neofuse_single {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/10_NeoFuse/",
+    publishDir "$params.outputDir/$TumorReplicateId/10_NeoFuse/",
         mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
-		readRNAFWD,
-		readRNAREV
+        readRNAFWD,
+        readRNAREV
     ) from reads_tumor_neofuse_ch
-	file STARidx from file(reference.STARidx)
-	file RefFASTA from file(reference.RefFASTA)
-	file AnnoFile from file(reference.AnnoFile)
+    file STARidx from file(reference.STARidx)
+    file RefFASTA from file(reference.RefFASTA)
+    file AnnoFile from file(reference.AnnoFile)
 
-	output:
-	file("**/*.tpm.txt") into tpm_file
-	path("**")
+    output:
+    file("**/*.tpm.txt") into tpm_file
+    path("**")
 
-	script:
-	if(single_end_RNA)
+    script:
+    if(single_end_RNA)
         """
         NeoFuse_single -1 ${readRNAFWD} \\
             -d ${TumorReplicateId} \\
@@ -3607,7 +3804,7 @@ process Neofuse_single {
             -a ${AnnoFile} \\
             -N ${params.netMHCpan}
         """
-	else
+    else
         """
         NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} \\
             -d ${TumorReplicateId} \\
@@ -3629,18 +3826,18 @@ process Neofuse_single {
 Add the gene ID (required by vcf-expression-annotator) to the TPM file
 */
 process add_geneID {
-	
-	input:
-	file tpm from tpm_file
-	file AnnoFile from file(reference.AnnoFile)
+    
+    input:
+    file tpm from tpm_file
+    file AnnoFile from file(reference.AnnoFile)
 
-	output:
-	file("*.tpm_final.txt") into final_file
+    output:
+    file("*.tpm_final.txt") into final_file
 
-	script:
-	"""
-	NameToID.py -i ${tpm} -a ${AnnoFile}
-	"""
+    script:
+    """
+    NameToID.py -i ${tpm} -a ${AnnoFile}
+    """
 }
 
 /*
@@ -3649,10 +3846,10 @@ Add gene expression info to the VEP annotated, phased VCF file
 
 process gene_annotator {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
         _,
@@ -3660,7 +3857,7 @@ process gene_annotator {
         vep_somatic_vcf_gz,
         vep_somatic_vcf_gz_tbi
     ) from mkPhasedVCF_out_ch0
-	file final_tpm from final_file
+    file final_tpm from final_file
 
 	output:
 	set(
@@ -3670,17 +3867,17 @@ process gene_annotator {
 	// file("*gx.vcf.gz") into vcf_vep_ex_gz
 	// file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
 
-	script:
-	"""
-	vcf-expression-annotator \\
+    script:
+    """
+    vcf-expression-annotator \\
         -i GeneID \\
         -e TPM \\
         -s ${TumorReplicateId} \\
-	    ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
+        ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
         -o ./${TumorReplicateId}_vep_somatic_gx.vcf
-	bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
-	tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
-	"""
+    bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
+    tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
+    """
 }
 
 /*
@@ -3740,13 +3937,13 @@ Run pVACseq
 */
 
 process pVACseq {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	// publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
     //     mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         _,
         vep_phased_vcf_gz,
@@ -3763,10 +3960,10 @@ process pVACseq {
 	// file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
 	// each hla_types from hlas.splitText()
 
-	output:
-	// file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
-	// file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
-	// val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
+    output:
+    // file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
+    // file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
+    // val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
     set(
         TumorReplicateId,
 	    file("**/MHC_Class_I/*.filtered.tsv") 
@@ -3776,28 +3973,28 @@ process pVACseq {
         file("**/MHC_Class_II/*.filtered.tsv") 
     ) into mhcII_out_f optional true
 
-	script:
-	hla_type = (hla_types - ~/\n/)
-	"""
-	pvacseq run \\
+    script:
+    hla_type = (hla_types - ~/\n/)
+    """
+    pvacseq run \\
         --iedb-install-directory /opt/iedb \\
         -t ${task.cpus} \\
         -p ${vep_phased_vcf_gz} \\
         -e ${params.epitope_len} \\
         -m ${params.top_sc_metric} \\
-	    --tdna-cov ${params.tdna_cov} \\
+        --tdna-cov ${params.tdna_cov} \\
         --trna-cov ${params.trna_cov} \\
-	    --normal-vaf ${params.nrm_vaf} \\
+        --normal-vaf ${params.nrm_vaf} \\
         --tdna-vaf ${params.tdna_vaf} \\
         --trna-vaf ${params.trna_vaf} \\
-	    --expn-val ${params.exp_val} \\
+        --expn-val ${params.exp_val} \\
         --maximum-transcript-support-level ${params.max_sup_lvl} \\
-	    -c ${params.min_fc} \\
+        -c ${params.min_fc} \\
         --normal-cov ${params.nrm_cov} \\
         --exclude-NAs \\
         --pass-only \\
-	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
-	"""
+    ${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
+    """
 }
 
 // process create_final_file {
@@ -3814,7 +4011,7 @@ process pVACseq {
 //         _
 //     ) from mkPhasedVCF_out_ch1
 
-	
+    
 // 	output:
 // 	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
 // 	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
@@ -3880,114 +4077,114 @@ headerFields = ['Chromosome',
                 'asparagine_proline_bond_count']
 
 process concat_mhcI_files {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
         mode: params.publishDirMode
 
-	input:
-	// val TumorReplicateId from con_mhcI_id
-	set(
+    input:
+    // val TumorReplicateId from con_mhcI_id
+    set(
         TumorReplicateId,
         file('*.filtered.tsv')
     ) from mhcI_out_f.collect()
-	// each file(in_file_fc) from mhcI_out_fc
-	// file '*.filtered.tsv' from mhcI_out_f.collect()
-	// file(mhcI_final_fc) from mhcI_filteredCon_file
-	//file(mhcI_final_f) from mhcI_filtered_file
+    // each file(in_file_fc) from mhcI_out_fc
+    // file '*.filtered.tsv' from mhcI_out_f.collect()
+    // file(mhcI_final_fc) from mhcI_filteredCon_file
+    //file(mhcI_final_f) from mhcI_filtered_file
 
-	output:
-	// file("*_MHCI_filtered.condensed.ranked.tsv")
-	file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
-	val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
+    output:
+    // file("*_MHCI_filtered.condensed.ranked.tsv")
+    file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
+    val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
 
-	script:
-	"""
- 	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
-	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
-	"""
+    script:
+    """
+     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
+    cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
+    """
 }
 
 process concat_mhcII_files {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
         mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         file('*.filtered.tsv')
     ) from mhcII_out_f.collect()
-	// file(in_file_fc) from mhcII_out_fc
-	// file '*.filtered.tsv' from mhcII_out_f.collect()
-	// file(mhcII_final_fc) from mhcII_filteredCon_file
-	// file(mhcII_final_f) from mhcII_filtered_file
+    // file(in_file_fc) from mhcII_out_fc
+    // file '*.filtered.tsv' from mhcII_out_f.collect()
+    // file(mhcII_final_fc) from mhcII_filteredCon_file
+    // file(mhcII_final_f) from mhcII_filtered_file
 
-	output:
-	// file("*_MHCII_filtered.condensed.ranked.tsv")
-	file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
-	
+    output:
+    // file("*_MHCII_filtered.condensed.ranked.tsv")
+    file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
+    
 
-	script:
-	"""
+    script:
+    """
     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
-	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
-	"""
+    cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
+    """
 }
 
 process ranked_reports {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
         mode: params.publishDirMode
 
-	input:
-	val TumorReplicateId from mhcI_tag
-	file pvacseq_mhcI_file from MHCI_final_ranked
-	file pvacseq_mhcII_file from MHCII_final_ranked
-	
+    input:
+    val TumorReplicateId from mhcI_tag
+    file pvacseq_mhcI_file from MHCI_final_ranked
+    file pvacseq_mhcII_file from MHCII_final_ranked
+    
 
-	output:
-	file("**/*_MHCI_filtered.condensed.ranked.tsv")
-	file("**/*_MHCII_filtered.condensed.ranked.tsv")
+    output:
+    file("**/*_MHCI_filtered.condensed.ranked.tsv")
+    file("**/*_MHCII_filtered.condensed.ranked.tsv")
 
-	script:
-	"""
-	mkdir ./MCH_Class_I/
-	pvacseq generate_condensed_ranked_report \\
+    script:
+    """
+    mkdir ./MCH_Class_I/
+    pvacseq generate_condensed_ranked_report \\
         -m lowest \\
         $pvacseq_mhcI_file \\
         ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
-	mkdir ./MCH_Class_II/
-	pvacseq generate_condensed_ranked_report \\
+    mkdir ./MCH_Class_II/
+    pvacseq generate_condensed_ranked_report \\
         -m lowest $pvacseq_mhcII_file \\
         ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
-	"""
+    """
 }
 
 process immunogenicity_scoring {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
         mode: params.publishDirMode
 
-	input:
-	val(TumorReplicateId) from mhCI_tag_immunogenicity
-	file pvacseq_file from MHCI_final_immunogenicity
+    input:
+    val(TumorReplicateId) from mhCI_tag_immunogenicity
+    file pvacseq_file from MHCI_final_immunogenicity
 
-	output:
-	file("*_immunogenicity.tsv") optional true
+    output:
+    file("*_immunogenicity.tsv") optional true
 
-	script:
-	"""
-	get_epitopes.py \
+    script:
+    """
+    get_epitopes.py \
         --pvacseq_out $pvacseq_file \\
         --sample_id $TumorReplicateId \\
         --output ./${TumorReplicateId}_epitopes.tsv
-	NeoAg_immunogenicity_predicition_GBM.R \\
+    NeoAg_immunogenicity_predicition_GBM.R \\
         ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
-	"""
+    """
 }
 
 /*
@@ -4015,6 +4212,8 @@ process multiQC {
             .combine(ch_flexbar_tumor, by: [0,1]).ifEmpty([])
             .combine(ch_flexbar_normal, by: [0,1]).ifEmpty([])
             .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
+            .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
+            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
             .combine(MarkDuplicatesTumor_out_ch3, by: [0,1])
             .combine(alignmentMetricsTumor_ch, by: [0,1])
             .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
