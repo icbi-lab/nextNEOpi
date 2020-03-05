@@ -165,7 +165,7 @@ if (! params.batchFile) {
             Channel
                    .fromFilePairs(params.readsRNAseq)
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
-                   .set { reads_tumor_neofuse_ch }
+                   .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
             
         } else  {
             exit 1, "No tumor sample defined"
@@ -237,7 +237,7 @@ if (! params.batchFile) {
                                     row.normalSampleName,
                                     file(row.readsRNAseqFWD),
                                     file(row.readsRNAseqREV)) }
-                .set { reads_tumor_neofuse_ch }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 
 }
 
@@ -522,11 +522,16 @@ process FastQC {
         mode: params.publishDirMode,
         saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
-    if (single_end) {
-        cpus = 2
-    } else {
+    if (!single_end && !single_end_RNA) {
+        cpus = 6
+    } else (!single_end && single_end_RNA) {
+        cpus = 5
+    } else (single_end && !single_end_RNA) {
         cpus = 4
+    } else if (single_end && single_end_RNA) {
+        cpus = 3
     }
+
 
     input:
     set(
@@ -545,6 +550,13 @@ process FastQC {
         sampleGroup,      // unused so far
     ) from fastqc_reads_normal_ch
 
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsRNAseq_FWD),
+        file(readsRNAseq_REV),
+        sampleGroup,      // unused so far
+    ) from fastqc_readsRNAseq_ch
 
     output:
     set(
@@ -559,8 +571,13 @@ process FastQC {
     tumor_readsFWD_ext = tumor_readsFWD.getExtension()
     normal_readsFWD_ext = normal_readsFWD.getExtension()
 
+    readsRNAseq_FWD_simpleName = readsRNAseq_FWD.getSimpleName()
+    readsRNAseq_FWD_ext = readsRNAseq_FWD.getExtension()
+
     tumor_readsFWD_ext = (tumor_readsFWD_ext == "gz") ? "fastq.gz" : tumor_readsFWD_ext
     normal_readsFWD_ext = (normal_readsFWD_ext == "gz") ? "fastq.gz" : normal_readsFWD_ext
+
+    readsRNAseq_FWD_ext = (readsRNAseq_FWD_ext == "gz") ? "fastq.gz" : readsRNAseq_FWD_ext
 
 
     if (! single_end) {
@@ -572,26 +589,67 @@ process FastQC {
         tumor_readsREV_ext = (tumor_readsREV_ext == "gz") ? "fastq.gz" : tumor_readsREV_ext
         normal_readsREV_ext = (normal_readsREV_ext == "gz") ? "fastq.gz" : normal_readsREV_ext
     }
-    if (single_end)
+    if (! single_end_RNA) {
+        readsRNAseq_REV_simpleName = readsRNAseq_REV.getSimpleName()
+        readsRNAseq_REV_ext = readsRNAseq_REV.getExtension()
+
+        readsRNAseq_REV_ext = (readsRNAseq_REV_ext == "gz") ? "fastq.gz" : readsRNAseq_REV_ext
+    }
+
+    if (single_end && single_end_RNA)
         """
         ln -s $tumor_readsFWD ${TumorReplicateId}.${tumor_readsFWD_ext}
         ln -s $normal_readsFWD ${NormalReplicateId}.${normal_readsFWD_ext}
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
 
         fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}.${tumor_readsFWD_ext} \\
-            ${NormalReplicateId}.${normal_readsFWD_ext}
+            ${NormalReplicateId}.${normal_readsFWD_ext} \\
+            ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
         """
-    else
+    else if (!single_end && !single_end_RNA)
         """
         ln -s $tumor_readsFWD ${TumorReplicateId}_R1.${tumor_readsFWD_ext}
         ln -s $normal_readsFWD ${NormalReplicateId}_R1.${normal_readsFWD_ext}
         ln -s $tumor_readsREV ${TumorReplicateId}_R2.${tumor_readsREV_ext}
         ln -s $normal_readsREV ${NormalReplicateId}_R2.${normal_readsREV_ext}
 
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
+        ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+
         $FASTQC --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
-            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext}
+            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
+            ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
         """
+    else if (!single_end && single_end_RNA)
+        """
+        ln -s $tumor_readsFWD ${TumorReplicateId}_R1.${tumor_readsFWD_ext}
+        ln -s $normal_readsFWD ${NormalReplicateId}_R1.${normal_readsFWD_ext}
+        ln -s $tumor_readsREV ${TumorReplicateId}_R2.${tumor_readsREV_ext}
+        ln -s $normal_readsREV ${NormalReplicateId}_R2.${normal_readsREV_ext}
+
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
+
+        $FASTQC --quiet --threads ${task.cpus} \\
+            ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
+            ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
+            ${TumorReplicateId}_RNA.${readsRNAseq_FWD_ext}
+        """
+    else if (single_end && !single_end_RNA)
+        """
+        ln -s $tumor_readsFWD ${TumorReplicateId}.${tumor_readsFWD_ext}
+        ln -s $normal_readsFWD ${NormalReplicateId}.${normal_readsFWD_ext}
+
+        ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
+        ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+
+        $FASTQC --quiet --threads ${task.cpus} \\
+            ${TumorReplicateId}.${tumor_readsFWD_ext} \\
+            ${NormalReplicateId}.${normal_readsFWD_ext} \\
+            ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
+        """
+
 }
 
 // adapter trimming Tumor
@@ -814,6 +872,137 @@ if (params.trim_adapters) {
     ch_flexbar_tumor     = Channel.empty()
     ch_flexbar_normal    = Channel.empty()
 }
+
+// adapter trimming RNAseq
+if (params.trim_adapters_RNAseq) {
+    process flexbar_RNAseq {
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+            sampleGroup,      // unused so far
+        ) from raw_reads_tumor_neofuse_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_RNA_trimmed_1.fastq.gz"),
+            file("${trimmedReads_2}"),
+            sampleGroup
+        ) into (
+            reads_tumor_neofuse_ch,
+            fastqc_readsRNAseq_trimmed_ch
+        )
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("*.log")
+        ) into ch_flexbar_RNAseq // multiQC
+
+
+        script:
+        trimmedReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "RNA_trimmed_2.fastq.gz"
+
+        if(params.adapterSeqFileRNAseq != false) {
+            val adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
+            flexbarAdapter = "-a $adapterSeqFile"
+        } else {
+            adapterSeq = Channel.value(params.adapterSeqRNAseq)
+            flexbarAdapter = "-as " + adapterSeq.getVal()
+        }
+
+        if(single_end_RNA)
+            """
+            $FLEXBAR --threads ${task.cpus} \\
+                -r ${readsRNAseq_FWD} \\
+                ${flexbarAdapter} \\
+                -z GZ \\
+                --target ${TumorReplicateId}_RNA_trimmed
+            """
+        else
+            """
+            $FLEXBAR --threads ${task.cpus} \\
+                -r ${readsRNAseq_FWD} -p ${readsRNAseq_REV} \\
+                ${flexbarAdapter} -ap ON \\
+                -z GZ \\
+                --target ${TumorReplicateId}_RNA_trimmed
+            """
+    }
+
+    // FastQC after RNAseq adapter trimming
+    process FastQC_trimmed_RNAseq {
+        tag "$TumorReplicateId"
+
+        publishDir "${params.outputDir}/$TumorReplicateId/02_QC/",
+            mode: params.publishDirMode,
+            saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+
+        if (single_end_RNA) {
+            cpus = 1
+        } else {
+            cpus = 2
+        }
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+            sampleGroup,      // unused so far
+        ) from fastqc_readsRNAseq_trimmed_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("*_fastqc*")
+        ) into ch_fastqc_trimmed_RNAseq // multiQC
+
+        script:
+        readsRNAseq_FWD_simpleName = readsRNAseq_FWD.getSimpleName()
+        readsRNAseq_FWD_ext = readsRNAseq_FWD.getExtension()
+
+        readsRNAseq_FWD_ext = (readsRNAseq_FWD_ext == "gz") ? "fastq.gz" : readsRNAseq_FWD_ext
+
+        if (! single_end_RNA) {
+            readsRNAseq_REV_simpleName = readsRNAseq_REV.getSimpleName()
+            readsRNAseq_REV_ext = readsRNAseq_REV.getExtension()
+
+            readsRNAseq_REV_ext = (readsRNAseq_REV_ext == "gz") ? "fastq.gz" : readsRNAseq_REV_ext
+        }
+        if (single_end_RNA)
+            """
+            ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_trimmed.${readsRNAseq_FWD_ext}
+
+            fastqc --quiet --threads ${task.cpus} ${TumorReplicateId}_RNA_trimmed.${tumor_readsFWD_ext}
+            """
+        else
+            """
+            ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_trimmed_R1.${readsRNAseq_FWD_ext}
+            ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_trimmed_R2.${readsRNAseq_REV_ext}
+
+            $FASTQC --quiet --threads ${task.cpus} \\
+                ${TumorReplicateId}_RNA_trimmed_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_trimmed_R2.${readsRNAseq_REV_ext}
+            """
+    }
+
+} else { // no adapter trimming for RNAseq
+    reads_tumor_neofuse_ch        = raw_reads_tumor_neofuse_ch
+    fastqc_readsRNAseq_trimmed_ch = Channel.empty()
+    ch_flexbar_RNAseq             = Channel.empty()
+    ch_fastqc_trimmed_RNAseq      = Channel.empty()
+}
+
 
 /// start processing reads
 process 'BwaTumor' {
@@ -3990,6 +4179,8 @@ process multiQC {
             .combine(ch_flexbar_tumor, by: [0,1]).ifEmpty([])
             .combine(ch_flexbar_normal, by: [0,1]).ifEmpty([])
             .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
+            .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
+            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
             .combine(MarkDuplicatesTumor_out_ch3, by: [0,1])
             .combine(alignmentMetricsTumor_ch, by: [0,1])
             .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
