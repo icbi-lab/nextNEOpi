@@ -162,6 +162,10 @@ if (! params.batchFile) {
                            fastqc_reads_tumor_ch;
                            raw_reads_tumor_hla_ch;
                            raw_reads_tumor_hlaHD_ch }
+            Channel
+                   .fromFilePairs(params.readsRNAseq)
+                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
+                   .set { reads_tumor_neofuse_ch }
             
         } else  {
             exit 1, "No tumor sample defined"
