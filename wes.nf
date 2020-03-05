@@ -162,7 +162,7 @@ if (! params.batchFile) {
                            fastqc_reads_tumor_ch;
                            reads_tumor_hla_ch;
                            reads_tumor_hlaHD_ch }
-			
+            
         } else  {
             exit 1, "No tumor sample defined"
         }
@@ -198,7 +198,7 @@ if (! params.batchFile) {
             if (row.readsNormalFWD == "None") {
                 exit 1, "No normal sample defined for " + row.readsTumorFWD
             }
-	        if (row.readsRNAseqREV == "None") {
+            if (row.readsRNAseqREV == "None") {
                 single_end_RNA = true
             }          
         }
@@ -211,11 +211,11 @@ if (! params.batchFile) {
                                     file(row.readsTumorFWD),
                                     file(row.readsTumorREV),
                                     row.group) }
-				.into { raw_reads_tumor_ch;
+                .into { raw_reads_tumor_ch;
                         fastqc_reads_tumor_ch;
                         reads_tumor_hla_ch;
                         reads_tumor_hlaHD_ch }
-		
+        
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
@@ -226,13 +226,13 @@ if (! params.batchFile) {
                                     row.group) }
                 .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
-		Channel
+        Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     row.normalSampleName,
                                     file(row.readsRNAseqFWD),
-									file(row.readsRNAseqREV)) }
+                                    file(row.readsRNAseqREV)) }
                 .set { reads_tumor_neofuse_ch }
 
 }
@@ -3411,23 +3411,23 @@ process 'mkPhasedVCF' {
  */
 
 process 'pre_map_hla' {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
     input:
-	set(
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
     ) from reads_tumor_hla_ch
-	val yaraIdx from Channel.value(reference.YaraIndex)
+    val yaraIdx from Channel.value(reference.YaraIndex)
 
-	output:
-	file("mapped_{1,2}.bam") into fished_reads
-	val("$TumorReplicateId") into tag_id
-	
-	script:
+    output:
+    file("mapped_{1,2}.bam") into fished_reads
+    val("$TumorReplicateId") into tag_id
+    
+    script:
     if(single_end) {
         yara_cpus = max((task.cpus - 2), 2)
         samtools_cpus = max(1, (task.cpus - yara_cpus))
@@ -3435,12 +3435,12 @@ process 'pre_map_hla' {
         yara_cpus = max((task.cpus - 6), 2)
         samtools_cpus = max(1, ((task.cpus - yara_cpus)/3))
     }
-	if (single_end)
+    if (single_end)
         """
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
             $SAMTOOLS view -@ ${task.cpus/2} -h -F 4 -b1 - > mapped_1.bam
         """
-	else
+    else
         """
         mkfifo R1 R2
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
@@ -3463,23 +3463,23 @@ process 'pre_map_hla' {
  */
 
 process 'OptiType' {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
+    publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
         mode: params.publishDirMode
 
-	input:
-	val(TumorReplicateId) from tag_id
-	file reads from fished_reads.collect()
+    input:
+    val(TumorReplicateId) from tag_id
+    file reads from fished_reads.collect()
 
-	output:
-	file("**")
-	file("**/*_result.tsv") into optitype_output
+    output:
+    file("**")
+    file("**/*_result.tsv") into optitype_output
 
-	script:
-	"""
-	$PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
-	"""
+    script:
+    """
+    $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
+    """
 }
 
 /*
@@ -3490,43 +3490,43 @@ process 'OptiType' {
 
 process 'run_hla_hd' {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	conda 'assets/hlahdenv.yml'
+    conda 'assets/hlahdenv.yml'
 
     publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
         mode: params.publishDirMode
 
     input:
-	set(
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
     ) from reads_tumor_hlaHD_ch
-	val frData from Channel.value(reference.HLAHDFreqData)
-	file gSplit from Channel.value(reference.HLAHDGeneSplit)
-	val dict from Channel.value(reference.HLAHDDict)
+    val frData from Channel.value(reference.HLAHDFreqData)
+    file gSplit from Channel.value(reference.HLAHDGeneSplit)
+    val dict from Channel.value(reference.HLAHDDict)
 
-	output:
-	file("**")
-	file("**/*_final.result.txt") into hlahd_output
+    output:
+    file("**")
+    file("**/*_final.result.txt") into hlahd_output
 
-	script:
+    script:
     hlahd_p = Channel.value(params.HLAHD_PATH)
     HLAHD_PATH = hlahd_p.getVal()
 
-	if (single_end)
-	    """
+    if (single_end)
+        """
         export PATH=\$PATH:$HLAHD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
         $HLAHD -t ${params.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsFWD} \\
             ${gSplit} ${dict} $TumorReplicateId .
-	    """
-	else
+        """
+    else
         """
         export PATH=\$PATH:$HLA_HD_PATH
         COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
@@ -3554,28 +3554,28 @@ Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 
 process Neofuse_single {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/10_NeoFuse/",
+    publishDir "$params.outputDir/$TumorReplicateId/10_NeoFuse/",
         mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
-		readRNAFWD,
-		readRNAREV
+        readRNAFWD,
+        readRNAREV
     ) from reads_tumor_neofuse_ch
-	file STARidx from file(reference.STARidx)
-	file RefFASTA from file(reference.RefFASTA)
-	file AnnoFile from file(reference.AnnoFile)
+    file STARidx from file(reference.STARidx)
+    file RefFASTA from file(reference.RefFASTA)
+    file AnnoFile from file(reference.AnnoFile)
 
-	output:
-	file("**/*.tpm.txt") into tpm_file
-	path("**")
+    output:
+    file("**/*.tpm.txt") into tpm_file
+    path("**")
 
-	script:
-	if(single_end_RNA)
+    script:
+    if(single_end_RNA)
         """
         NeoFuse_single -1 ${readRNAFWD} \\
             -d ${TumorReplicateId} \\
@@ -3591,7 +3591,7 @@ process Neofuse_single {
             -a ${AnnoFile} \\
             -N ${params.netMHCpan}
         """
-	else
+    else
         """
         NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} \\
             -d ${TumorReplicateId} \\
@@ -3613,18 +3613,18 @@ process Neofuse_single {
 Add the gene ID (required by vcf-expression-annotator) to the TPM file
 */
 process add_geneID {
-	
-	input:
-	file tpm from tpm_file
-	file AnnoFile from file(reference.AnnoFile)
+    
+    input:
+    file tpm from tpm_file
+    file AnnoFile from file(reference.AnnoFile)
 
-	output:
-	file("*.tpm_final.txt") into final_file
+    output:
+    file("*.tpm_final.txt") into final_file
 
-	script:
-	"""
-	NameToID.py -i ${tpm} -a ${AnnoFile}
-	"""
+    script:
+    """
+    NameToID.py -i ${tpm} -a ${AnnoFile}
+    """
 }
 
 /*
@@ -3633,10 +3633,10 @@ Add gene expression info to the VEP annotated, phased VCF file
 
 process gene_annotator {
 
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
         _,
@@ -3644,23 +3644,23 @@ process gene_annotator {
         vep_somatic_vcf_gz,
         vep_somatic_vcf_gz_tbi
     ) from mkPhasedVCF_out_ch0
-	file final_tpm from final_file
+    file final_tpm from final_file
 
-	output:
-	file("*gx.vcf.gz") into vcf_vep_ex_gz
-	file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
+    output:
+    file("*gx.vcf.gz") into vcf_vep_ex_gz
+    file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
 
-	script:
-	"""
-	vcf-expression-annotator \\
+    script:
+    """
+    vcf-expression-annotator \\
         -i GeneID \\
         -e TPM \ß
         -s ${TumorReplicateId} \\
-	    ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
+        ${vep_somatic_vcf_gz} ${final_tpm} custom gene \\
         -o ./${TumorReplicateId}_vep_somatic_gx.vcf
-	bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
-	tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
-	"""
+    bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
+    tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
+    """
 }
 
 /*
@@ -3690,17 +3690,17 @@ To be used as input for pVACseq
 */
 
 process get_vhla {
-	input:
-	file(opti_out) from optitype_output
-	file(hlahd_out) from hlahd_output
-	
-	output:
-	stdout hlas
+    input:
+    file(opti_out) from optitype_output
+    file(hlahd_out) from hlahd_output
+    
+    output:
+    stdout hlas
 
-	script:
-	"""
-	HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
-	"""
+    script:
+    """
+    HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
+    """
 }
 
 /*
@@ -3708,13 +3708,13 @@ Run pVACseq
 */
 
 process pVACseq {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	// publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
     //     mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
         vep_phased_vcf_gz,
@@ -3722,18 +3722,18 @@ process pVACseq {
         _,
         _
     ) from mkPhasedVCF_out_pVACseqch0
-	file(anno_vcf) from vcf_vep_ex_gz
-	file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
-	each hla_types from hlas.splitText()
+    file(anno_vcf) from vcf_vep_ex_gz
+    file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
+    each hla_types from hlas.splitText()
 
-	output:
-	// file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
-	// file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
-	// val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
+    output:
+    // file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
+    // file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
+    // val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
     set(
         TumorReplicateId,
         NormalReplicateId,
-	    file("**/MHC_Class_I/*.filtered.tsv") 
+        file("**/MHC_Class_I/*.filtered.tsv") 
     ) into mhcI_out_f optional true
     set(
         TumorReplicateId,
@@ -3741,28 +3741,28 @@ process pVACseq {
         file("**/MHC_Class_II/*.filtered.tsv") 
     ) into mhcII_out_f optional true
 
-	script:
-	hla_type = (hla_types - ~/\n/)
-	"""
-	pvacseq run \\
+    script:
+    hla_type = (hla_types - ~/\n/)
+    """
+    pvacseq run \\
         --iedb-install-directory /opt/iedb \\
         -t ${task.cpus} \\
         -p ${vep_phased_vcf_gz} \\
         -e ${params.epitope_len} \\
         -m ${params.top_sc_metric} \\
-	    --tdna-cov ${params.tdna_cov} \\
+        --tdna-cov ${params.tdna_cov} \\
         --trna-cov ${params.trna_cov} \\
-	    --normal-vaf ${params.nrm_vaf} \\
+        --normal-vaf ${params.nrm_vaf} \\
         --tdna-vaf ${params.tdna_vaf} \\
         --trna-vaf ${params.trna_vaf} \\
-	    --expn-val ${params.exp_val} \\
+        --expn-val ${params.exp_val} \\
         --maximum-transcript-support-level ${params.max_sup_lvl} \\
-	    -c ${params.min_fc} \\
+        -c ${params.min_fc} \\
         --normal-cov ${params.nrm_cov} \\
         --exclude-NAs \\
         --pass-only \\
-	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
-	"""
+    ${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
+    """
 }
 
 // process create_final_file {
@@ -3779,7 +3779,7 @@ process pVACseq {
 //         _
 //     ) from mkPhasedVCF_out_ch1
 
-	
+    
 // 	output:
 // 	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
 // 	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
@@ -3845,116 +3845,116 @@ headerFields = ['Chromosome',
                 'asparagine_proline_bond_count']
 
 process concat_mhcI_files {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
         mode: params.publishDirMode
 
-	input:
-	// val TumorReplicateId from con_mhcI_id
-	set(
+    input:
+    // val TumorReplicateId from con_mhcI_id
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file('*.filtered.tsv')
     ) from mhcI_out_f.collect()
-	// each file(in_file_fc) from mhcI_out_fc
-	// file '*.filtered.tsv' from mhcI_out_f.collect()
-	// file(mhcI_final_fc) from mhcI_filteredCon_file
-	//file(mhcI_final_f) from mhcI_filtered_file
+    // each file(in_file_fc) from mhcI_out_fc
+    // file '*.filtered.tsv' from mhcI_out_f.collect()
+    // file(mhcI_final_fc) from mhcI_filteredCon_file
+    //file(mhcI_final_f) from mhcI_filtered_file
 
-	output:
-	// file("*_MHCI_filtered.condensed.ranked.tsv")
-	file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
-	val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
+    output:
+    // file("*_MHCI_filtered.condensed.ranked.tsv")
+    file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
+    val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
 
-	script:
-	"""
- 	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
-	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
-	"""
+    script:
+    """
+     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
+    cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
+    """
 }
 
 process concat_mhcII_files {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
         mode: params.publishDirMode
 
-	input:
-	set(
+    input:
+    set(
         TumorReplicateId,
         NormalReplicateId,
         file('*.filtered.tsv')
     ) from mhcII_out_f.collect()
-	// file(in_file_fc) from mhcII_out_fc
-	// file '*.filtered.tsv' from mhcII_out_f.collect()
-	// file(mhcII_final_fc) from mhcII_filteredCon_file
-	// file(mhcII_final_f) from mhcII_filtered_file
+    // file(in_file_fc) from mhcII_out_fc
+    // file '*.filtered.tsv' from mhcII_out_f.collect()
+    // file(mhcII_final_fc) from mhcII_filteredCon_file
+    // file(mhcII_final_f) from mhcII_filtered_file
 
-	output:
-	// file("*_MHCII_filtered.condensed.ranked.tsv")
-	file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
-	
+    output:
+    // file("*_MHCII_filtered.condensed.ranked.tsv")
+    file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
+    
 
-	script:
-	"""
+    script:
+    """
     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
-	cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
-	"""
+    cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
+    """
 }
 
 process ranked_reports {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
         mode: params.publishDirMode
 
-	input:
-	val TumorReplicateId from mhcI_tag
-	file pvacseq_mhcI_file from MHCI_final_ranked
-	file pvacseq_mhcII_file from MHCII_final_ranked
-	
+    input:
+    val TumorReplicateId from mhcI_tag
+    file pvacseq_mhcI_file from MHCI_final_ranked
+    file pvacseq_mhcII_file from MHCII_final_ranked
+    
 
-	output:
-	file("**/*_MHCI_filtered.condensed.ranked.tsv")
-	file("**/*_MHCII_filtered.condensed.ranked.tsv")
+    output:
+    file("**/*_MHCI_filtered.condensed.ranked.tsv")
+    file("**/*_MHCII_filtered.condensed.ranked.tsv")
 
-	script:
-	"""
-	mkdir ./MCH_Class_I/
-	pvacseq generate_condensed_ranked_report \\
+    script:
+    """
+    mkdir ./MCH_Class_I/
+    pvacseq generate_condensed_ranked_report \\
         -m lowest \\
         $pvacseq_mhcI_file \\
         ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
-	mkdir ./MCH_Class_II/
-	pvacseq generate_condensed_ranked_report \\
+    mkdir ./MCH_Class_II/
+    pvacseq generate_condensed_ranked_report \\
         -m lowest $pvacseq_mhcII_file \\
         ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
-	"""
+    """
 }
 
 process immunogenicity_scoring {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
         mode: params.publishDirMode
 
-	input:
-	val(TumorReplicateId) from mhCI_tag_immunogenicity
-	file pvacseq_file from MHCI_final_immunogenicity
+    input:
+    val(TumorReplicateId) from mhCI_tag_immunogenicity
+    file pvacseq_file from MHCI_final_immunogenicity
 
-	output:
-	file("*_immunogenicity.tsv") optional true
+    output:
+    file("*_immunogenicity.tsv") optional true
 
-	script:
-	"""
-	get_epitopes.py \
+    script:
+    """
+    get_epitopes.py \
         --pvacseq_out $pvacseq_file \\
         --sample_id $TumorReplicateId \\
         --output ./${TumorReplicateId}_epitopes.tsv
-	NeoAg_immunogenicity_predicition_GBM.R \\
+    NeoAg_immunogenicity_predicition_GBM.R \\
         ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
-	"""
+    """
 }
 
 /*
