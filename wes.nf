@@ -554,8 +554,7 @@ process FastQC {
         TumorReplicateId,
         NormalReplicateId,
         file(readsRNAseq_FWD),
-        file(readsRNAseq_REV),
-        sampleGroup,      // unused so far
+        file(readsRNAseq_REV)
     ) from fastqc_readsRNAseq_ch
 
     output:
