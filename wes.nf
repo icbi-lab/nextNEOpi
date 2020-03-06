@@ -3733,7 +3733,7 @@ process 'run_hla_hd' {
     if (single_end)
         """
         export PATH=\$PATH:$HLAHD_PATH
-        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\\n' | wc -m`
         $HLAHD -t ${task.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsFWD} \\
@@ -3742,7 +3742,7 @@ process 'run_hla_hd' {
     else
         """
         export PATH=\$PATH:$HLAHD_PATH
-        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\n' | wc -m`
+        COVERAGE=`cat ${readsFWD} | head -2 | tail -1 |  tr -d '\\n' | wc -m`
         $HLAHD -t ${task.cpus} \\
             -m \$COVERAGE \\
             -f ${frData} ${readsFWD} ${readsREV} \\
@@ -3922,13 +3922,13 @@ process get_vhla {
 	output:
 	set (
 		TumorReplicateId,
-		stdout
+		file("${TumorReplicateId}_hlas.txt")
 	) into hlas
 	// stdout hlas
 
 	script:
 	"""
-	HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs}
+	HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs} > ${TumorReplicateId}_hlas.txt
 	"""
 }
 
