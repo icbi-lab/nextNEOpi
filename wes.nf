@@ -1029,10 +1029,7 @@ process 'BwaTumor' {
         TumorReplicateId,
         NormalReplicateId,
         file("${TumorReplicateId}_aligned.bam")
-    ) into (
-        BwaTumor_out_ch0,
-        BwaTumor_out_ch1 // extract_mhc -> hld-hd, optitype
-    )
+    ) into BwaTumor_out_ch0
 
     script:
     if (single_end)
@@ -1082,7 +1079,8 @@ process 'MarkDuplicatesTumor' {
     ) into (
         MarkDuplicatesTumor_out_ch0,
         MarkDuplicatesTumor_out_ch1,
-        MarkDuplicatesTumor_out_ch2
+        MarkDuplicatesTumor_out_ch2,
+        MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
     )
 
     set(
@@ -3593,8 +3591,10 @@ process 'mhc_extract' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(tumor_BAM_aligned_sort_mkdp)
-    ) from BwaTumor_out_ch1
+        file(tumor_BAM_aligned_sort_mkdp),
+        file(tumor_BAI_aligned_sort_mkdp),
+        _
+    ) from MarkDuplicatesTumor_out_ch3
 
 
     output:
