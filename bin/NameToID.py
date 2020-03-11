@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 
 import sys, argparse
+import ntpath
 
 if __name__ == "__main__":
 	# Parse arguments
 	parser = argparse.ArgumentParser(usage='NameToID.py [-h] -i {/path/to/counts/input_file/} -a {/path/to/counts/annotation.gtf/}') #-o {/path/to/outDir}')
 	parser.add_argument('-i','--InFile', help='input file',required=True)
 	parser.add_argument('-a','--AnnotationFile', help='annotation GTF file',required=True)
-	# parser.add_argument('-o','--outDir', help='Output dir', required=True)
+	parser.add_argument('-o','--outDir', help='Output dir', required=True)
 	args = parser.parse_args()
 
 	annoFile = args.AnnotationFile
 	inFile = args.InFile
-	outFile = args.InFile
-	outFile = outFile.replace("tpm.txt", "tpm_final.txt")
+	outFile = ntpath.basename(inFile)
+	outFile = args.outDir + "/" + outFile.replace("tpm.txt", "tpm_final.txt")
 
 
 	gene_name = []
