@@ -3610,7 +3610,7 @@ process 'mhc_extract' {
     )
 
     script:
-    mhc_region = params.HLA_HD_genome_version ? params.MHC_genomic_region[params.HLA_HD_genome_version] ? : false : false
+    mhc_region = params.HLA_HD_genome_version ? params.MHC_genomic_region[params.HLA_HD_genome_version] : false : false
     
     if (!mhc_region) {
         exit 1, "MHC region not found for genome version: ${params.HLA_HD_genome_version}" 
@@ -4063,24 +4063,13 @@ process pVACseq {
     script:
     hla_type = (hla_types - ~/\n/)
     """
-    pvacseq run \\
-        --iedb-install-directory /opt/iedb \\
-        -t ${task.cpus} \\
-        -p ${vep_phased_vcf_gz} \\
-        -e ${params.epitope_len} \\
-		-m ${params.top_sc_metric} \\
-        --tdna-cov ${params.tdna_cov} \\
-        --trna-cov ${params.trna_cov} \\
-        --normal-vaf ${params.nrm_vaf} \\
-        --tdna-vaf ${params.tdna_vaf} \\
-        --trna-vaf ${params.trna_vaf} \\
-        --expn-val ${params.exp_val} \\
-        --maximum-transcript-support-level ${params.max_sup_lvl} \\
-        -c ${params.min_fc} \\
-        --normal-cov ${params.nrm_cov} \\
-        --exclude-NAs \\
-        --pass-only \\
-		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
+    pvacseq run pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} -m ${params.top_sc_metric} \\
+	--tdna-cov ${params.tdna_cov} --trna-cov ${params.trna_cov} \\
+	--normal-vaf ${params.nrm_vaf} --tdna-vaf ${params.tdna_vaf} --trna-vaf ${params.trna_vaf} \\
+	--expn-val ${params.exp_val} --maximum-transcript-support-level ${params.max_sup_lvl} \\
+	-c ${params.min_fc} --normal-cov ${params.nrm_cov} --exclude-NAs --pass-only \\
+	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
+
     """
 }
 
