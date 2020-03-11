@@ -3610,7 +3610,7 @@ process 'mhc_extract' {
     )
 
     script:
-    mhc_region = params.HLA_HD_genome_version ? params.MHC_genomic_region[params.HLA_HD_genome_version] ? : false : false
+    mhc_region = params.HLA_HD_genome_version ? params.MHC_genomic_region[ params.HLA_HD_genome_version ].region ? : false : false
     
     if (!mhc_region) {
         exit 1, "MHC region not found for genome version: ${params.HLA_HD_genome_version}" 
