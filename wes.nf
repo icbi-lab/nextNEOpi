@@ -159,9 +159,7 @@ if (! params.batchFile) {
                    .fromFilePairs(params.readsTumor)
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .into { raw_reads_tumor_ch;
-                           fastqc_reads_tumor_ch;
-                           raw_reads_tumor_hla_ch;
-                           raw_reads_tumor_hlaHD_ch }
+                           fastqc_reads_tumor_ch }
             Channel
                    .fromFilePairs(params.readsRNAseq)
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
@@ -216,9 +214,7 @@ if (! params.batchFile) {
                                     file(row.readsTumorREV),
                                     row.group) }
                 .into { raw_reads_tumor_ch;
-                        fastqc_reads_tumor_ch;
-                        raw_reads_tumor_hla_ch;
-                        raw_reads_tumor_hlaHD_ch }
+                        fastqc_reads_tumor_ch }
         
         Channel
                 .fromPath(params.batchFile)
@@ -678,8 +674,6 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_tumor_ch,
-            reads_tumor_hla_ch,
-            reads_tumor_hlaHD_ch,
             fastqc_reads_tumor_trimmed_ch
         )
         set(
@@ -865,8 +859,6 @@ if (params.trim_adapters) {
 } else { // no adapter trimming
     reads_tumor_ch       = raw_reads_tumor_ch 
     reads_normal_ch      = raw_reads_normal_ch
-    reads_tumor_hla_ch   = raw_reads_tumor_hla_ch
-    reads_tumor_hlaHD_ch = raw_reads_tumor_hlaHD_ch
     ch_fastqc_trimmed    = Channel.empty()
     ch_flexbar_tumor     = Channel.empty()
     ch_flexbar_normal    = Channel.empty()
@@ -1087,7 +1079,8 @@ process 'MarkDuplicatesTumor' {
     ) into (
         MarkDuplicatesTumor_out_ch0,
         MarkDuplicatesTumor_out_ch1,
-        MarkDuplicatesTumor_out_ch2
+        MarkDuplicatesTumor_out_ch2,
+        MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
     )
 
     set(
@@ -3590,6 +3583,84 @@ process 'mkPhasedVCF' {
 // END CREATE phased VCF
 
 // HLA TYPING
+
+process 'mhc_extract' {
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(tumor_BAM_aligned_sort_mkdp),
+        file(tumor_BAI_aligned_sort_mkdp),
+        _
+    ) from MarkDuplicatesTumor_out_ch3
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${mhcReads_1}"),
+        file("${mhcReads_2}"),
+        _,      // unused so far
+    ) into (
+        reads_tumor_hla_ch,
+        reads_tumor_hlaHD_ch
+    )
+
+    script:
+    mhc_region = params.HLA_HD_genome_version ? params.MHC_genomic_region[params.HLA_HD_genome_version] ? : false : false
+    
+    if (!mhc_region) {
+        exit 1, "MHC region not found for genome version: ${params.HLA_HD_genome_version}" 
+    }
+
+    mhcReads_1 = (single_end) ? TumorReplicateId + "_reads_mhc.fastq.gz" : TumorReplicateId + "_reads_mhc_R1.fastq.gz"
+    mhcReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "_reads_mhc_R2.fastq.gz"
+
+    if(single_end)
+        """
+        mkfifo unmapped_bam
+        mkfifo mhc_mapped_bam
+        mkfifo R.fastq
+
+        $SAMTOOLS  view -@2 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        $SAMTOOLS  view -@2 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+
+        $SAMTOOLS merge -@2 -u - mhc_mapped_bam unmapped_bam | \\
+            $SAMTOOLS sort -@2 -n - | \\
+            $SAMTOOLS fastq -@2 -0 R.fastq \\
+            -i - &
+        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
+
+        wait
+
+        rm -f unmapped_bam mhc_mapped_bam R.fastq
+        """
+    else
+        """
+        mkfifo unmapped_bam
+        mkfifo mhc_mapped_bam
+        mkfifo R1.fastq
+        mkfifo R2.fastq
+
+        $SAMTOOLS  view -@2 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        $SAMTOOLS  view -@2 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+
+        $SAMTOOLS merge -@2 -u - mhc_mapped_bam unmapped_bam | \\
+            $SAMTOOLS sort -@2 -n - | \\
+            $SAMTOOLS fastq -@2 -1 R1.fastq -2 R2.fastq \\
+            -i - &
+        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R1.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R1.fastq.gz
+        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 2:N:0:NNNNNNNN/; }' R2.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R2.fastq.gz
+
+        wait
+
+        rm -f unmapped_bam mhc_mapped_bam R1.fastq R2.fastq
+        """
+}
+
 
 /*
 *********************************************
