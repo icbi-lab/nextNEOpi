@@ -1087,7 +1087,7 @@ process 'MarkDuplicatesTumor' {
         TumorReplicateId,
         NormalReplicateId,
         file("${TumorReplicateId}_aligned_sort_mkdp.txt")
-    ) into MarkDuplicatesTumor_out_ch3 // multiQC
+    ) into MarkDuplicatesTumor_out_ch4 // multiQC
 
     script:
     """
@@ -4308,7 +4308,7 @@ process pVACseq {
 //             .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
 //             .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
 //             .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
-//             .combine(MarkDuplicatesTumor_out_ch3, by: [0,1])
+//             .combine(MarkDuplicatesTumor_out_ch4, by: [0,1])
 //             .combine(alignmentMetricsTumor_ch, by: [0,1])
 //             .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
 //             .combine(alignmentMetricsNormal_ch, by: [0,1])
