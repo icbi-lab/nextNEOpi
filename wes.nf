@@ -3625,11 +3625,11 @@ process 'mhc_extract' {
         mkfifo mhc_mapped_bam
         mkfifo R.fastq
 
-        $SAMTOOLS  view -@2 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        $SAMTOOLS  view -@2 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        $SAMTOOLS  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        $SAMTOOLS  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
 
-        $SAMTOOLS merge -@2 -u - mhc_mapped_bam unmapped_bam | \\
-            $SAMTOOLS sort -@2 -n - | \\
+        $SAMTOOLS merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
+            $SAMTOOLS sort -@4 -n - | \\
             $SAMTOOLS fastq -@2 -0 R.fastq \\
             -i - &
         $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
@@ -3645,11 +3645,11 @@ process 'mhc_extract' {
         mkfifo R1.fastq
         mkfifo R2.fastq
 
-        $SAMTOOLS  view -@2 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        $SAMTOOLS  view -@2 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        $SAMTOOLS  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        $SAMTOOLS  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
 
-        $SAMTOOLS merge -@2 -u - mhc_mapped_bam unmapped_bam | \\
-            $SAMTOOLS sort -@2 -n - | \\
+        $SAMTOOLS merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
+            $SAMTOOLS sort -@4 -n - | \\
             $SAMTOOLS fastq -@2 -1 R1.fastq -2 R2.fastq -s /dev/null -0 /dev/null \\
             -i - &
         $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R1.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R1.fastq.gz &
