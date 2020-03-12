@@ -3487,7 +3487,7 @@ process 'mkPhasedVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
-        mkPhasedVCF_out_ch0, mkPhasedVCF_out_ch1, mkPhasedVCF_out_ch2, mkPhasedVCF_out_ch3, mkPhasedVCF_out_pVACseqch0
+        mkPhasedVCF_out_ch0, mkPhasedVCF_out_pVACseqch0
     )
     // set(
     //     TumorReplicateId,
@@ -3946,8 +3946,8 @@ process gene_annotator {
 	output:
 	set(
 		TumorReplicateId,
-		file("*gx.vcf.gz"),
-		file("*gx.vcf.gz.tbi")
+		file("*_vep_somatic_gx.vcf.gz"),
+		file("*_vep_somatic_gx.vcf.gz.tbi")
 	) into vcf_vep_ex_gz
 	// file("*gx.vcf.gz") into vcf_vep_ex_gz
 	// file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
@@ -4023,9 +4023,9 @@ process get_vhla {
 Run pVACseq
 */
 
-process pVACseq {
+process 'pVACseq' {
     tag "$TumorReplicateId"
-
+	cache false
     // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
     //     mode: params.publishDirMode
 
@@ -4043,215 +4043,163 @@ process pVACseq {
     ) from mkPhasedVCF_out_pVACseqch0
 		.combine(vcf_vep_ex_gz, by: 0)
 		.combine(hlas.splitText(), by: 0)
-	// file(anno_vcf) from vcf_vep_ex_gz
-	// file(anno_vcf_tbi) from vcf_vep_ex_gz_tbi
-	// each hla_types from hlas.splitText()
 
     output:
     // file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
     // file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
-    // val("${TumorReplicateId}") into (ffile_tag_id, con_mhcI_id, con_mhcII_id)
+    // val("${TumorReplicateId}") into (con_mhcI_id, con_mhcII_id)
+	// file("**/MHC_Class_I/*.filtered.tsv") into mhcI_out_f optional true
     set(
-        TumorReplicateId,
-	    file("**/MHC_Class_I/*.filtered.tsv") 
-    ) into mhcI_out_f optional true
+		TumorReplicateId,
+	    file("**/MHC_Class_I/*.filtered.tsv")
+    ) optional true into mhcI_out_f
     set(
         TumorReplicateId,
         file("**/MHC_Class_II/*.filtered.tsv") 
-    ) into mhcII_out_f optional true
+    ) optional true into mhcII_out_f
+	// file("**/MHC_Class_I/*.filtered.tsv")  into mhcI_out_f optional true
+	// file("**/MHC_Class_II/*.filtered.tsv")  into mhcII_out_f optional true
 
     script:
     hla_type = (hla_types - ~/\n/)
     """
-    pvacseq run pvacseq run --iedb-install-directory /opt/iedb -t 10 -p ${vep_phased_vcf_gz} -e ${params.epitope_len} -m ${params.top_sc_metric} \\
-	--tdna-cov ${params.tdna_cov} --trna-cov ${params.trna_cov} \\
-	--normal-vaf ${params.nrm_vaf} --tdna-vaf ${params.tdna_vaf} --trna-vaf ${params.trna_vaf} \\
-	--expn-val ${params.exp_val} --maximum-transcript-support-level ${params.max_sup_lvl} \\
-	-c ${params.min_fc} --normal-cov ${params.nrm_cov} --exclude-NAs --pass-only \\
-	${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./$TumorReplicateId/${hla_type}/
-
+    pvacseq run \\
+		--iedb-install-directory /opt/iedb \\
+		-t 10 \\
+		-p ${vep_phased_vcf_gz} \\
+		-e ${params.epitope_len} \\
+		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
     """
 }
 
-// process create_final_file {
-// 	cache false
-// 	tag "$TumorReplicateId"
+headerFields = ['Chromosome',
+                'Start',
+                'Stop',
+                'Reference',
+                'Variant',
+                'Transcript',
+                'Transcript Support Level',
+                'Ensembl Gene ID',
+                'Variant Type',
+                'Mutation',
+                'Protein Position',
+                'Gene Name',
+                'HGVSc',
+                'HGVSp',
+                'HLA Allele',
+                'Peptide Length',
+                'Sub-peptide Position',
+                'Mutation Position',
+                'MT Epitope Seq',
+                'WT Epitope Seq',
+                'Best MT Score Method',
+                'Best MT Score',
+                'Corresponding WT Score',
+                'Corresponding Fold Change',
+                'Tumor DNA Depth',
+                'Tumor DNA VAF',
+                'Tumor RNA Depth',
+                'Tumor RNA VAF',
+                'Normal Depth',
+                'Normal VAF',
+                'Gene Expression',
+                'Transcript Expression',
+                'Median MT Score',
+                'Median WT Score',
+                'Median Fold Change',
+                'NetMHCpan WT Score',
+                'NetMHCpan MT Score',
+                'cterm_7mer_gravy_score',
+                'max_7mer_gravy_score',
+                'difficult_n_terminal_residue',
+                'c_terminal_cysteine',
+                'c_terminal_proline',
+                'cysteine_count',
+                'n_terminal_asparagine',
+                'asparagine_proline_bond_count']
 
-// 	input:
-// 	set(
-//         TumorReplicateId,
-//         _,
-//         _,
-//         _,
-//         _,
-//         _
-//     ) from mkPhasedVCF_out_ch1
+process concat_mhcI_files {
+    tag "$TumorReplicateId"
 
-    
-// 	output:
-// 	// file("*final_MHCI_filtered.condensed.ranked.tsv") into mhcI_filteredCon_file
-// 	// file("*final_MHCII_filtered.condensed.ranked.tsv") into mhcII_filteredCon_file
-// 	file("*_MHCI_filtered.tsv") into mhcI_filtered_file
-// 	file("*_MHCII_filtered.tsv") into mhcII_filtered_file
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+        mode: params.publishDirMode
 
-// 	script:
-//     header1 = "Gene Name\tMutation\tProtein Position\tHGVSc\tHGVSp\tHLA Allele\tMutation Position\tMT\tEpitope Seq\tMedian MT Score\tMedian WT Score\tMedian Fold Change\tBest MT Score\tCorresponding WT Score\tCorresponding Fold Change\tTumor DNA Depth\tTumor DNA VAF\tTumor RNA Depth\tTumor RNA VAF\tGene Expression Rank"
-//     header2 = "Chromosome	Start	Stop	Reference	Variant	Transcript	Transcript Support Level	Ensembl Gene ID	Variant Type	Mutation	Protein Position	Gene Name	HGVSc	HGVSp	HLA Allele	Peptide Length	Sub-peptide Position	Mutation Position	MT Epitope Seq	WT Epitope Seq	Best MT Score Method	Best MT Score	Corresponding WT Score	Corresponding Fold Change	Tumor DNA Depth	Tumor DNA VAF	Tumor RNA Depth	Tumor RNA VAF	Normal Depth	Normal VAF	Gene Expression	Transcript Expression	Median MT Score	Median WT Score	Median Fold Change	NetMHCpan WT Score	NetMHCpan MT Score	cterm_7mer_gravy_score	max_7mer_gravy_score	difficult_n_terminal_residue	c_terminal_cysteine	c_terminal_proline	cysteine_count	n_terminal_asparagine	asparagine_proline_bond_count"
+    input:
+    set(
+        TumorReplicateId,
+        '*filtered.tsv'
+    ) from mhcI_out_f.groupTuple(by: 0)
 
-// 	"""
-// 	echo "$header1" > ${TumorReplicateId}_final_MHCI_filtered.condensed.ranked.tsv
-// 	echo "$header1" > ${TumorReplicateId}_final_MHCII_filtered.condensed.ranked.tsv
-// 	echo "$header2" > ${TumorReplicateId}_final_MHCI_filtered.tsv
-// 	echo "$header2" > ${TumorReplicateId}_final_MHCII_filtered.tsv
-// 	"""
-// }
+    output:
+	set(
+        TumorReplicateId,
+        file("*_MHCI_filtered.tsv")
+    ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
 
-// headerFields = ['Chromosome',
-//                 'Start',
-//                 'Stop',
-//                 'Reference',
-//                 'Variant',
-//                 'Transcript',
-//                 'Transcript Support Level',
-//                 'Ensembl Gene ID',
-//                 'Variant Type',
-//                 'Mutation',
-//                 'Protein Position',
-//                 'Gene Name',
-//                 'HGVSc',
-//                 'HGVSp',
-//                 'HLA Allele',
-//                 'Peptide Length',
-//                 'Sub-peptide Position',
-//                 'Mutation Position',
-//                 'MT Epitope Seq',
-//                 'WT Epitope Seq',
-//                 'Best MT Score Method',
-//                 'Best MT Score',
-//                 'Corresponding WT Score',
-//                 'Corresponding Fold Change',
-//                 'Tumor DNA Depth',
-//                 'Tumor DNA VAF',
-//                 'Tumor RNA Depth',
-//                 'Tumor RNA VAF',
-//                 'Normal Depth',
-//                 'Normal VAF',
-//                 'Gene Expression',
-//                 'Transcript Expression',
-//                 'Median MT Score',
-//                 'Median WT Score',
-//                 'Median Fold Change',
-//                 'NetMHCpan WT Score',
-//                 'NetMHCpan MT Score',
-//                 'cterm_7mer_gravy_score',
-//                 'max_7mer_gravy_score',
-//                 'difficult_n_terminal_residue',
-//                 'c_terminal_cysteine',
-//                 'c_terminal_proline',
-//                 'cysteine_count',
-//                 'n_terminal_asparagine',
-//                 'asparagine_proline_bond_count']
+    script:
+    """
+	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
+	cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
+    """
+}
 
-// process concat_mhcI_files {
-//     tag "$TumorReplicateId"
+process concat_mhcII_files {
+    tag "$TumorReplicateId"
 
-//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
-//         mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
+        mode: params.publishDirMode
 
-//     input:
-//     // val TumorReplicateId from con_mhcI_id
-//     set(
-//         TumorReplicateId,
-//         file('*.filtered.tsv')
-//     ) from mhcI_out_f.collect()
-//     // each file(in_file_fc) from mhcI_out_fc
-//     // file '*.filtered.tsv' from mhcI_out_f.collect()
-//     // file(mhcI_final_fc) from mhcI_filteredCon_file
-//     //file(mhcI_final_f) from mhcI_filtered_file
+    input:
+    set(
+        TumorReplicateId,
+        '*filtered.tsv'
+    ) from mhcII_out_f.groupTuple(by: 0)
 
-//     output:
-// 	set(
-//         TumorReplicateId,
-//         file("*_MHCI_filtered.tsv")
-//     ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
-//     // file("*_MHCI_filtered.condensed.ranked.tsv")
-//     // file("*_MHCI_filtered.tsv") optional true into (MHCI_final_ranked, MHCI_final_immunogenicity)
-//     // val("${TumorReplicateId}") into (mhcI_tag, mhCI_tag_immunogenicity)
+    output:
+	set(
+        TumorReplicateId,
+        file("*_MHCII_filtered.tsv")
+    ) into MHCII_final_ranked
 
-//     script:
-//     """
-//     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
-//     cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
-//     """
-// }
+    script:
+    """
+	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
+	cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
+    """
+}
 
-// process concat_mhcII_files {
-//     tag "$TumorReplicateId"
+process ranked_reports {
+    tag "$TumorReplicateId"
 
-//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
-//         mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+        mode: params.publishDirMode
 
-//     input:
-//     set(
-//         TumorReplicateId,
-//         file('*.filtered.tsv')
-//     ) from mhcII_out_f.collect()
-//     // file(in_file_fc) from mhcII_out_fc
-//     // file '*.filtered.tsv' from mhcII_out_f.collect()
-//     // file(mhcII_final_fc) from mhcII_filteredCon_file
-//     // file(mhcII_final_f) from mhcII_filtered_file
-
-//     output:
-// 	set(
-//         TumorReplicateId,
-//         file("*_MHCII_filtered.tsv")
-//     ) into MHCII_final_ranked
-//     // file("*_MHCII_filtered.condensed.ranked.tsv")
-//     // file("*_MHCII_filtered.tsv") optional true into MHCII_final_ranked
+    input:
+	set (
+		TumorReplicateId,
+		pvacseq_mhcI_file,
+		pvacseq_mhcII_file
+	) from MHCI_final_ranked
+		.combine(MHCII_final_ranked, by: 0)
     
 
-//     script:
-//     """
-//     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
-//     cat *.filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
-//     """
-// }
+    output:
+    file("**/*_MHCI_filtered.condensed.ranked.tsv")
+    file("**/*_MHCII_filtered.condensed.ranked.tsv")
 
-// process ranked_reports {
-//     tag "$TumorReplicateId"
-
-//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-//         mode: params.publishDirMode
-
-//     input:
-// 	set (
-// 		TumorReplicateId,
-// 		pvacseq_mhcI_file,
-// 		pvacseq_mhcII_file
-// 	) from MHCI_final_ranked
-// 		.combine(MHCII_final_ranked, by: [0,1])
-//     // val TumorReplicateId from mhcI_tag
-//     // file pvacseq_mhcI_file from MHCI_final_ranked
-//     // file pvacseq_mhcII_file from MHCII_final_ranked
-    
-
-//     output:
-//     file("**/*_MHCI_filtered.condensed.ranked.tsv")
-//     file("**/*_MHCII_filtered.condensed.ranked.tsv")
-
-//     script:
-//     """
-//     mkdir ./MCH_Class_I/
-//     pvacseq generate_condensed_ranked_report \\
-//         -m lowest \\
-//         $pvacseq_mhcI_file \\
-//         ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
-//     mkdir ./MCH_Class_II/
-//     pvacseq generate_condensed_ranked_report \\
-//         -m lowest $pvacseq_mhcII_file \\
-//         ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
-//     """
-// }
+    script:
+    """
+    mkdir ./MCH_Class_I/
+    pvacseq generate_condensed_ranked_report \\
+        -m lowest \\
+        $pvacseq_mhcI_file \\
+        ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+    mkdir ./MCH_Class_II/
+    pvacseq generate_condensed_ranked_report \\
+        -m lowest $pvacseq_mhcII_file \\
+        ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+    """
+}
 
 // process immunogenicity_scoring {
 //     tag "$TumorReplicateId"
@@ -4281,48 +4229,48 @@ process pVACseq {
 //     """
 // }
 
-// /*
-// ***********************************
-// *  Generate final multiQC output  *
-// ***********************************
-// */
-// process multiQC {
+/*
+***********************************
+*  Generate final multiQC output  *
+***********************************
+*/
+process multiQC {
 
-//     publishDir "${params.outputDir}/$TumorReplicateId/02_QC", mode: params.publishDirMode
+    publishDir "${params.outputDir}/$TumorReplicateId/02_QC", mode: params.publishDirMode
 
-//     input:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//     )   from ch_fastqc
-//             .combine(ch_flexbar_tumor, by: [0,1]).ifEmpty([])
-//             .combine(ch_flexbar_normal, by: [0,1]).ifEmpty([])
-//             .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
-//             .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
-//             .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
-//             .combine(MarkDuplicatesTumor_out_ch4, by: [0,1])
-//             .combine(alignmentMetricsTumor_ch, by: [0,1])
-//             .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
-//             .combine(alignmentMetricsNormal_ch, by: [0,1])
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+    )   from ch_fastqc
+            .combine(ch_flexbar_tumor, by: [0,1]).ifEmpty([])
+            .combine(ch_flexbar_normal, by: [0,1]).ifEmpty([])
+            .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
+            .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
+            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
+            .combine(MarkDuplicatesTumor_out_ch4, by: [0,1])
+            .combine(alignmentMetricsTumor_ch, by: [0,1])
+            .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
+            .combine(alignmentMetricsNormal_ch, by: [0,1])
 
-//     output:
-//     file("multiqc_data/*")
-//     file("multiqc_report.html")
+    output:
+    file("multiqc_data/*")
+    file("multiqc_report.html")
 
-//     script:
-//     """
-//     multiqc .
-//     """
+    script:
+    """
+    multiqc .
+    """
 
-// }
+}
 
 
 /*
