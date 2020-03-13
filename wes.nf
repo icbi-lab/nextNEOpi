@@ -3798,7 +3798,6 @@ process 'run_hla_hd' {
 
     script:
     hlahd_p = Channel.value(params.HLAHD_PATH).getVal()
-    // HLAHD_PATH = hlahd_p.getVal()
 
     if (single_end)
         """
@@ -4065,7 +4064,7 @@ process 'pVACseq' {
     """
     pvacseq run \\
 		--iedb-install-directory /opt/iedb \\
-		-t 10 \\
+		-t ${task.cpus} \\
 		-p ${vep_phased_vcf_gz} \\
 		-e ${params.epitope_len} \\
 		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
