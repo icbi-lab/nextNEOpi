@@ -924,7 +924,6 @@ if (params.trim_adapters_RNAseq) {
             NormalReplicateId,
             file(readsRNAseq_FWD),
             file(readsRNAseq_REV),
-            sampleGroup,      // unused so far
         ) from raw_reads_tumor_neofuse_ch
 
         output:
@@ -932,8 +931,7 @@ if (params.trim_adapters_RNAseq) {
             TumorReplicateId,
             NormalReplicateId,
             file("${TumorReplicateId}_RNA_trimmed_1.fastq.gz"),
-            file("${trimmedReads_2}"),
-            sampleGroup
+            file("${trimmedReads_2}")
         ) into (
             reads_tumor_neofuse_ch,
             fastqc_readsRNAseq_trimmed_ch
@@ -993,8 +991,7 @@ if (params.trim_adapters_RNAseq) {
             TumorReplicateId,
             NormalReplicateId,
             file(readsRNAseq_FWD),
-            file(readsRNAseq_REV),
-            sampleGroup,      // unused so far
+            file(readsRNAseq_REV)
         ) from fastqc_readsRNAseq_trimmed_ch
 
         output:
