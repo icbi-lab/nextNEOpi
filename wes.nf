@@ -857,11 +857,56 @@ if (params.trim_adapters) {
             """
     }
 } else { // no adapter trimming
-    reads_tumor_ch       = raw_reads_tumor_ch 
-    reads_normal_ch      = raw_reads_normal_ch
-    ch_fastqc_trimmed    = Channel.empty()
-    ch_flexbar_tumor     = Channel.empty()
-    ch_flexbar_normal    = Channel.empty()
+    process mk_readChannelsFromRaw {
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(tumor_readsFWD),
+            file(tumor_readsREV),
+            sampleGroup,      // unused so far
+        ) from raw_reads_tumor_ch
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(normal_readsFWD),
+            file(normal_readsREV),
+            sampleGroup,      // unused so far
+        ) from raw_reads_normal_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(tumor_readsFWD),
+            file(tumor_readsREV),
+            sampleGroup,      // unused so far
+        ) into reads_tumor_ch
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(normal_readsFWD),
+            file(normal_readsREV),
+            sampleGroup,      // unused so far
+        ) into reads_normal_ch
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            ""
+        ) into (
+            ch_fastqc_trimmed,
+            ch_flexbar_tumor,
+            ch_flexbar_normal
+        )
+
+        // do nothing
+        """
+        """
+    }    
 }
 
 // adapter trimming RNAseq
@@ -988,10 +1033,41 @@ if (params.trim_adapters_RNAseq) {
     }
 
 } else { // no adapter trimming for RNAseq
-    reads_tumor_neofuse_ch        = raw_reads_tumor_neofuse_ch
-    fastqc_readsRNAseq_trimmed_ch = Channel.empty()
-    ch_flexbar_RNAseq             = Channel.empty()
-    ch_fastqc_trimmed_RNAseq      = Channel.empty()
+    process mk_readRNAseqChannelsFromRaw {
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+        ) from raw_reads_tumor_neofuse_ch
+
+        empty = []
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsRNAseq_FWD),
+            file(readsRNAseq_REV),
+        ) into reads_tumor_neofuse_ch
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            ""
+        ) into (
+            fastqc_readsRNAseq_trimmed_ch,
+            ch_flexbar_RNAseq,
+            ch_fastqc_trimmed_RNAseq
+        ) 
+
+        // do nothing
+        """
+        """    
+    }
 }
 
 
@@ -4250,11 +4326,11 @@ process multiQC {
         file("*"),
         file("*"),
     )   from ch_fastqc
-            .combine(ch_flexbar_tumor, by: [0,1]).ifEmpty([])
-            .combine(ch_flexbar_normal, by: [0,1]).ifEmpty([])
-            .combine(ch_fastqc_trimmed, by: [0,1]).ifEmpty([])
-            .combine(ch_flexbar_RNAseq, by: [0,1]).ifEmpty([])
-            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1]).ifEmpty([])
+            .combine(ch_flexbar_tumor, by: [0,1])
+            .combine(ch_flexbar_normal, by: [0,1])
+            .combine(ch_fastqc_trimmed, by: [0,1])
+            .combine(ch_flexbar_RNAseq, by: [0,1])
+            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1])
             .combine(MarkDuplicatesTumor_out_ch4, by: [0,1])
             .combine(alignmentMetricsTumor_ch, by: [0,1])
             .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
