@@ -944,7 +944,7 @@ if (params.trim_adapters_RNAseq) {
 
 
         script:
-        trimmedReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "RNA_trimmed_2.fastq.gz"
+        trimmedReads_2 = (single_end_RNA) ? val("NO_FILE") : TumorReplicateId + "_RNA_trimmed_2.fastq.gz"
 
         if(params.adapterSeqFileRNAseq != false) {
             val adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
