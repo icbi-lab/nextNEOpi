@@ -4107,6 +4107,8 @@ process 'pVACseq' {
 
     script:
     hla_type = (hla_types - ~/\n/)
+    NetChop = params.NetChop ? "--net-chop-method cterm" : ""
+    NetMHCstab = params.NetMHCstab ? "--netmhc-stab" : ""
     """
     pvacseq run \\
 		--iedb-install-directory /opt/iedb \\
@@ -4114,6 +4116,8 @@ process 'pVACseq' {
 		-p ${vep_phased_vcf_gz} \\
 		-e ${params.epitope_len} \\
         --normal-sample-name ${NormalReplicateId} \\
+        ${NetChop} \\
+        ${NetMHCstab} \\
 		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
     """
 }
