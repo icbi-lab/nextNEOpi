@@ -3562,16 +3562,8 @@ process 'mkPhasedVCF' {
     ) into (
         mkPhasedVCF_out_ch0, mkPhasedVCF_out_pVACseqch0
     )
-    // set(
-    //     TumorReplicateId,
-    //     NormalReplicateId,
-    //     file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_reference.fa"),
-    //     file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_protein_mutated.fa"),
-    //     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa"),
-    //     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
-    // ) into (
-    //     mkPhasedVCFproteinSeq_out_ch0
-    // )
+    file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
+    file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
 
     script:
     """
@@ -3617,7 +3609,7 @@ process 'mkPhasedVCF' {
         --symbol --terms SO --transcript_version --tsl \\
         --vcf
 
-    $PERL $VEP -i ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
+    $PERL $VEP -i ${tumorVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_summary.html \\
@@ -4005,7 +3997,7 @@ process gene_annotator {
     input:
     set(
         TumorReplicateId,
-        _,
+        NormalReplicateId,
         _,
         _,
         vep_somatic_vcf_gz,
@@ -4018,6 +4010,7 @@ process gene_annotator {
 	output:
 	set(
 		TumorReplicateId,
+        NormalReplicateId,
 		file("*_vep_somatic_gx.vcf.gz"),
 		file("*_vep_somatic_gx.vcf.gz.tbi")
 	) into vcf_vep_ex_gz
@@ -4037,27 +4030,6 @@ process gene_annotator {
     tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
     """
 }
-
-/*
-gzip and tabix the output files (required by pVACseq)
-*/
-
-// process bgzip {
-
-// 	input:
-// 	file(anno_vcf) from vcf_vep_gx_ch1
-
-// 	output:
-// 	file("*gx.vcf.gz") into vcf_vep_ex_gz
-// 	file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
-
-// 	script:
-// 	"""
-// 	bgzip -f ${anno_vcf}
-// 	tabix -p vcf "${anno_vcf}.gz"
-// 	"""
-
-// }
 
 /*
 Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
@@ -4104,11 +4076,12 @@ process 'pVACseq' {
     input:
     set(
         TumorReplicateId,
-        _,
+        NormalReplicateId,
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
         _,
 		_,
+        _,
 		anno_vcf,
 		anno_vcf_tbi,
 		hla_types
@@ -4140,6 +4113,7 @@ process 'pVACseq' {
 		-t ${task.cpus} \\
 		-p ${vep_phased_vcf_gz} \\
 		-e ${params.epitope_len} \\
+        --normal-sample-name ${NormalReplicateId} \\
 		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
     """
 }
