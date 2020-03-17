@@ -3755,15 +3755,15 @@ process 'pre_map_hla' {
     ) from reads_tumor_hla_ch
     val yaraIdx from Channel.value(reference.YaraIndex)
 
-	output:
-	set (
-		TumorReplicateId,
-		file("mapped_{1,2}.bam")
-	) into fished_reads
-	// file("mapped_{1,2}.bam") into fished_reads
-	// val("$TumorReplicateId") into tag_id
-	
-	script:
+    output:
+    set (
+        TumorReplicateId,
+        file("mapped_{1,2}.bam")
+    ) into fished_reads
+    // file("mapped_{1,2}.bam") into fished_reads
+    // val("$TumorReplicateId") into tag_id
+    
+    script:
     if(single_end) {
         yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
         samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
@@ -3804,21 +3804,21 @@ process 'OptiType' {
     publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
         mode: params.publishDirMode
 
-	input:
-	set (
-		TumorReplicateId,
-		file(reads)
-	) from fished_reads.collect()
-	// val(TumorReplicateId) from tag_id
-	// file reads from fished_reads.collect()
+    input:
+    set (
+        TumorReplicateId,
+        file(reads)
+    ) from fished_reads.collect()
+    // val(TumorReplicateId) from tag_id
+    // file reads from fished_reads.collect()
 
-	output:
-	set (
-		TumorReplicateId,
-		file("**/*_result.tsv")
-	) into optitype_output
-	file("**")
-	// file("**/*_result.tsv") into optitype_output
+    output:
+    set (
+        TumorReplicateId,
+        file("**/*_result.tsv")
+    ) into optitype_output
+    file("**")
+    // file("**/*_result.tsv") into optitype_output
 
     script:
     """
@@ -3853,13 +3853,13 @@ process 'run_hla_hd' {
     file gSplit from Channel.value(reference.HLAHDGeneSplit)
     val dict from Channel.value(reference.HLAHDDict)
 
-	output:
-	set (
-		TumorReplicateId,
-		file("**/*_final.result.txt")
-	) into hlahd_output
-	// file("**")
-	// file("**/*_final.result.txt") into hlahd_output
+    output:
+    set (
+        TumorReplicateId,
+        file("**/*_final.result.txt")
+    ) into hlahd_output
+    // file("**")
+    // file("**/*_final.result.txt") into hlahd_output
 
     script:
     hlahd_p = Channel.value(params.HLAHD_PATH).getVal()
@@ -3916,12 +3916,16 @@ process Neofuse {
     file AnnoFile from file(reference.AnnoFile)
 
     output:
-	set (
-		TumorReplicateId,
-		file("**/*.tpm.txt")
-	) into tpm_file
-    // file("**/*.tpm.txt") into tpm_file
+    set (
+        TumorReplicateId,
+        file("**/*.tpm.txt") // TODO: consider changing wildcards to expected dirnames and filenames
+    ) into tpm_file
+    set (
+        TumorReplicateId,
+        file("./STAR/*Aligned.sortedByCoord.out.bam")
+    ) into star_bam_file
     path("${TumorReplicateId}")
+
 
     script:
     if(single_end_RNA)
@@ -3963,21 +3967,21 @@ Add the gene ID (required by vcf-expression-annotator) to the TPM file
 */
 process add_geneID {
     
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
     input:
-	set (
-		TumorReplicateId,
-		tpm
-	) from tpm_file
+    set (
+        TumorReplicateId,
+        tpm
+    ) from tpm_file
     // file tpm from tpm_file
     file AnnoFile from file(reference.AnnoFile)
 
     output:
-	set (
-		TumorReplicateId,
-		file("*.tpm_final.txt")
-	) into final_file
+    set (
+        TumorReplicateId,
+        file("*.tpm_final.txt")
+    ) into final_file
     // file("*.tpm_final.txt") into final_file
 
     script:
@@ -4002,20 +4006,22 @@ process gene_annotator {
         _,
         vep_somatic_vcf_gz,
         vep_somatic_vcf_gz_tbi,
-		final_tpm
+        final_tpm,
+        RNA_bam
     ) from mkPhasedVCF_out_ch0
-		.combine(final_file, by: 0)
+        .combine(final_file, by: 0)
+        .combine(star_bam_file, by: 0)
     // file final_tpm from final_file
 
-	output:
-	set(
-		TumorReplicateId,
+    output:
+    set(
+        TumorReplicateId,
         NormalReplicateId,
-		file("*_vep_somatic_gx.vcf.gz"),
-		file("*_vep_somatic_gx.vcf.gz.tbi")
-	) into vcf_vep_ex_gz
-	// file("*gx.vcf.gz") into vcf_vep_ex_gz
-	// file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
+        file("*_vep_somatic_gx.vcf.gz"),
+        file("*_vep_somatic_gx.vcf.gz.tbi")
+    ) into vcf_vep_ex_gz
+    // file("*gx.vcf.gz") into vcf_vep_ex_gz
+    // file("*gx.vcf.gz.tbi") into vcf_vep_ex_gz_tbi
 
     script:
     """
@@ -4024,10 +4030,22 @@ process gene_annotator {
         -e TPM \\
         -s ${TumorReplicateId} \\
         ${vep_somatic_vcf_gz} ${final_tpm} \\
-		custom gene \\
+        custom gene \\
+        -o ./${TumorReplicateId}_vep_somatic_gx_tmp.vcf
+    bgzip -f ${TumorReplicateId}_vep_somatic_gx_tmp.vcf
+    tabix -p vcf ${TumorReplicateId}_vep_somatic_gx_tmp.vcf.gz
+
+    vcf-readcount-annotator \\
+        -s ${TumorReplicateId} \\
+        -t all \\
         -o ./${TumorReplicateId}_vep_somatic_gx.vcf
+        ${TumorReplicateId}_vep_somatic_gx_tmp.vcf.gz \\
+        ${RNA_bam} \\
+        RNA
+        
     bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
     tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
+
     """
 }
 
@@ -4037,30 +4055,30 @@ To be used as input for pVACseq
 */
 
 process get_vhla {
-	tag "$TumorReplicateId"
+    tag "$TumorReplicateId"
 
-	input:
-	set (
-		TumorReplicateId,
-		opti_out,
-		hlahd_out
-	) from optitype_output
-		.combine(hlahd_output, by: 0)
-	// file(opti_out) from optitype_output
-	// file(hlahd_out) from hlahd_output
-	
-	output:
-	set (
-		TumorReplicateId,
-		file("${TumorReplicateId}_hlas.txt")
-	) into hlas
-	// file("${TumorReplicateId}_hlas.txt")
-	// stdout hlas
+    input:
+    set (
+        TumorReplicateId,
+        opti_out,
+        hlahd_out
+    ) from optitype_output
+        .combine(hlahd_output, by: 0)
+    // file(opti_out) from optitype_output
+    // file(hlahd_out) from hlahd_output
+    
+    output:
+    set (
+        TumorReplicateId,
+        file("${TumorReplicateId}_hlas.txt")
+    ) into hlas
+    // file("${TumorReplicateId}_hlas.txt")
+    // stdout hlas
 
-	script:
-	"""
-	HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs} > ./${TumorReplicateId}_hlas.txt
-	"""
+    script:
+    """
+    HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs} > ./${TumorReplicateId}_hlas.txt
+    """
 }
 
 /*
@@ -4069,7 +4087,7 @@ Run pVACseq
 
 process 'pVACseq' {
     tag "$TumorReplicateId"
-	cache false
+    cache false
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
         mode: params.publishDirMode
 
@@ -4080,30 +4098,30 @@ process 'pVACseq' {
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
         _,
-		_,
         _,
-		anno_vcf,
-		anno_vcf_tbi,
-		hla_types
+        _,
+        anno_vcf,
+        anno_vcf_tbi,
+        hla_types
     ) from mkPhasedVCF_out_pVACseqch0
-		.combine(vcf_vep_ex_gz, by: 0)
-		.combine(hlas.splitText(), by: 0)
+        .combine(vcf_vep_ex_gz, by: 0)
+        .combine(hlas.splitText(), by: 0)
 
     output:
     // file("**/MHC_Class_I/*.filtered.condensed.ranked.tsv") into mhcI_out_fc optional true
     // file("**/MHC_Class_II/*.filtered.condensed.ranked.tsv") into mhcII_out_fc optional true
     // val("${TumorReplicateId}") into (con_mhcI_id, con_mhcII_id)
-	// file("**/MHC_Class_I/*.filtered.tsv") into mhcI_out_f optional true
+    // file("**/MHC_Class_I/*.filtered.tsv") into mhcI_out_f optional true
     set(
-		TumorReplicateId,
-	    file("**/MHC_Class_I/*.filtered.tsv")
+        TumorReplicateId,
+        file("**/MHC_Class_I/*.filtered.tsv")
     ) optional true into mhcI_out_f
     set(
         TumorReplicateId,
         file("**/MHC_Class_II/*.filtered.tsv") 
     ) optional true into mhcII_out_f
-	// file("**/MHC_Class_I/*.filtered.tsv")  into mhcI_out_f optional true
-	// file("**/MHC_Class_II/*.filtered.tsv")  into mhcII_out_f optional true
+    // file("**/MHC_Class_I/*.filtered.tsv")  into mhcI_out_f optional true
+    // file("**/MHC_Class_II/*.filtered.tsv")  into mhcII_out_f optional true
 
     script:
     hla_type = (hla_types - ~/\n/)
@@ -4111,14 +4129,14 @@ process 'pVACseq' {
     NetMHCstab = params.NetMHCstab ? "--netmhc-stab" : ""
     """
     pvacseq run \\
-		--iedb-install-directory /opt/iedb \\
-		-t ${task.cpus} \\
-		-p ${vep_phased_vcf_gz} \\
-		-e ${params.epitope_len} \\
+        --iedb-install-directory /opt/iedb \\
+        -t ${task.cpus} \\
+        -p ${vep_phased_vcf_gz} \\
+        -e ${params.epitope_len} \\
         --normal-sample-name ${NormalReplicateId} \\
         ${NetChop} \\
         ${NetMHCstab} \\
-		${anno_vcf} ${TumorReplicateId}_${hla_type} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
+        ${anno_vcf} ${TumorReplicateId} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
     """
 }
 
@@ -4181,15 +4199,15 @@ process concat_mhcI_files {
     ) from mhcI_out_f.groupTuple(by: 0)
 
     output:
-	set(
+    set(
         TumorReplicateId,
         file("*_MHCI_filtered.tsv")
     ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
 
     script:
     """
-	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
-	cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
+    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
+    cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
     """
 }
 
@@ -4206,15 +4224,15 @@ process concat_mhcII_files {
     ) from mhcII_out_f.groupTuple(by: 0)
 
     output:
-	set(
+    set(
         TumorReplicateId,
         file("*_MHCII_filtered.tsv")
     ) into MHCII_final_ranked
 
     script:
     """
-	printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
-	cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
+    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
+    cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
     """
 }
 
@@ -4225,12 +4243,12 @@ process ranked_reports {
         mode: params.publishDirMode
 
     input:
-	set (
-		TumorReplicateId,
-		pvacseq_mhcI_file,
-		pvacseq_mhcII_file
-	) from MHCI_final_ranked
-		.combine(MHCII_final_ranked, by: 0)
+    set (
+        TumorReplicateId,
+        pvacseq_mhcI_file,
+        pvacseq_mhcII_file
+    ) from MHCI_final_ranked
+        .combine(MHCII_final_ranked, by: 0)
     
 
     output:
