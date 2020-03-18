@@ -4323,6 +4323,8 @@ process multiQC {
         file("*"),
         file("*"),
         file("*"),
+        file("*"),
+        file("*")
     )   from ch_fastqc
             .combine(ch_fastp_tumor, by: [0,1])
             .combine(ch_fastp_normal, by: [0,1])
