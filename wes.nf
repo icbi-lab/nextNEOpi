@@ -3915,6 +3915,7 @@ process Neofuse {
     set (
         TumorReplicateId,
         file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam")
+        file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam.bai")
     ) into star_bam_file
     path("${TumorReplicateId}")
 
@@ -3999,12 +4000,14 @@ process gene_annotator {
         vep_somatic_vcf_gz,
         vep_somatic_vcf_gz_tbi,
         final_tpm,
-        RNA_bam
+        RNA_bam,
+        RNA_bai,
     ) from mkPhasedVCF_out_ch0
         .combine(final_file, by: 0)
         .combine(star_bam_file, by: 0)
     
     file(RefFasta) from file(reference.RefFASTA)
+    file(RefIdx) from file(reference.RefIdx)
 
     output:
     set(
