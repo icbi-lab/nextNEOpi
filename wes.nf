@@ -4011,7 +4011,8 @@ process gene_annotator {
     ) from mkPhasedVCF_out_ch0
         .combine(final_file, by: 0)
         .combine(star_bam_file, by: 0)
-    // file final_tpm from final_file
+    
+    file(RefFasta) from file(reference.RefFASTA)
 
     output:
     set(
@@ -4035,14 +4036,33 @@ process gene_annotator {
     bgzip -f ${TumorReplicateId}_vep_somatic_gx_tmp.vcf
     tabix -p vcf ${TumorReplicateId}_vep_somatic_gx_tmp.vcf.gz
 
+    vt decompose \\
+        -s ${TumorReplicateId}_vep_somatic_gx_tmp.vcf.gz \\
+        -o ${TumorReplicateId}_vep_somatic_gx_dec_tmp.vcf.gz
+
+    bam_readcount_helper.py \\
+        ${TumorReplicateId}_vep_somatic_gx_dec_tmp.vcf.gz \\
+        ${TumorReplicateId} \\
+        ${RefFasta} \\
+        ${RNA_bam} \\
+        ./
+
     vcf-readcount-annotator \\
         -s ${TumorReplicateId} \\
-        -t all \\
-        -o ./${TumorReplicateId}_vep_somatic_gx.vcf
-        ${TumorReplicateId}_vep_somatic_gx_tmp.vcf.gz \\
-        ${RNA_bam} \\
+        -t snv \\
+        -o ./${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf
+        ${TumorReplicateId}_vep_somatic_gx_dec_tmp.vcf.gz \\
+        ${TumorReplicateId}_bam_readcount_snv.tsv \\
         RNA
-        
+
+    vcf-readcount-annotator \\
+        -s ${TumorReplicateId} \\
+        -t indel \\
+        -o ./${TumorReplicateId}_vep_somatic_gx.vcf
+        ./${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
+        ${TumorReplicateId}_bam_readcount_indel.tsv \\
+        RNA
+
     bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
     tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
 
