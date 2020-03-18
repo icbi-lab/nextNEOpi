@@ -3914,7 +3914,7 @@ process Neofuse {
     ) into tpm_file
     set (
         TumorReplicateId,
-        file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam")
+        file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam"),
         file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam.bai")
     ) into star_bam_file
     path("${TumorReplicateId}")
