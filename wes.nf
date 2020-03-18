@@ -4045,7 +4045,7 @@ process gene_annotator {
     vcf-readcount-annotator \\
         -s ${TumorReplicateId} \\
         -t snv \\
-        -o ./${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf
+        -o ${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
         ${TumorReplicateId}_vep_somatic_gx_dec_tmp.vcf.gz \\
         ${TumorReplicateId}_bam_readcount_snv.tsv \\
         RNA
@@ -4053,8 +4053,8 @@ process gene_annotator {
     vcf-readcount-annotator \\
         -s ${TumorReplicateId} \\
         -t indel \\
-        -o ./${TumorReplicateId}_vep_somatic_gx.vcf
-        ./${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
+        -o ${TumorReplicateId}_vep_somatic_gx.vcf \\
+        ${TumorReplicateId}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
         ${TumorReplicateId}_bam_readcount_indel.tsv \\
         RNA
 
