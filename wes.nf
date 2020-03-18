@@ -4144,8 +4144,8 @@ process 'pVACseq' {
 
     script:
     hla_type = (hla_types - ~/\n/)
-    NetChop = params.NetChop ? "--net-chop-method cterm" : ""
-    NetMHCstab = params.NetMHCstab ? "--netmhc-stab" : ""
+    NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
+    NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
     """
     pvacseq run \\
         --iedb-install-directory /opt/iedb \\
