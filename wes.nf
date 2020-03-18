@@ -972,7 +972,7 @@ if (params.trim_adapters_RNAseq) {
                 ${params.fastpOpts}
             """
     }
-fa
+    
     // FastQC after RNAseq adapter trimming
     process FastQC_trimmed_RNAseq {
         tag "$TumorReplicateId"
