@@ -707,6 +707,7 @@ if (params.trim_adapters) {
             $FASTP --thread ${task.cpus} \\
                 --in1 ${tumor_readsFWD} \\
                 --out1 ${TumorReplicateId}_trimmed_R1.fastq.gz \\
+                --json ${TumorReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
@@ -717,6 +718,7 @@ if (params.trim_adapters) {
                 --in2 ${tumor_readsREV} \\
                 --out1 ${TumorReplicateId}_trimmed_R1.fastq.gz \\
                 --out2 ${TumorReplicateId}_trimmed_R2.fastq.gz \\
+                --json ${TumorReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
@@ -780,6 +782,7 @@ if (params.trim_adapters) {
             $FASTP --thread ${task.cpus} \\
                 --in1 ${normal_readsFWD} \\
                 --out1 ${NormalReplicateId}_trimmed_R1.fastq.gz \\
+                --json ${NormalReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
@@ -790,6 +793,7 @@ if (params.trim_adapters) {
                 --in2 ${normal_readsREV} \\
                 --out1 ${NormalReplicateId}_trimmed_R1.fastq.gz \\
                 --out2 ${NormalReplicateId}_trimmed_R2.fastq.gz \\
+                --json ${NormalReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
@@ -959,6 +963,7 @@ if (params.trim_adapters_RNAseq) {
             $FASTP --thread ${task.cpus} \\
                 --in1 ${readsRNAseq_FWD} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
+                --json ${TumorReplicateId}_RNA_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
@@ -969,6 +974,7 @@ if (params.trim_adapters_RNAseq) {
                 --in2 ${readsRNAseq_REV} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
                 --out2 ${TumorReplicateId}_RNA_trimmed_R2.fastq.gz \\
+                --json ${TumorReplicateId}_RNA_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
             """
