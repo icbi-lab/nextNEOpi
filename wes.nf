@@ -957,7 +957,7 @@ if (params.trim_adapters_RNAseq) {
         if(single_end)
             """
             $FASTP --thread ${task.cpus} \\
-                --in1 ${tumor_readsFWD} \\
+                --in1 ${readsRNAseq_FWD} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
@@ -965,8 +965,8 @@ if (params.trim_adapters_RNAseq) {
         else
             """
             $FASTP --thread ${task.cpus} \\
-                --in1 ${tumor_readsFWD} \\
-                --in2 ${tumor_readsREV} \\
+                --in1 ${readsRNAseq_FWD} \\
+                --in2 ${readsRNAseq_REV} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
                 --out2 ${TumorReplicateId}_RNA_trimmed_R2.fastq.gz \\
                 ${fastpAdapter} \\
