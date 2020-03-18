@@ -246,7 +246,6 @@ scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
 FASTQC        = file(params.FASTQC)
-FLEXBAR       = file(params.FLEXBAR)
 BWA           = file(params.BWA)
 VARSCAN       = file(params.VARSCAN)
 GATK4         = file(params.GATK4)
@@ -649,70 +648,6 @@ process FastQC {
 
 // adapter trimming Tumor
 if (params.trim_adapters) {
-    // process flexbar_tumor {
-
-    //     tag "$TumorReplicateId"
-
-    //     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-    //         mode: params.publishDirMode
-
-    //     input:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file(tumor_readsFWD),
-    //         file(tumor_readsREV),
-    //         sampleGroup,      // unused so far
-    //     ) from raw_reads_tumor_ch
-
-    //     output:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("${TumorReplicateId}_trimmed_1.fastq.gz"),
-    //         file("${trimmedReads_2}"),
-    //         sampleGroup
-    //     ) into (
-    //         reads_tumor_ch,
-    //         fastqc_reads_tumor_trimmed_ch
-    //     )
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("*.log")
-    //     ) into ch_flexbar_tumor // multiQC
-
-
-    //     script:
-    //     trimmedReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "_trimmed_2.fastq.gz"
-
-    //     if(params.adapterSeqFile != false) {
-    //         val adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
-    //         flexbarAdapter = "-a $adapterSeqFile"
-    //     } else {
-    //         adapterSeq = Channel.value(params.adapterSeq)
-    //         flexbarAdapter = "-as " + adapterSeq.getVal()
-    //     }
-
-    //     if(single_end)
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${tumor_readsFWD} \\
-    //             ${flexbarAdapter} \\
-    //             -z GZ \\
-    //             --target ${TumorReplicateId}_trimmed
-    //         """
-    //     else
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${tumor_readsFWD} -p ${tumor_readsREV} \\
-    //             ${flexbarAdapter} -ap ON \\
-    //             -z GZ \\
-    //             --target ${TumorReplicateId}_trimmed
-    //         """
-
-    // }
-
     process fastp_tumor {
 
         tag "$TumorReplicateId"
@@ -785,70 +720,6 @@ if (params.trim_adapters) {
                 ${params.fastpOpts}
             """
     }
-
-    // adapter trimming Normal
-    // process flexbar_normal {
-
-    //     tag "$NormalReplicateId"
-
-    //     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-    //         mode: params.publishDirMode
-
-    //     input:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file(normal_readsFWD),
-    //         file(normal_readsREV),
-    //         sampleGroup,      // unused so far
-    //     ) from raw_reads_normal_ch
-
-    //     output:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("${NormalReplicateId}_trimmed_1.fastq.gz"),
-    //         file("${trimmedReads_2}"),
-    //         sampleGroup
-    //     ) into (
-    //         reads_normal_ch,
-    //         fastqc_reads_normal_trimmed_ch
-    //     )
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("*.log")
-    //     ) into ch_flexbar_normal // multiQC
-
-    //     script:
-    //     trimmedReads_2 = (single_end) ? val("NO_FILE") : NormalReplicateId + "_trimmed_2.fastq.gz"
-
-    //     if(params.adapterSeqFile != false) {
-    //         adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
-    //         flexbarAdapter = "-a $adapterSeqFile"
-    //     } else {
-    //         adapterSeq = Channel.value(params.adapterSeq)
-    //         flexbarAdapter = "-as " + adapterSeq.getVal()
-    //     }
-
-    //     if(single_end)
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${normal_readsFWD} \\
-    //             ${flexbarAdapter} \\
-    //             -z GZ \\
-    //             --target ${NormalReplicateId}_trimmed
-    //         """
-    //     else
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${normal_readsFWD} -p ${normal_readsREV} \\
-    //             ${flexbarAdapter} -ap ON \\
-    //             -z GZ \\
-    //             --target ${NormalReplicateId}_trimmed
-    //         """
-
-    // }
 
     process fastp_normal {
 
@@ -1032,67 +903,6 @@ if (params.trim_adapters) {
 
 // adapter trimming RNAseq
 if (params.trim_adapters_RNAseq) {
-    // process flexbar_RNAseq {
-
-    //     tag "$TumorReplicateId"
-
-    //     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-    //         mode: params.publishDirMode
-
-    //     input:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file(readsRNAseq_FWD),
-    //         file(readsRNAseq_REV),
-    //     ) from raw_reads_tumor_neofuse_ch
-
-    //     output:
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("${TumorReplicateId}_RNA_trimmed_1.fastq.gz"),
-    //         file("${trimmedReads_2}")
-    //     ) into (
-    //         reads_tumor_neofuse_ch,
-    //         fastqc_readsRNAseq_trimmed_ch
-    //     )
-    //     set(
-    //         TumorReplicateId,
-    //         NormalReplicateId,
-    //         file("*.log")
-    //     ) into ch_flexbar_RNAseq // multiQC
-
-    //     script:
-    //     trimmedReads_2 = (single_end_RNA) ? val("NO_FILE") : TumorReplicateId + "_RNA_trimmed_2.fastq.gz"
-
-    //     if(params.adapterSeqFileRNAseq != false) {
-    //         val adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
-    //         flexbarAdapter = "-a $adapterSeqFile"
-    //     } else {
-    //         adapterSeq = Channel.value(params.adapterSeqRNAseq)
-    //         flexbarAdapter = "-as " + adapterSeq.getVal()
-    //     }
-
-    //     if(single_end_RNA)
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${readsRNAseq_FWD} \\
-    //             ${flexbarAdapter} \\
-    //             -z GZ \\
-    //             --target ${TumorReplicateId}_RNA_trimmed
-    //         """
-    //     else
-    //         """
-    //         $FLEXBAR --threads ${task.cpus} \\
-    //             -r ${readsRNAseq_FWD} -p ${readsRNAseq_REV} \\
-    //             ${flexbarAdapter} -ap ON \\
-    //             -z GZ \\
-    //             --target ${TumorReplicateId}_RNA_trimmed
-    //         """
-    // }
-
-/////////////////////
     process fastp_RNAseq {
         tag "$TumorReplicateId"
 
@@ -1162,9 +972,7 @@ if (params.trim_adapters_RNAseq) {
                 ${params.fastpOpts}
             """
     }
-
-//////////////////////
-
+fa
     // FastQC after RNAseq adapter trimming
     process FastQC_trimmed_RNAseq {
         tag "$TumorReplicateId"
@@ -1234,7 +1042,7 @@ if (params.trim_adapters_RNAseq) {
             ""
         ) into (
             fastqc_readsRNAseq_trimmed_ch,
-            ch_flexbar_RNAseq,
+            ch_fastp_RNAseq,
             ch_fastqc_trimmed_RNAseq
         ) 
 
