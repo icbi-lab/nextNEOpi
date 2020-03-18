@@ -246,6 +246,7 @@ scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
 FASTQC        = file(params.FASTQC)
+FASTP        = file(params.FASTP)
 BWA           = file(params.BWA)
 VARSCAN       = file(params.VARSCAN)
 GATK4         = file(params.GATK4)
@@ -972,7 +973,7 @@ if (params.trim_adapters_RNAseq) {
                 ${params.fastpOpts}
             """
     }
-    
+
     // FastQC after RNAseq adapter trimming
     process FastQC_trimmed_RNAseq {
         tag "$TumorReplicateId"
