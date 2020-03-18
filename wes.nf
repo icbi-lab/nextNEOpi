@@ -4082,7 +4082,11 @@ process get_vhla {
 
     script:
     """
-    HLA_parser.py --opti_out ${opti_out} --hlahd_out ${hlahd_out} --ref_hlas ${params.valid_HLAs} > ./${TumorReplicateId}_hlas.txt
+    HLA_parser.py \\
+        --opti_out ${opti_out} \\
+        --hlahd_out ${hlahd_out} \\
+        --ref_hlas ${params.valid_HLAs} \\
+        > ./${TumorReplicateId}_hlas.txt
     """
 }
 
