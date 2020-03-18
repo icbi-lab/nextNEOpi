@@ -4007,7 +4007,7 @@ process gene_annotator {
         .combine(star_bam_file, by: 0)
     
     file(RefFasta) from file(reference.RefFASTA)
-    file(RefIdx) from file(reference.RefIdx)
+    file(RefIdx) from file(reference.RefIDX)
 
     output:
     set(
@@ -4387,7 +4387,7 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 14) exit 1, """
+    if (params.references.size() != 15) exit 1, """
     ERROR: Not all References needed found in configuration
     Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
     """
@@ -4406,6 +4406,7 @@ def defineReference() {
         'STARidx'       	: checkParamReturnFileReferences("STARidx"),
         'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
         'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA")
+        'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
 
     ]
 }
