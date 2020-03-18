@@ -4405,7 +4405,7 @@ def defineReference() {
         'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
         'STARidx'       	: checkParamReturnFileReferences("STARidx"),
         'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
-        'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA")
+        'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
         'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
 
     ]
