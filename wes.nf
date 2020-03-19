@@ -4118,11 +4118,13 @@ process 'pVACseq' {
     output:
     set(
         TumorReplicateId,
-        file("**/MHC_Class_I/*.filtered.tsv")
+        file("**/MHC_Class_I/*.filtered.tsv"),
+        file("**/MHC_Class_I/*.all_epitopes.tsv")
     ) optional true into mhcI_out_f
     set(
         TumorReplicateId,
-        file("**/MHC_Class_II/*.filtered.tsv") 
+        file("**/MHC_Class_II/*.filtered.tsv"),
+        file("**/MHC_Class_II/*.all_epitopes.tsv")
     ) optional true into mhcII_out_f
 
     script:
@@ -4151,7 +4153,8 @@ process concat_mhcI_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv'
+        '*filtered.tsv',
+        '*.all_epitopes.tsv'
     ) from mhcI_out_f.groupTuple(by: 0)
 
     output:
@@ -4159,10 +4162,12 @@ process concat_mhcI_files {
         TumorReplicateId,
         file("*_MHCI_filtered.tsv")
     ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
+    file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
 
     script:
     """
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCI_all_epitopes.tsv
     """
 }
 
@@ -4175,7 +4180,8 @@ process concat_mhcII_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv'
+        '*filtered.tsv',
+        '*.all_epitopes.tsv'
     ) from mhcII_out_f.groupTuple(by: 0)
 
     output:
@@ -4183,10 +4189,12 @@ process concat_mhcII_files {
         TumorReplicateId,
         file("*_MHCII_filtered.tsv")
     ) into MHCII_final_ranked
+    file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
 
     script:
     """
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes.tsv
     """
 }
 
