@@ -4142,52 +4142,6 @@ process 'pVACseq' {
     """
 }
 
-// headerFields = ['Chromosome',
-//                 'Start',
-//                 'Stop',
-//                 'Reference',
-//                 'Variant',
-//                 'Transcript',
-//                 'Transcript Support Level',
-//                 'Ensembl Gene ID',
-//                 'Variant Type',
-//                 'Mutation',
-//                 'Protein Position',
-//                 'Gene Name',
-//                 'HGVSc',
-//                 'HGVSp',
-//                 'HLA Allele',
-//                 'Peptide Length',
-//                 'Sub-peptide Position',
-//                 'Mutation Position',
-//                 'MT Epitope Seq',
-//                 'WT Epitope Seq',
-//                 'Best MT Score Method',
-//                 'Best MT Score',
-//                 'Corresponding WT Score',
-//                 'Corresponding Fold Change',
-//                 'Tumor DNA Depth',
-//                 'Tumor DNA VAF',
-//                 'Tumor RNA Depth',
-//                 'Tumor RNA VAF',
-//                 'Normal Depth',
-//                 'Normal VAF',
-//                 'Gene Expression',
-//                 'Transcript Expression',
-//                 'Median MT Score',
-//                 'Median WT Score',
-//                 'Median Fold Change',
-//                 'NetMHCpan WT Score',
-//                 'NetMHCpan MT Score',
-//                 'cterm_7mer_gravy_score',
-//                 'max_7mer_gravy_score',
-//                 'difficult_n_terminal_residue',
-//                 'c_terminal_cysteine',
-//                 'c_terminal_proline',
-//                 'cysteine_count',
-//                 'n_terminal_asparagine',
-//                 'asparagine_proline_bond_count']
-
 process concat_mhcI_files {
     tag "$TumorReplicateId"
 
@@ -4212,11 +4166,6 @@ process concat_mhcI_files {
     """
 }
 
-//
-//    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCI_filtered.tsv
-//    cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCI_filtered.tsv
-
-
 process concat_mhcII_files {
     tag "$TumorReplicateId"
 
@@ -4240,10 +4189,6 @@ process concat_mhcII_files {
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
     """
 }
-
-//    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_MHCII_filtered.tsv
-//    cat *filtered.tsv | sed -e '/^Chromosome/d' >> ${TumorReplicateId}_MHCII_filtered.tsv
-
 
 process ranked_reports {
     tag "$TumorReplicateId"
