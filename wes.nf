@@ -4208,7 +4208,7 @@ process concat_mhcI_files {
 
     script:
     """
-    sed -e '3,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered.tsv
     """
 }
 
@@ -4237,7 +4237,7 @@ process concat_mhcII_files {
 
     script:
     """
-    sed -e '3,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
     """
 }
 
