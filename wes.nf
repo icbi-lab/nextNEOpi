@@ -4189,7 +4189,7 @@ process concat_mhcII_files {
         TumorReplicateId,
         file("*_MHCII_filtered.tsv")
     ) into MHCII_final_ranked
-    file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
+    file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
 
     script:
     """
