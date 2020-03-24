@@ -4238,6 +4238,37 @@ process ranked_reports {
     """
 }
 
+// mixMHC2pred
+// boilerplate code to be finished (Didi)
+/*
+process mixMHC2pred {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        file(mutatedProtein),
+        alleles // to be implemented
+    ) from mkPhasedVCF_out_mixMHCpred_ch0
+        .combine(hlas_ch2.splitText(), by: 0) // to be created
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_mixMHC2pred.tsv"),
+    )
+
+    script:
+    """
+    pepChopper.py -i ${mutatedProtein} -o chopped_peps.txt
+    MixMHC2pred -i chopped_peps.txt -o ${TumorReplicateId}_mixMHC2pred.tsv -a ${alleles}
+    """
+}
+*/
+
 // process immunogenicity_scoring {
 //     tag "$TumorReplicateId"
 
