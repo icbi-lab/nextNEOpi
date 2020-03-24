@@ -1895,6 +1895,12 @@ process 'Mutect2' {
 
 
     script:
+    if(params.mutect2ponFile != false) {
+        val mutect2ponFile = Channel.fromPath(params.mutect2ponFile)
+        panel_of_normals = "--panel-of-normals ${mutect2ponFile}"
+    } else {
+        panel_of_normals = ""
+    }
     """
     mkdir -p ${params.tmpDir}
 
@@ -1904,6 +1910,7 @@ process 'Mutect2' {
         -I ${Tumorbam} -tumor ${TumorReplicateId} \\
         -I ${Normalbam} -normal ${NormalReplicateId} \\
         --germline-resource ${gnomADfull} \\
+        ${panel_of_normals} \\
         -L ${intervals} \\
         --native-pair-hmm-threads ${task.cpus} \\
         -O ${TumorReplicateId}_${intervals}.vcf.gz
