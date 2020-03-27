@@ -454,11 +454,6 @@ process 'IntervalListToBed' {
         file(paddedIntervalList) from preprocessIntervalList_out_ch1
 
     output:
-    file(
-        "${paddedIntervalList.baseName}.bed"
-    ) into (
-        IntervalListToBed_out_ch0
-    )
     tuple(
         file("${paddedIntervalList.baseName}.bed.gz"),
         file("${paddedIntervalList.baseName}.bed.gz.tbi")
