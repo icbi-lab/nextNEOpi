@@ -296,7 +296,7 @@ process 'RegionsBedToIntervalList' {
 
     output:
     file(
-        "${RegionsBed.baseName}.list"
+        "${RegionsBed.baseName}.interval_list"
     ) into (
         RegionsBedToIntervalList_out_ch0,
         RegionsBedToIntervalList_out_ch1,
@@ -307,7 +307,7 @@ process 'RegionsBedToIntervalList' {
     """
     $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
         I=${RegionsBed} \\
-        O=${RegionsBed.baseName}.list \\
+        O=${RegionsBed.baseName}.interval_list \\
         SD=$RefDict
     """
 }
