@@ -329,7 +329,7 @@ process 'BaitsBedToIntervalList' {
 
     output:
     file(
-        "${BaitsBed.baseName}.list"
+        "${BaitsBed.baseName}.interval_list"
     ) into (
         BaitsBedToIntervalList_out_ch0,
         BaitsBedToIntervalList_out_ch1
