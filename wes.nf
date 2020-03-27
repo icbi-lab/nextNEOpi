@@ -4483,28 +4483,49 @@ def checkParamReturnFileDatabases(item) {
 }
 
 def defineReference() {
-    if (params.references.size() != 15) exit 1, """
-    ERROR: Not all References needed found in configuration
-    Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
-    """
-    return [
-        'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
-        'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
-        'RefDict'           : checkParamReturnFileReferences("RefDict"),
-        'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-        'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-        'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
-        'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-        'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
-        'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
-        'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-        'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
-        'STARidx'       	: checkParamReturnFileReferences("STARidx"),
-        'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
-        'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
-        'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
-
-    ]
+    if(params.WES) {
+        if (params.references.size() != 15) exit 1, """
+        ERROR: Not all References needed found in configuration
+        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
+        """
+        return [
+            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
+            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
+            'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
+            'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+            'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
+            'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
+            'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
+            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
+            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
+            'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
+            'STARidx'       	: checkParamReturnFileReferences("STARidx"),
+            'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
+            'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
+            'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
+        ]
+    } else {
+        if (params.references.size() != 15) exit 1, """
+        ERROR: Not all References needed found in configuration
+        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
+        """
+        return [
+            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
+            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
+            'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
+            'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+            'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
+            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
+            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
+            'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
+            'STARidx'       	: checkParamReturnFileReferences("STARidx"),
+            'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
+            'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
+            'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
+        ]
+    }
 }
 
 def defineDatabases() {
