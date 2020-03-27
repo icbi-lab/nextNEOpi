@@ -364,7 +364,7 @@ process 'preprocessIntervalList' {
 
     output:
     file(
-        "${interval_list.baseName}_merged_padded.list"
+        "${interval_list.baseName}_merged_padded.interval_list"
     ) into (
         preprocessIntervalList_out_ch0,
         preprocessIntervalList_out_ch1,
@@ -385,7 +385,7 @@ process 'preprocessIntervalList' {
         --bin-length 0 \\
         --padding ${padding} \\
         --interval-merging-rule OVERLAPPING_ONLY \\
-        -O ${interval_list.baseName}_merged_padded.list
+        -O ${interval_list.baseName}_merged_padded.interval_list
     """
 }
 
