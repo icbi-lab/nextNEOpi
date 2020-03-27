@@ -279,69 +279,77 @@ ________________________________________________________________________________
 **       P R E P R O C E S S I N G         **
 *********************************************
 */
-process 'RegionsBedToIntervalList' {
+if (params.WES) {
+    process 'RegionsBedToIntervalList' {
 
-    tag 'RegionsBedToIntervalList'
+        tag 'RegionsBedToIntervalList'
 
-    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
+        publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
-    input:
-    set(
-        file(RefDict),
-        file(RegionsBed)
-    ) from Channel.value(
-        [ reference.RefDict,
-          reference.RegionsBed ]
-    )
+        input:
+        set(
+            file(RefDict),
+            file(RegionsBed)
+        ) from Channel.value(
+            [ reference.RefDict,
+            reference.RegionsBed ]
+        )
 
-    output:
-    file(
-        "${RegionsBed.baseName}.interval_list"
-    ) into (
-        RegionsBedToIntervalList_out_ch0,
-        RegionsBedToIntervalList_out_ch1,
-        RegionsBedToIntervalList_out_ch2
-    )
+        output:
+        file(
+            "${RegionsBed.baseName}.interval_list"
+        ) into (
+            RegionsBedToIntervalList_out_ch0,
+            RegionsBedToIntervalList_out_ch1,
+            RegionsBedToIntervalList_out_ch2
+        )
 
-    script:
-    """
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
-        I=${RegionsBed} \\
-        O=${RegionsBed.baseName}.interval_list \\
-        SD=$RefDict
-    """
-}
+        script:
+        """
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
+            I=${RegionsBed} \\
+            O=${RegionsBed.baseName}.interval_list \\
+            SD=$RefDict
+        """
+    }
 
-process 'BaitsBedToIntervalList' {
+    process 'BaitsBedToIntervalList' {
 
-    tag 'BaitsBedToIntervalList'
+        tag 'BaitsBedToIntervalList'
 
-    publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
+        publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
 
-    input:
-    set(
-        file(RefDict),
-        file(BaitsBed)
-    ) from Channel.value(
-        [ reference.RefDict,
-          reference.BaitsBed ]
-    )
+        input:
+        set(
+            file(RefDict),
+            file(BaitsBed)
+        ) from Channel.value(
+            [ reference.RefDict,
+            reference.BaitsBed ]
+        )
 
-    output:
-    file(
-        "${BaitsBed.baseName}.interval_list"
-    ) into (
-        BaitsBedToIntervalList_out_ch0,
-        BaitsBedToIntervalList_out_ch1
-    )
+        output:
+        file(
+            "${BaitsBed.baseName}.interval_list"
+        ) into (
+            BaitsBedToIntervalList_out_ch0,
+            BaitsBedToIntervalList_out_ch1
+        )
 
-    script:
-    """
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
-        I=${BaitsBed} \\
-        O=${BaitsBed.baseName}.interval_list \\
-        SD=$RefDict
-    """
+        script:
+        """
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
+            I=${BaitsBed} \\
+            O=${BaitsBed.baseName}.interval_list \\
+            SD=$RefDict
+        """
+    }
+} else {
+    RegionsBedToIntervalList_out_ch0 = Channel.empty()
+    RegionsBedToIntervalList_out_ch1 = Channel.empty()
+    RegionsBedToIntervalList_out_ch2 = Channel.empty()
+    BaitsBedToIntervalList_out_ch0 = Channel.empty()
+    BaitsBedToIntervalList_out_ch1 = Channel.empty()
 }
 
 process 'preprocessIntervalList' {
@@ -378,15 +386,24 @@ process 'preprocessIntervalList' {
     )
 
     script:
-    """
-    $GATK4 PreprocessIntervals \\
-        -R $RefFasta \\
-        -L ${interval_list} \\
-        --bin-length 0 \\
-        --padding ${padding} \\
-        --interval-merging-rule OVERLAPPING_ONLY \\
-        -O ${interval_list.baseName}_merged_padded.interval_list
-    """
+    if(params.WES)
+        """
+        $GATK4 PreprocessIntervals \\
+            -R $RefFasta \\
+            -L ${interval_list} \\
+            --bin-length 0 \\
+            --padding ${padding} \\
+            --interval-merging-rule OVERLAPPING_ONLY \\
+            -O ${interval_list.baseName}_merged_padded.interval_list
+        """
+    else
+        """
+        $GATK4 PreprocessIntervals \\
+            -R $RefFasta \\
+            --bin-length 1000 \\
+            --padding 0 \\
+            -O ${interval_list.baseName}_merged_padded.interval_list
+        """
 }
 
 process 'SplitIntervals' {
@@ -1165,59 +1182,86 @@ process 'MarkDuplicatesTumor' {
     """
 }
 
-process 'alignmentMetricsTumor' {
-// Generate HS metrics using picard
+if(params.WES) {
+    process 'alignmentMetricsTumor' {
+    // Generate HS metrics using picard
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
+            mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai),
-        _
-    ) from MarkDuplicatesTumor_out_ch0
-    
-    set(
-        file(RefFasta),
-        file(RefIdx)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx ]
-    )
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(bam),
+            file(bai),
+            _
+        ) from MarkDuplicatesTumor_out_ch0
+        
+        set(
+            file(RefFasta),
+            file(RefIdx)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx ]
+        )
 
-    file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch0
-    file(IntervalsList) from RegionsBedToIntervalList_out_ch1
+        file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch0
+        file(IntervalsList) from RegionsBedToIntervalList_out_ch1
 
 
-    output:
-    set(TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}.*.txt")
-    ) into alignmentMetricsTumor_ch // multiQC
+        output:
+        set(TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}.*.txt")
+        ) into alignmentMetricsTumor_ch // multiQC
 
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
-        TMP_DIR=${params.tmpDir} \\
-        INPUT=${bam} \\
-        OUTPUT=${TumorReplicateId}.HS.metrics.txt \\
-        R=${RefFasta} \\
-        BAIT_INTERVALS=${BaitIntervalsList} \\
-        TARGET_INTERVALS=${IntervalsList} \\
-        PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \\
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
-        TMP_DIR=${params.tmpDir} \\
-        INPUT=${bam} \\
-        OUTPUT=${TumorReplicateId}.AS.metrics.txt \\
-        R=${RefFasta} &&
-    $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${TumorReplicateId}.flagstat.txt
-    """
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
+            TMP_DIR=${params.tmpDir} \\
+            INPUT=${bam} \\
+            OUTPUT=${TumorReplicateId}.HS.metrics.txt \\
+            R=${RefFasta} \\
+            BAIT_INTERVALS=${BaitIntervalsList} \\
+            TARGET_INTERVALS=${IntervalsList} \\
+            PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \\
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
+            TMP_DIR=${params.tmpDir} \\
+            INPUT=${bam} \\
+            OUTPUT=${TumorReplicateId}.AS.metrics.txt \\
+            R=${RefFasta} &&
+        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${TumorReplicateId}.flagstat.txt
+        """
+    }
+} else {
+    // bogus channel for multiqc
+    process mk_bogus_alignmentMetricsTumor_ch {
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            _,
+            _
+        ) from MarkDuplicatesTumor_out_ch0
+
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            ""
+        ) into alignmentMetricsTumor_ch
+
+        // do nothing
+        """
+        """    
+    }    
 }
 
 process 'BwaNormal' {
@@ -1329,61 +1373,87 @@ process 'MarkDuplicatesNormal' {
     """
 }
 
-process 'alignmentMetricsNormal' {
-// Generate HS metrics using picard
+if (params.WES) {
+    process 'alignmentMetricsNormal' {
+    // Generate HS metrics using picard
 
-    tag "$NormalReplicateId"
+        tag "$NormalReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
+            mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai),
-        _
-    ) from MarkDuplicatesNormal_out_ch0
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(bam),
+            file(bai),
+            _
+        ) from MarkDuplicatesNormal_out_ch0
 
-    set(
-        file(RefFasta),
-        file(RefIdx)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx ]
-    )
+        set(
+            file(RefFasta),
+            file(RefIdx)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx ]
+        )
 
-    file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch1
-    file(IntervalsList) from RegionsBedToIntervalList_out_ch2
-
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}.*.txt")
-    ) into alignmentMetricsNormal_ch // multiQC
+        file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch1
+        file(IntervalsList) from RegionsBedToIntervalList_out_ch2
 
 
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
-        TMP_DIR=${params.tmpDir} \\
-        INPUT=${bam} \\
-        OUTPUT=${NormalReplicateId}.HS.metrics.txt \\
-        R=${RefFasta} \\
-        BAIT_INTERVALS=${BaitIntervalsList} \\
-        TARGET_INTERVALS=${IntervalsList} \\
-        PER_TARGET_COVERAGE=${NormalReplicateId}.perTarget.coverage.txt && \\
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
-        TMP_DIR=${params.tmpDir} \\
-        INPUT=${bam} \\
-        OUTPUT=${NormalReplicateId}.AS.metrics.txt \\
-        R=${RefFasta} && \\
-    $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${NormalReplicateId}.flagstat.txt
-    """
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${NormalReplicateId}.*.txt")
+        ) into alignmentMetricsNormal_ch // multiQC
+
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
+            TMP_DIR=${params.tmpDir} \\
+            INPUT=${bam} \\
+            OUTPUT=${NormalReplicateId}.HS.metrics.txt \\
+            R=${RefFasta} \\
+            BAIT_INTERVALS=${BaitIntervalsList} \\
+            TARGET_INTERVALS=${IntervalsList} \\
+            PER_TARGET_COVERAGE=${NormalReplicateId}.perTarget.coverage.txt && \\
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
+            TMP_DIR=${params.tmpDir} \\
+            INPUT=${bam} \\
+            OUTPUT=${NormalReplicateId}.AS.metrics.txt \\
+            R=${RefFasta} && \\
+        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${NormalReplicateId}.flagstat.txt
+        """
+} else {
+    // bogus channel for multiqc
+    process mk_bogus_alignmentMetricsTumor_ch {
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            _,
+            _
+        ) from MarkDuplicatesTumor_out_ch0
+
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            ""
+        ) into alignmentMetricsTumor_ch
+        
+        // do nothing
+        """
+        """    
+    }    
 }
 
 
