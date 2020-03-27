@@ -339,7 +339,7 @@ process 'BaitsBedToIntervalList' {
     """
     $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
         I=${BaitsBed} \\
-        O=${BaitsBed.baseName}.list \\
+        O=${BaitsBed.baseName}.interval_list \\
         SD=$RefDict
     """
 }
@@ -4241,6 +4241,56 @@ process ranked_reports {
 // mixMHC2pred
 // boilerplate code to be finished (Didi)
 /*
+
+process 'pVACtools_generate_protein_seq' {
+    tag "$TumorReplicateId"
+
+    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    //     mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        _,
+        _,
+        _,
+        _,
+        _,
+        anno_vcf,
+        anno_vcf_tbi
+    ) from mkPhasedVCF_out_pVACseq_ch1
+
+    output:
+    set(
+        TumorReplicateId,
+        file("**/MHC_Class_I/*.filtered.tsv"),
+        file("**/MHC_Class_I/*.all_epitopes.tsv")
+    ) optional true into mhcI_out_f
+    set(
+        TumorReplicateId,
+        file("**/MHC_Class_II/*.filtered.tsv"),
+        file("**/MHC_Class_II/*.all_epitopes.tsv")
+    ) optional true into mhcII_out_f
+
+    script:
+    hla_type = (hla_types - ~/\n/)
+    NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
+    NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
+    """
+    pvacseq run \\
+        --iedb-install-directory /opt/iedb \\
+        -t ${task.cpus} \\
+        -p ${vep_phased_vcf_gz} \\
+        -e ${params.epitope_len} \\
+        --normal-sample-name ${NormalReplicateId} \\
+        ${NetChop} \\
+        ${NetMHCstab} \\
+        ${anno_vcf} ${TumorReplicateId} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
+    """
+}
+
+
 process mixMHC2pred {
     tag "$TumorReplicateId"
 
