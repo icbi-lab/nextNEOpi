@@ -1171,6 +1171,7 @@ process 'MarkDuplicatesTumor' {
     mkdir -p ${params.tmpDir}
 
     $GATK4 MarkDuplicatesSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -O ${TumorReplicateId}_aligned_sort_mkdp.bam \\
@@ -1178,7 +1179,8 @@ process 'MarkDuplicatesTumor' {
         --create-output-bam-index true \\
         --read-validation-stringency LENIENT \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
     """
 }
 
@@ -1362,6 +1364,7 @@ process 'MarkDuplicatesNormal' {
     mkdir -p ${params.tmpDir}
 
     $GATK4 MarkDuplicatesSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\    
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -O ${NormalReplicateId}_aligned_sort_mkdp.bam \\
@@ -1369,7 +1372,8 @@ process 'MarkDuplicatesNormal' {
         --create-output-bam-index true \\
         --read-validation-stringency LENIENT \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' 2> /dev/stdout
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
     """
 }
 
