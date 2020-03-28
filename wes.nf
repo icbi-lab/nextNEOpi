@@ -1364,7 +1364,7 @@ process 'MarkDuplicatesNormal' {
     mkdir -p ${params.tmpDir}
 
     $GATK4 MarkDuplicatesSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\    
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -O ${NormalReplicateId}_aligned_sort_mkdp.bam \\
