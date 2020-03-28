@@ -1433,9 +1433,10 @@ if (params.WES) {
             R=${RefFasta} && \\
         $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${NormalReplicateId}.flagstat.txt
         """
+    }
 } else {
     // bogus channel for multiqc
-    process mk_bogus_alignmentMetricsTumor_ch {
+    process mk_bogus_alignmentMetricsNormal_ch {
         tag "$TumorReplicateId"
 
         input:
