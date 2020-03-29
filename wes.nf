@@ -1551,6 +1551,7 @@ process 'BaseRecalTumorGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     $GATK4 BaseRecalibratorSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I fixed.bam \\
         -R ${RefFasta} \\
@@ -1560,8 +1561,10 @@ process 'BaseRecalTumorGATK4' {
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold} \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' && \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
     $GATK4 ApplyBQSRSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1569,7 +1572,8 @@ process 'BaseRecalTumorGATK4' {
         -O ${TumorReplicateId}_recal4.bam \\
         --bqsr-recal-file ${TumorReplicateId}_bqsr.table \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}'
     """
 }
 
@@ -1687,6 +1691,7 @@ process 'AnalyzeCovariates' {
     mkdir -p ${params.tmpDir}
 
     $GATK4 BaseRecalibratorSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1696,7 +1701,8 @@ process 'AnalyzeCovariates' {
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold} \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' && \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
     $GATK4 AnalyzeCovariates \\
         --tmp-dir ${params.tmpDir} \\
         -before ${recalTable} \\
@@ -1845,6 +1851,7 @@ process 'BaseRecalNormalGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     $GATK4 BaseRecalibratorSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I Normal_fixed.bam \\
         -R ${RefFasta} \\
@@ -1854,8 +1861,10 @@ process 'BaseRecalNormalGATK4' {
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold} \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'&& \\
-        $GATK4 ApplyBQSRSpark \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 ApplyBQSRSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1863,7 +1872,8 @@ process 'BaseRecalNormalGATK4' {
         -O ${NormalReplicateId}_recal4.bam \\
         --bqsr-recal-file ${NormalReplicateId}_bqsr.table \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}'
     """
 }
 
@@ -2571,6 +2581,7 @@ process 'BaseRecalTumorGATK3' {
     mkdir -p ${params.tmpDir}
 
     $GATK4 BaseRecalibratorSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -2580,8 +2591,10 @@ process 'BaseRecalTumorGATK3' {
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold} \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'&& \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
     $GATK4 ApplyBQSRSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -2589,7 +2602,8 @@ process 'BaseRecalTumorGATK3' {
         -O ${TumorReplicateId}_recal4.bam \\
         --bqsr-recal-file ${TumorReplicateId}_bqsr4.table \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}'
     """
 }
 
@@ -2781,6 +2795,7 @@ all mate-pair information is in sync between reads and its pairs
     mkdir -p ${params.tmpDir}
 
     $GATK4 BaseRecalibratorSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -2790,8 +2805,10 @@ all mate-pair information is in sync between reads and its pairs
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold} \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'&& \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
     $GATK4 ApplyBQSRSpark \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -2799,7 +2816,8 @@ all mate-pair information is in sync between reads and its pairs
         -O ${NormalReplicateId}_recal4.bam \\
         --bqsr-recal-file ${NormalReplicateId}_bqsr4.table \\
         --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}'
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}'
     """
 }
 
