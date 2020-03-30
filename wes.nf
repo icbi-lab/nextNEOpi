@@ -4287,6 +4287,7 @@ process 'pVACseq' {
         -t ${task.cpus} \\
         -p ${vep_phased_vcf_gz} \\
         -e ${params.epitope_len} \\
+        --keep-tmp-files \\
         --normal-sample-name ${NormalReplicateId} \\
         ${NetChop} \\
         ${NetMHCstab} \\
