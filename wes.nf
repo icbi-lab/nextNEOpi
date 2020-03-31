@@ -4383,7 +4383,7 @@ process concat_mhc_tmp_files {
 
     // MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
     // MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
-    headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
+    var headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
 
     script:
     """
