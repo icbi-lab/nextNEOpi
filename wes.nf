@@ -4389,9 +4389,9 @@ process concat_mhc_tmp_files {
     script:
     """
     printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_netmhc_tmp_combined.tsv
-    grep -v "^allele" *.netmhcpan.*.tsv_* | \
+    grep -h -v "^allele" *.netmhcpan.*.tsv_* | \\
         cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
-    grep -v "^allele" *.NetMHCIIpan.*.tsv_* | \
+    grep -h -v "^allele" *.NetMHCIIpan.*.tsv_* | \\
         cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
     """
 }
