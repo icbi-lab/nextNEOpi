@@ -942,6 +942,7 @@ if (params.trim_adapters_RNAseq) {
             file("${trimmedReads_2}")
         ) into (
             reads_tumor_neofuse_ch,
+            reads_tumor_mixcr_ch,
             fastqc_readsRNAseq_trimmed_ch
         )
         set(
@@ -1053,7 +1054,10 @@ if (params.trim_adapters_RNAseq) {
             NormalReplicateId,
             file(readsRNAseq_FWD),
             file(readsRNAseq_REV),
-        ) into reads_tumor_neofuse_ch
+        ) into (
+            reads_tumor_neofuse_ch,
+            reads_tumor_mixcr_ch
+        )
 
         set(
             TumorReplicateId,
@@ -4245,9 +4249,9 @@ Run pVACseq
 
 process 'pVACseq' {
     tag "$TumorReplicateId"
-    cache false
-    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-    //     mode: params.publishDirMode
+    // cache false
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+         mode: params.publishDirMode
 
     input:
     set(
@@ -4537,6 +4541,52 @@ process mixMHC2pred {
 //     NeoAg_immunogenicity_predicition_GBM.R \\
 //         ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
 //     """
+// }
+
+// process mixcr {
+//     tag "$TumorReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+//         mode: params.publishDirMode
+
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         readRNAFWD,
+//         readRNAREV
+//     ) from reads_tumor_mixcr_ch
+
+//     output:
+//     set(
+//         TumorReplicateId,
+//         file("${TumorReplicateId}_mixMHC2pred.tsv"),
+//     )
+
+//     script:
+//     """
+//     mixcr align \\
+//         -p rna-seq \\
+//         -s hsa \\
+//         -OallowPartialAlignments=true \\
+//         $readRNAFWD $readRNAREV \\
+//         ${TumorReplicateId}.alignments.vdjca
+//     mixcr assemblePartial \\
+//         ${TumoreReplicateId}.alignments.vdjca \\
+//         ${TumorReplicateId}.alignments_rescued_1.vdjca
+//     mixcr assemblePartial \\
+//         ${TumorReplicateId}.alignments_rescued_1.vdjca \\
+//         ${TumorReplicate}.alignments_rescued_2.vdjca
+        
+//     mixcr assemble \\
+//         ${TumorReplicateId}.alignments_rescued_2.vdjca \
+//         ${TumorReplicateId}.clones.clns
+
+//     mixcr exportClones \\
+//         -c ALL ${TumorReplicateId}.clones.clns \\
+//         ${TumorReplicateId}.clones.$chain.txt
+//     """
+
 // }
 
 /*
