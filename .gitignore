@@ -13,3 +13,4 @@ RESULTS/
 work*/
 wes.nf.back
 .nextflow/
+tmp/
