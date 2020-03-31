@@ -4154,8 +4154,8 @@ process gene_annotator {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("*_vep_somatic_gx.vcf.gz"),
-        file("*_vep_somatic_gx.vcf.gz.tbi")
+        file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
+        file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
     ) into vcf_vep_ex_gz
 
     script:
@@ -4273,9 +4273,18 @@ process 'pVACseq' {
     ) optional true into mhcI_out_f
     set(
         TumorReplicateId,
+        file("**/MHC_Class_I/tmp/${TumorReplicateId}.netmhcpan.*.tsv_*"),
+    ) optional true into mhcI_tmp_out_f
+
+    set(
+        TumorReplicateId,
         file("**/MHC_Class_II/*.filtered.tsv"),
         file("**/MHC_Class_II/*.all_epitopes.tsv")
     ) optional true into mhcII_out_f
+    set(
+        TumorReplicateId,
+        file("**/MHC_Class_II/tmp/${TumorReplicateId}.NetMHCIIpan.*.tsv_*"),
+    ) optional true into mhcII_tmp_out_f
 
     script:
     hla_type = (hla_types - ~/\n/)
@@ -4348,6 +4357,44 @@ process concat_mhcII_files {
     sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes.tsv
     """
 }
+
+process concat_mhc_tmp_files {
+    tag "$TumorReplicateId"
+
+    // remove me when CSiN is working
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/tmpFiles/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        '*.netmhcpan.*.tsv_*',
+    ) from mhcI_tmp_out_f
+    set(
+        TumorReplicateId,
+        '*.NetMHCIIpan.*.tsv_*',
+    ) from mhcII_tmp_out_f
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_netmhc_tmp_combined.tsv")
+    ) into mhc_tmp_files_ch
+
+    // MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
+    // MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
+    headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
+
+    script:
+    """
+    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_netmhc_tmp_combined.tsv
+    grep -v "^allele" *.netmhcpan.*.tsv_* | \
+        cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
+    grep -v "^allele" *.NetMHCIIpan.*.tsv_* | \
+        cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
+    """
+}
+
 
 process ranked_reports {
     tag "$TumorReplicateId"
