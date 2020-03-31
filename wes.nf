@@ -4250,6 +4250,7 @@ Run pVACseq
 process 'pVACseq' {
     tag "$TumorReplicateId"
     // cache false
+    // remove publish when done with debuging
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
          mode: params.publishDirMode
 
@@ -4364,7 +4365,7 @@ process concat_mhcII_files {
 
 // MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
 // MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
-var headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
+headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
 
 process concat_mhc_tmp_files {
     tag "$TumorReplicateId"
