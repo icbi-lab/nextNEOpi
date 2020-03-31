@@ -4358,6 +4358,10 @@ process concat_mhcII_files {
     """
 }
 
+// MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
+// MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
+var headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
+
 process concat_mhc_tmp_files {
     tag "$TumorReplicateId"
 
@@ -4381,9 +4385,6 @@ process concat_mhc_tmp_files {
         file("${TumorReplicateId}_netmhc_tmp_combined.tsv")
     ) into mhc_tmp_files_ch
 
-    // MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
-    // MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
-    var headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
 
     script:
     """
