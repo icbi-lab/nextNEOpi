@@ -4544,6 +4544,7 @@ if(params.TCR) {
         //     ${TumorReplicateId}.clones.ALL.txt
         """
         $MIXCR analyze shotgun \\
+            --limit ${task.cpus} \\
             --species hs \\
             --starting-material rna \\
             --only-productive \\
