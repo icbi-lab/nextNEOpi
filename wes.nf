@@ -4501,7 +4501,7 @@ process mixMHC2pred {
 // }
 
 if(params.TCR) {
-    process mixcr {
+    process mixcr_RNA {
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
@@ -4523,25 +4523,6 @@ if(params.TCR) {
 
         script:
         readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
-        // """
-        // $MIXCR align \\
-        //     -p rna-seq \\
-        //     -s hs \\
-        //     -OallowPartialAlignments=true \\
-        //     $reads \\
-        //     ${TumorReplicateId}.alignments.vdjca
-        // $MIXCR assemblePartial \\
-        //     ${TumoreReplicateId}.alignments.vdjca \\
-        //     ${TumorReplicateId}.alignments_rescued_1.vdjca
-        // $MIXCR assemblePartial \\
-        //     ${TumorReplicateId}.alignments_rescued_1.vdjca \\
-        //     ${TumorReplicate}.alignments_rescued_2.vdjca
-        // $MIXCR assemble \\
-        //     ${TumorReplicateId}.alignments_rescued_2.vdjca \
-        //     ${TumorReplicateId}.clones.clns
-        // $MIXCR exportClones \\
-        //     -c ALL ${TumorReplicateId}.clones.clns \\
-        //     ${TumorReplicateId}.clones.ALL.txt
         """
         $MIXCR analyze shotgun \\
             --limit ${task.cpus} \\
