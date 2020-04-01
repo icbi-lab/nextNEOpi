@@ -4251,8 +4251,8 @@ process 'pVACseq' {
     tag "$TumorReplicateId"
     // cache false
     // remove publish when done with debuging
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-         mode: params.publishDirMode
+    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    //     mode: params.publishDirMode
 
     input:
     set(
@@ -4276,20 +4276,13 @@ process 'pVACseq' {
         file("**/MHC_Class_I/*.filtered.tsv"),
         file("**/MHC_Class_I/*.all_epitopes.tsv")
     ) optional true into mhcI_out_f
-    set(
-        TumorReplicateId,
-        file("**/MHC_Class_I/tmp/${TumorReplicateId}.netmhcpan.*.tsv_*"),
-    ) optional true into mhcI_tmp_out_f
 
     set(
         TumorReplicateId,
         file("**/MHC_Class_II/*.filtered.tsv"),
         file("**/MHC_Class_II/*.all_epitopes.tsv")
     ) optional true into mhcII_out_f
-    set(
-        TumorReplicateId,
-        file("**/MHC_Class_II/tmp/${TumorReplicateId}.NetMHCIIpan.*.tsv_*"),
-    ) optional true into mhcII_tmp_out_f
+
 
     script:
     hla_type = (hla_types - ~/\n/)
@@ -4300,8 +4293,8 @@ process 'pVACseq' {
         --iedb-install-directory /opt/iedb \\
         -t ${task.cpus} \\
         -p ${vep_phased_vcf_gz} \\
-        -e ${params.epitope_len} \\
-        --keep-tmp-files \\
+        -e1 ${params.mhci_epitope_len} \\
+        -e2 ${params.mhcii_epitope_len} \\
         --normal-sample-name ${NormalReplicateId} \\
         ${NetChop} \\
         ${NetMHCstab} \\
@@ -4360,44 +4353,6 @@ process concat_mhcII_files {
     """
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
     sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes.tsv
-    """
-}
-
-// MHC-II: allele  seq_num start   end     core_peptide    peptide ic50    percentile_rank
-// MHC-I:  allele  seq_num start   end     length  peptide ic50    rank
-headerFields = ['HLA Allele', 'seq_num', 'start', 'end', 'MT Epitope Seq', 'ic50', 'rank']
-
-process concat_mhc_tmp_files {
-    tag "$TumorReplicateId"
-
-    // remove me when CSiN is working
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/tmpFiles/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        '*.netmhcpan.*.tsv_*',
-    ) from mhcI_tmp_out_f
-    set(
-        TumorReplicateId,
-        '*.NetMHCIIpan.*.tsv_*',
-    ) from mhcII_tmp_out_f
-
-    output:
-    set(
-        TumorReplicateId,
-        file("${TumorReplicateId}_netmhc_tmp_combined.tsv")
-    ) into mhc_tmp_files_ch
-
-
-    script:
-    """
-    printf \"${headerFields.join("\t")}\\n\" > ${TumorReplicateId}_netmhc_tmp_combined.tsv
-    grep -h -v "^allele" *.netmhcpan.*.tsv_* | \\
-        cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
-    grep -h -v "^allele" *.NetMHCIIpan.*.tsv_* | \\
-        cut -f1-4,6-8 >> ${TumorReplicateId}_netmhc_tmp_combined.tsv
     """
 }
 
