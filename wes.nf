@@ -4601,7 +4601,7 @@ if(params.TCR) {
         readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
         """
         $MIXCR analyze shotgun \\
-            --align "--threads ${task.cpus}" \\        
+            --align "--threads ${task.cpus}" \\
             --species hs \\
             --starting-material rna \\
             --only-productive \\
