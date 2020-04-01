@@ -4522,7 +4522,7 @@ if(params.TCR) {
         )
 
         script:
-        readsRNA = (single_end_RNA) ? readRNAFWD : readsRNAFWD + " " + readsRNAREV
+        readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
         """
         // $MIXCR align \\
         //     -p rna-seq \\
