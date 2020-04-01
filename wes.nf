@@ -266,6 +266,7 @@ YARA		  = file(params.YARA)
 PYTHON		  = file(params.PYTHON)
 OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
+MIXCR		  = file(params.MIXCR)
 
 /*
 ________________________________________________________________________________
@@ -4499,51 +4500,57 @@ process mixMHC2pred {
 //     """
 // }
 
-// process mixcr {
-//     tag "$TumorReplicateId"
+if(params.TCR) {
+    process mixcr {
+        tag "$TumorReplicateId"
 
-//     publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
-//         mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+            mode: params.publishDirMode
 
-//     input:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         readRNAFWD,
-//         readRNAREV
-//     ) from reads_tumor_mixcr_ch
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            readRNAFWD,
+            readRNAREV
+        ) from reads_tumor_mixcr_ch
 
-//     output:
-//     set(
-//         TumorReplicateId,
-//         file("${TumorReplicateId}_mixMHC2pred.tsv"),
-//     )
+        output:
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_mixcr.*.txt"),
+        )
 
-//     script:
-//     """
-//     mixcr align \\
-//         -p rna-seq \\
-//         -s hsa \\
-//         -OallowPartialAlignments=true \\
-//         $readRNAFWD $readRNAREV \\
-//         ${TumorReplicateId}.alignments.vdjca
-//     mixcr assemblePartial \\
-//         ${TumoreReplicateId}.alignments.vdjca \\
-//         ${TumorReplicateId}.alignments_rescued_1.vdjca
-//     mixcr assemblePartial \\
-//         ${TumorReplicateId}.alignments_rescued_1.vdjca \\
-//         ${TumorReplicate}.alignments_rescued_2.vdjca
-        
-//     mixcr assemble \\
-//         ${TumorReplicateId}.alignments_rescued_2.vdjca \
-//         ${TumorReplicateId}.clones.clns
-
-//     mixcr exportClones \\
-//         -c ALL ${TumorReplicateId}.clones.clns \\
-//         ${TumorReplicateId}.clones.$chain.txt
-//     """
-
-// }
+        script:
+        readsRNA = (single_end_RNA) ? readRNAFWD : readsRNAFWD + " " + readsRNAREV
+        """
+        // $MIXCR align \\
+        //     -p rna-seq \\
+        //     -s hs \\
+        //     -OallowPartialAlignments=true \\
+        //     $reads \\
+        //     ${TumorReplicateId}.alignments.vdjca
+        // $MIXCR assemblePartial \\
+        //     ${TumoreReplicateId}.alignments.vdjca \\
+        //     ${TumorReplicateId}.alignments_rescued_1.vdjca
+        // $MIXCR assemblePartial \\
+        //     ${TumorReplicateId}.alignments_rescued_1.vdjca \\
+        //     ${TumorReplicate}.alignments_rescued_2.vdjca
+        // $MIXCR assemble \\
+        //     ${TumorReplicateId}.alignments_rescued_2.vdjca \
+        //     ${TumorReplicateId}.clones.clns
+        // $MIXCR exportClones \\
+        //     -c ALL ${TumorReplicateId}.clones.clns \\
+        //     ${TumorReplicateId}.clones.ALL.txt
+        $MIXCR analyze shotgun \\
+            --species hs \\
+            --starting-material rna \\
+            --only-productive \\
+            $reads \\
+            ${TumorReplicateId}_mixcr
+        """
+    }
+}
 
 /*
 ***********************************
