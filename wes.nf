@@ -4517,7 +4517,7 @@ if(params.TCR) {
             NormalReplicateId,
             readFWD,
             readREV,
-            -
+            _
         ) from reads_tumor_mixcr_DNA_ch
 
         output:
