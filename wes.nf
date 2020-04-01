@@ -687,6 +687,7 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_tumor_ch,
+            reads_tumor_mixcr_DNA_ch,
             fastqc_reads_tumor_trimmed_ch
         )
         set(
@@ -894,7 +895,10 @@ if (params.trim_adapters) {
             file(tumor_readsFWD),
             file(tumor_readsREV),
             sampleGroup,      // unused so far
-        ) into reads_tumor_ch
+        ) into (
+            reads_tumor_ch,
+            reads_tumor_mixcr_DNA_ch
+        )
         set(
             TumorReplicateId,
             NormalReplicateId,
@@ -943,7 +947,7 @@ if (params.trim_adapters_RNAseq) {
             file("${trimmedReads_2}")
         ) into (
             reads_tumor_neofuse_ch,
-            reads_tumor_mixcr_ch,
+            reads_tumor_mixcr_RNA_ch,
             fastqc_readsRNAseq_trimmed_ch
         )
         set(
@@ -1057,7 +1061,7 @@ if (params.trim_adapters_RNAseq) {
             file(readsRNAseq_REV),
         ) into (
             reads_tumor_neofuse_ch,
-            reads_tumor_mixcr_ch
+            reads_tumor_mixcr_RNA_ch
         )
 
         set(
@@ -4501,6 +4505,39 @@ process mixMHC2pred {
 // }
 
 if(params.TCR) {
+    process mixcr_DNA {
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            readFWD,
+            readREV
+        ) from reads_tumor_mixcr_DNA_ch
+
+        output:
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_mixcr_DNA.*.txt"),
+        )
+
+        script:
+        reads = (single_end) ? readFWD : readFWD + " " + readREV
+        """
+        $MIXCR analyze shotgun \\
+            --limit ${task.cpus} \\
+            --species hs \\
+            --starting-material dna \\
+            --only-productive \\
+            $reads \\
+            ${TumorReplicateId}_mixcr_DNA
+        """
+    }
+
     process mixcr_RNA {
         tag "$TumorReplicateId"
 
@@ -4513,12 +4550,12 @@ if(params.TCR) {
             NormalReplicateId,
             readRNAFWD,
             readRNAREV
-        ) from reads_tumor_mixcr_ch
+        ) from reads_tumor_mixcr_RNA_ch
 
         output:
         set(
             TumorReplicateId,
-            file("${TumorReplicateId}_mixcr.*.txt"),
+            file("${TumorReplicateId}_mixcr_RNA.*.txt"),
         )
 
         script:
@@ -4530,7 +4567,7 @@ if(params.TCR) {
             --starting-material rna \\
             --only-productive \\
             $readsRNA \\
-            ${TumorReplicateId}_mixcr
+            ${TumorReplicateId}_mixcr_RNA
         """
     }
 }
