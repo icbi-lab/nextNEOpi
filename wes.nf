@@ -4523,7 +4523,7 @@ if(params.TCR) {
 
         script:
         readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
-        """
+        // """
         // $MIXCR align \\
         //     -p rna-seq \\
         //     -s hs \\
@@ -4542,6 +4542,7 @@ if(params.TCR) {
         // $MIXCR exportClones \\
         //     -c ALL ${TumorReplicateId}.clones.clns \\
         //     ${TumorReplicateId}.clones.ALL.txt
+        """
         $MIXCR analyze shotgun \\
             --species hs \\
             --starting-material rna \\
