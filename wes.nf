@@ -763,6 +763,7 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_normal_ch,
+            reads_normal_mixcr_DNA_ch,
             fastqc_reads_normal_trimmed_ch
         )
         set(
@@ -905,7 +906,10 @@ if (params.trim_adapters) {
             file(normal_readsFWD),
             file(normal_readsREV),
             sampleGroup,      // unused so far
-        ) into reads_normal_ch
+        ) into (
+            reads_normal_ch,
+            reads_normal_mixcr_DNA_ch
+        )
 
         set(
             TumorReplicateId,
@@ -4505,7 +4509,7 @@ process mixMHC2pred {
 // }
 
 if(params.TCR) {
-    process mixcr_DNA {
+    process mixcr_DNA_tumor {
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
@@ -4530,12 +4534,46 @@ if(params.TCR) {
         reads = (single_end) ? readFWD : readFWD + " " + readREV
         """
         $MIXCR analyze shotgun \\
-            --limit ${task.cpus} \\
+            --align "--threads ${task.cpus}" \\
             --species hs \\
             --starting-material dna \\
             --only-productive \\
             $reads \\
             ${TumorReplicateId}_mixcr_DNA
+        """
+    }
+
+    process mixcr_DNA_normal {
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            readFWD,
+            readREV,
+            _
+        ) from reads_normal_mixcr_DNA_ch
+
+        output:
+        set(
+            NormalReplicateId,
+            file("${NormalReplicateId}_mixcr_DNA.*.txt"),
+        )
+
+        script:
+        reads = (single_end) ? readFWD : readFWD + " " + readREV
+        """
+        $MIXCR analyze shotgun \\
+            --align "--threads ${task.cpus}" \\
+            --species hs \\
+            --starting-material dna \\
+            --only-productive \\
+            $reads \\
+            ${NormalReplicateId}_mixcr_DNA
         """
     }
 
@@ -4563,7 +4601,7 @@ if(params.TCR) {
         readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
         """
         $MIXCR analyze shotgun \\
-            --limit ${task.cpus} \\
+            --align "--threads ${task.cpus}" \\        
             --species hs \\
             --starting-material rna \\
             --only-productive \\
