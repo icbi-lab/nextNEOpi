@@ -4546,7 +4546,7 @@ if(params.TCR) {
             --species hs \\
             --starting-material rna \\
             --only-productive \\
-            $reads \\
+            $readsRNA \\
             ${TumorReplicateId}_mixcr
         """
     }
