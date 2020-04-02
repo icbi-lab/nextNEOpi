@@ -4502,7 +4502,6 @@ process mixMHC2pred {
     )
 
     script:
-    each allele alleles.splitText()
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
