@@ -4466,7 +4466,7 @@ process 'pepare_mixMHC2_seq' {
         TumorReplicateId,
         file("${TumorReplicateId}_peptides.fasta")
     ) optional true into pepare_mixMHC2_seq_out_ch0
-    file("${TumorReplicateId}_alleles_translated.txt") into optional true into pepare_mixMHC2_seq_out_ch1
+    file("${TumorReplicateId}_alleles_translated.txt") optional true into pepare_mixMHC2_seq_out_ch1
 
     script:
     """
