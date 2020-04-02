@@ -2,7 +2,6 @@
 import argparse
 import sys
 import csv
-import subprocess
 import pandas as pd
 
 if __name__ == "__main__":
