@@ -4464,9 +4464,9 @@ process 'pepare_mixMHC2_seq' {
     output:
     set(
         TumorReplicateId,
-        file("${TumorReplicateId}_peptides.fasta"),
-        file("${TumorReplicateId}_alleles_translated.txt")
-    ) optional true into pepare_mixMHC2_seq_out_ch
+        file("${TumorReplicateId}_peptides.fasta")
+    ) optional true into pepare_mixMHC2_seq_out_ch0
+    file("${TumorReplicateId}_alleles_translated.txt") into optional true into pepare_mixMHC2_seq_out_ch1
 
     script:
     """
@@ -4491,11 +4491,9 @@ process mixMHC2pred {
     input:
     set(
         TumorReplicateId,
-        mut_peps,
-        alleles
-    ) from pepare_mixMHC2_seq_out_ch
-    each allele alleles.splitText()
-
+        mut_peps
+    ) from pepare_mixMHC2_seq_out_ch0
+    each allele from.pepare_mixMHC2_seq_out_ch1.splitText()
 
     output:
     set(
@@ -4504,6 +4502,7 @@ process mixMHC2pred {
     )
 
     script:
+    each allele alleles.splitText()
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
