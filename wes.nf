@@ -164,7 +164,6 @@ if (! params.batchFile) {
                    .fromFilePairs(params.readsRNAseq)
                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                    .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
         } else  {
             exit 1, "No tumor sample defined"
         }
@@ -186,7 +185,6 @@ if (! params.batchFile) {
 } else {
         // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
         // create channel with all sampleId/reads file sets from the batch file
-
         // check if reverse reads are specified, if not set up single end processing
         // check if Normal reads are specified, if not set up exit with error
         // attention: if one of the samples is no-Normal or single end, all others
@@ -202,7 +200,6 @@ if (! params.batchFile) {
             }
             if (row.readsRNAseqREV == "None") {
                 single_end_RNA = true
-            }
         }
 
         Channel
@@ -485,7 +482,7 @@ process 'IntervalListToBed' {
     $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \\
         I=${paddedIntervalList} \\
         O=${paddedIntervalList.baseName}.bed
-
+    
     ${BGZIP} -c ${paddedIntervalList.baseName}.bed > ${paddedIntervalList.baseName}.bed.gz &&
     ${TABIX} -p bed ${paddedIntervalList.baseName}.bed.gz
     """
@@ -784,7 +781,7 @@ if (params.trim_adapters) {
             if(params.adapterSeq != false) {
                 adapterSeq   = Channel.value(params.adapterSeq)
                 fastpAdapter = "--adapter_sequence " + adapterSeq.getVal()
-
+            
                 if(params.adapterSeqR2 != false) {
                     adapterSeqR2   = Channel.value(params.adapterSeqR2)
                     fastpAdapter += " --adapter_sequence_r2 " + adapterSeqR2.getVal()
@@ -4293,8 +4290,8 @@ process 'pVACseq' {
 
     set(
         TumorReplicateId,
-        file("**/MHC_Class_II/*.filtered.tsv"),
-        file("**/MHC_Class_II/*.all_epitopes.tsv")
+        file("**/MHC_Class_II/*filtered.tsv"),
+        file("**/MHC_Class_II/*all_epitopes.tsv")
     ) optional true into mhcII_out_f
 
 
@@ -4326,7 +4323,7 @@ process concat_mhcI_files {
     set(
         TumorReplicateId,
         '*filtered.tsv',
-        '*.all_epitopes.tsv'
+        '*all_epitopes.tsv'
     ) from mhcI_out_f.groupTuple(by: 0)
 
     output:
@@ -4338,8 +4335,12 @@ process concat_mhcI_files {
 
     script:
     """
-    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered.tsv
-    sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCI_all_epitopes.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered_temp.tsv
+    drop_dups.py --inFile ${TumorReplicateId}_MHCI_filtered_temp.tsv --out ./${TumorReplicateId}_MHCI_filtered.tsv
+    rm ${TumorReplicateId}_MHCI_filtered_temp.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv
+    drop_dups.py --inFile ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCI_all_epitopes.tsv
+    rm ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv
     """
 }
 
@@ -4353,7 +4354,7 @@ process concat_mhcII_files {
     set(
         TumorReplicateId,
         '*filtered.tsv',
-        '*.all_epitopes.tsv'
+        '*all_epitopes.tsv'
     ) from mhcII_out_f.groupTuple(by: 0)
 
     output:
@@ -4365,8 +4366,12 @@ process concat_mhcII_files {
 
     script:
     """
-    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered.tsv
-    sed -e '2,\${/^Chromosome/d' -e '}' *.all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered_temp.tsv
+    drop_dups.py --inFile ${TumorReplicateId}_MHCII_filtered_temp.tsv --out ./${TumorReplicateId}_MHCII_filtered.tsv
+    rm ${TumorReplicateId}_MHCII_filtered_temp.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv
+    drop_dups.py --inFile ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCII_all_epitopes.tsv
+    rm ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv
     """
 }
 
@@ -4514,10 +4519,10 @@ process mixMHC2pred {
 //         mode: params.publishDirMode
 
 //     input:
-// 	set (
-// 		TumorReplicateId,
-// 		mhCI_tag_immunogenicity
-// 	) from MHCI_final_immunogenicity
+//     set (
+//         TumorReplicateId,
+//         mhCI_tag_immunogenicity
+//     ) from MHCI_final_immunogenicity
 //     // val(TumorReplicateId) from mhCI_tag_immunogenicity
 //     // file pvacseq_file from MHCI_final_immunogenicity
 
@@ -4722,14 +4727,14 @@ def defineReference() {
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
             'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
             'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'       	: checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
-            'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
-            'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
+            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'STARidx'           : checkParamReturnFileReferences("STARidx"),
+            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile"),
+            'RefFASTA'            : checkParamReturnFileReferences("RefFASTA"),
+            'RefIDX'            : checkParamReturnFileReferences("RefIDX")
         ]
     } else {
         if (params.references.size() != 15) exit 1, """
@@ -4742,14 +4747,14 @@ def defineReference() {
             'RefDict'           : checkParamReturnFileReferences("RefDict"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-            'YaraIndex'        	: checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'       	: checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'       	: checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'        	: checkParamReturnFileReferences("AnnoFile"),
-            'RefFASTA'        	: checkParamReturnFileReferences("RefFASTA"),
-            'RefIDX'        	: checkParamReturnFileReferences("RefIDX")
+            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'STARidx'           : checkParamReturnFileReferences("STARidx"),
+            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile"),
+            'RefFASTA'            : checkParamReturnFileReferences("RefFASTA"),
+            'RefIDX'            : checkParamReturnFileReferences("RefIDX")
         ]
     }
 }
