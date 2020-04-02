@@ -482,7 +482,7 @@ process 'IntervalListToBed' {
     $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \\
         I=${paddedIntervalList} \\
         O=${paddedIntervalList.baseName}.bed
-    
+
     ${BGZIP} -c ${paddedIntervalList.baseName}.bed > ${paddedIntervalList.baseName}.bed.gz &&
     ${TABIX} -p bed ${paddedIntervalList.baseName}.bed.gz
     """
@@ -781,7 +781,7 @@ if (params.trim_adapters) {
             if(params.adapterSeq != false) {
                 adapterSeq   = Channel.value(params.adapterSeq)
                 fastpAdapter = "--adapter_sequence " + adapterSeq.getVal()
-            
+
                 if(params.adapterSeqR2 != false) {
                     adapterSeqR2   = Channel.value(params.adapterSeqR2)
                     fastpAdapter += " --adapter_sequence_r2 " + adapterSeqR2.getVal()
@@ -4009,7 +4009,7 @@ process 'run_hla_hd' {
         file("**/*_final.result.txt")
     ) into (
         hlahd_output,
-        hlahd_mixMHC2_pred_ch0,
+        hlahd_mixMHC2_pred_ch0
     )
 
     script:
@@ -4491,7 +4491,7 @@ process mixMHC2pred {
     set(
         TumorReplicateId,
         mut_peps,
-        alleles,
+        alleles
     ) from pepare_mixMHC2_seq_out_ch
     each allele alleles.splitText()
 
@@ -4499,14 +4499,14 @@ process mixMHC2pred {
     output:
     set(
         TumorReplicateId,
-        file("${TumorReplicateId}_mixMHC2pred.tsv"),
+        file("${TumorReplicateId}_mixMHC2pred.tsv")
     )
 
     script:
     """
     ${MixMHC2pred} \\
         -i ${mut_peps} \\
-        -o ${TumorReplicateId}_mixMHC2pred.tsv
+        -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${allele}
     """
 }
