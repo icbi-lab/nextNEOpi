@@ -4493,7 +4493,7 @@ process mixMHC2pred {
         TumorReplicateId,
         mut_peps
     ) from pepare_mixMHC2_seq_out_ch0
-    each allele from.pepare_mixMHC2_seq_out_ch1.splitText()
+    each allele from pepare_mixMHC2_seq_out_ch1.splitText()
 
     output:
     set(
