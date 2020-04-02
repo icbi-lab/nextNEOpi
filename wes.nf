@@ -143,95 +143,95 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
 
 // did not get a CSV batch file: just run a single sample
 if (! params.batchFile) {
-        // create channel with tumorSampleName/reads file set
-        if (params.readsTumor != "NO_FILE") {
-            // Sample name and reads file is passed via cmd line options
-            // Sample name to use, if not given uses fastq file simpleName
-            params.tumorSampleName  = "undefined"
-            params.normalSampleName = "undefined"
-            if(!params.single_end) {
-                tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor)[0].simpleName
-            } else {
-                tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
-            }
-
-            Channel
-                   .fromFilePairs(params.readsTumor)
-                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
-                   .into { raw_reads_tumor_ch;
-                           fastqc_reads_tumor_ch }
-            Channel
-                   .fromFilePairs(params.readsRNAseq)
-                   .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
-                   .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-        } else  {
-            exit 1, "No tumor sample defined"
-        }
-
-        if (params.readsNormal != "NO_FILE") {
-            if(!params.single_end) {
-                normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal)[0].simpleName
-            } else {
-                normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
-            }
-            Channel
-                    .fromFilePairs(params.readsNormal)
-                    .map { reads -> tuple(normalSampleName, tumorSampleName, reads[1][0], reads[1][1], "None") }
-                    .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
-        }  else  {
-            exit 1, "No normal sample defined"
-        }
-
-} else {
-        // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
-        // create channel with all sampleId/reads file sets from the batch file
-        // check if reverse reads are specified, if not set up single end processing
-        // check if Normal reads are specified, if not set up exit with error
-        // attention: if one of the samples is no-Normal or single end, all others
-        // will be handled as such. You might want to process mixed sample data as
-        // separate batches.
-        batchCSV = file(params.batchFile).splitCsv(header:true)
-        for ( row in batchCSV ) {
-            if (row.readsTumorREV == "None") {
-                single_end = true
-            }
-            if (row.readsNormalFWD == "None") {
-                exit 1, "No normal sample defined for " + row.readsTumorFWD
-            }
-            if (row.readsRNAseqREV == "None") {
-                single_end_RNA = true
+    // create channel with tumorSampleName/reads file set
+    if (params.readsTumor != "NO_FILE") {
+        // Sample name and reads file is passed via cmd line options
+        // Sample name to use, if not given uses fastq file simpleName
+        params.tumorSampleName  = "undefined"
+        params.normalSampleName = "undefined"
+        if(!params.single_end) {
+            tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor)[0].simpleName
+        } else {
+            tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
         }
 
         Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file(row.readsTumorFWD),
-                                    file(row.readsTumorREV),
-                                    row.group) }
+                .fromFilePairs(params.readsTumor)
+                .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                 .into { raw_reads_tumor_ch;
                         fastqc_reads_tumor_ch }
-
         Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file(row.readsNormalFWD),
-                                    file(row.readsNormalREV),
-                                    row.group) }
-                .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
-
-        Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file(row.readsRNAseqFWD),
-                                    file(row.readsRNAseqREV)) }
+                .fromFilePairs(params.readsRNAseq)
+                .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
                 .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    } else  {
+        exit 1, "No tumor sample defined"
+    }
 
+    if (params.readsNormal != "NO_FILE") {
+        if(!params.single_end) {
+            normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal)[0].simpleName
+        } else {
+            normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
+        }
+        Channel
+                .fromFilePairs(params.readsNormal)
+                .map { reads -> tuple(normalSampleName, tumorSampleName, reads[1][0], reads[1][1], "None") }
+                .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
+    }  else  {
+        exit 1, "No normal sample defined"
+    }
+
+} else {
+    // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
+    // create channel with all sampleId/reads file sets from the batch file
+    // check if reverse reads are specified, if not set up single end processing
+    // check if Normal reads are specified, if not set up exit with error
+    // attention: if one of the samples is no-Normal or single end, all others
+    // will be handled as such. You might want to process mixed sample data as
+    // separate batches.
+    batchCSV = file(params.batchFile).splitCsv(header:true)
+    for ( row in batchCSV ) {
+        if (row.readsTumorREV == "None") {
+            single_end = true
+        }
+        if (row.readsNormalFWD == "None") {
+            exit 1, "No normal sample defined for " + row.readsTumorFWD
+        }
+        if (row.readsRNAseqREV == "None") {
+            single_end_RNA = true
+        }
+    }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                row.normalSampleName,
+                                file(row.readsTumorFWD),
+                                file(row.readsTumorREV),
+                                row.group) }
+            .into { raw_reads_tumor_ch;
+                    fastqc_reads_tumor_ch }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                row.normalSampleName,
+                                file(row.readsNormalFWD),
+                                file(row.readsNormalREV),
+                                row.group) }
+            .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                row.normalSampleName,
+                                file(row.readsRNAseqFWD),
+                                file(row.readsRNAseqREV)) }
+            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 }
 
 
@@ -4285,8 +4285,8 @@ process 'pVACseq' {
     output:
     set(
         TumorReplicateId,
-        file("**/MHC_Class_I/*.filtered.tsv"),
-        file("**/MHC_Class_I/*.all_epitopes.tsv")
+        file("**/MHC_Class_I/*filtered.tsv"),
+        file("**/MHC_Class_I/*all_epitopes.tsv")
     ) optional true into mhcI_out_f
 
     set(
