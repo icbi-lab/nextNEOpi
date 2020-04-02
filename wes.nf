@@ -4472,7 +4472,7 @@ process 'pepare_mixMHC2_seq' {
     """
     pepChopper.py \\
         --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
-        --fasta_in ${TumorReplicateId}_protSeq.fasta \\
+        --fasta_in ${protSeq_fasta} \\
         --fasta_out ${TumorReplicateId}_peptides.fasta
     translate_HLAHD2mixMHC2pred.py \\
         --HLAHD_file ${hlahd_allel_file} \\
