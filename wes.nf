@@ -264,6 +264,7 @@ PYTHON		  = file(params.PYTHON)
 OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
 MIXCR		  = file(params.MIXCR)
+MiXMHC2PRED   = file(params.MiXMHC2PRED)
 
 /*
 ________________________________________________________________________________
@@ -4504,7 +4505,7 @@ process mixMHC2pred {
 
     script:
     """
-    ${MixMHC2pred} \\
+    ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${allele}
