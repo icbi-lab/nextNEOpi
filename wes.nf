@@ -4488,8 +4488,8 @@ process 'pepare_mixMHC2_seq' {
 process mixMHC2pred {
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
-        mode: params.publishDirMode
+    // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
+    //     mode: params.publishDirMode
 
     input:
     set(
@@ -4499,20 +4499,36 @@ process mixMHC2pred {
     each allele from pepare_mixMHC2_seq_out_ch1.splitText()
 
     output:
-    set(
-        TumorReplicateId,
-        file("${TumorReplicateId}_mixMHC2pred.tsv")
-    )
+    val TumorReplicateId into mixMHC2pred_out_ch0
+    file("${TumorReplicateId}_${allele}_mixMHC2pred.tsv") into mixMHC2pred_out_ch1
 
     script:
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
-        -o ${TumorReplicateId}_mixMHC2pred.tsv \\
+        -o ${TumorReplicateId}_${allele}_mixMHC2pred.tsv \\
         -a ${allele}
     """
 }
 
+process collect_mixMHC2pred_results {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
+        mode: params.publishDirMode,
+        saveAs: ${TumorReplicateId}_mixMHC2pred.tsv
+
+    input:
+    val TumorReplicateId from mixMHC2pred_out_ch0
+    file(collectedResult) from mixMHC2pred_out_ch.collectFile()
+
+    output:
+    file(collectedResult)
+
+    script:
+    """
+    """
+}
 
 // process immunogenicity_scoring {
 //     tag "$TumorReplicateId"
