@@ -4453,6 +4453,9 @@ process 'pepare_mixMHC2_seq' {
     // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
     //     mode: params.publishDirMode
 
+    // TODO: fix me, maybe us a separate conda, need py3
+    conda 'assets/gatkcondaenv.yml'
+
     input:
     set(
         TumorReplicateId,
