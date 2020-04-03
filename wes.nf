@@ -4496,17 +4496,18 @@ process mixMHC2pred {
         TumorReplicateId,
         mut_peps
     ) from pepare_mixMHC2_seq_out_ch0
-    alleles from pepare_mixMHC2_seq_out_ch1.splitText()
+    val allelesFile from pepare_mixMHC2_seq_out_ch1
 
     output:
     file("${TumorReplicateId}_mixMHC2pred.tsv") into mixMHC2pred_out_ch1
 
     script:
+    alleles = file(allelesFile).readLines().join(" ")
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_${allele.trim()}_mixMHC2pred.tsv \\
-        -a ${alleles.trim().join(" ")}
+        -a ${alleles}
     """
 }
 
