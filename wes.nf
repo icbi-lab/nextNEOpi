@@ -4511,7 +4511,7 @@ process mixMHC2pred {
         -a ${alleles}
     awk ${TumorReplicateId}_mixMHC2pred.tsv \\
         '{ \\
-            if (\$0 ~ /\#/) { print } \\
+            if (\$0 ~ /\\#/) { print } \\
             else { if (\$3 <= 2) { print } } \\
         }' > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
     """
