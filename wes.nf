@@ -4506,7 +4506,7 @@ process mixMHC2pred {
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
-        -o ${TumorReplicateId}_${allele.trim()}_mixMHC2pred.tsv \\
+        -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${alleles}
     """
 }
