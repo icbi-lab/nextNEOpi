@@ -4499,7 +4499,8 @@ process mixMHC2pred {
     val allelesFile from pepare_mixMHC2_seq_out_ch1
 
     output:
-    file("${TumorReplicateId}_mixMHC2pred.tsv") into mixMHC2pred_out_ch1
+    file("${TumorReplicateId}_mixMHC2pred.tsv")
+    file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
 
     script:
     alleles = file(allelesFile).readLines().join(" ")
@@ -4508,6 +4509,11 @@ process mixMHC2pred {
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${alleles}
+    awk ${TumorReplicateId}_mixMHC2pred.tsv \\
+        '{ \\
+            if (\$0 ~ /\#/) { print } \\
+            else { if (\$3 <= 2) { print } } \\
+        }' > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
     """
 }
 
