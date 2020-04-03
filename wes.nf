@@ -4500,14 +4500,14 @@ process mixMHC2pred {
 
     output:
     val TumorReplicateId into mixMHC2pred_out_ch0
-    file("${TumorReplicateId}_${allele}_mixMHC2pred.tsv") into mixMHC2pred_out_ch1
+    file("${TumorReplicateId}_${allele.trim()}_mixMHC2pred.tsv") into mixMHC2pred_out_ch1
 
     script:
     """
     ${MiXMHC2PRED} \\
         -i ${mut_peps} \\
-        -o ${TumorReplicateId}_${allele}_mixMHC2pred.tsv \\
-        -a ${allele}
+        -o ${TumorReplicateId}_${allele.trim()}_mixMHC2pred.tsv \\
+        -a ${allele.trim()}
     """
 }
 
@@ -4515,12 +4515,12 @@ process collect_mixMHC2pred_results {
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
-        mode: params.publishDirMode,
-        saveAs: ${TumorReplicateId}_mixMHC2pred.tsv
+        saveAs: { "${TumorReplicateId}_mixMHC2pred.tsv" },
+        mode: params.publishDirMode
 
     input:
     val TumorReplicateId from mixMHC2pred_out_ch0
-    file(collectedResult) from mixMHC2pred_out_ch.collectFile()
+    file(collectedResult) from mixMHC2pred_out_ch1.collectFile()
 
     output:
     file(collectedResult)
