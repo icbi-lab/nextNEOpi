@@ -4337,10 +4337,10 @@ process concat_mhcI_files {
     script:
     """
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCI_filtered_temp.tsv
-    drop_dups.py --inFile ${TumorReplicateId}_MHCI_filtered_temp.tsv --out ./${TumorReplicateId}_MHCI_filtered.tsv
+    // drop_dups.py --inFile ${TumorReplicateId}_MHCI_filtered_temp.tsv --out ./${TumorReplicateId}_MHCI_filtered.tsv
     rm ${TumorReplicateId}_MHCI_filtered_temp.tsv
     sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv
-    drop_dups.py --inFile ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCI_all_epitopes.tsv
+    // drop_dups.py --inFile ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCI_all_epitopes.tsv
     rm ${TumorReplicateId}_MHCI_all_epitopes_temp.tsv
     """
 }
@@ -4368,10 +4368,10 @@ process concat_mhcII_files {
     script:
     """
     sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${TumorReplicateId}_MHCII_filtered_temp.tsv
-    drop_dups.py --inFile ${TumorReplicateId}_MHCII_filtered_temp.tsv --out ./${TumorReplicateId}_MHCII_filtered.tsv
+    // drop_dups.py --inFile ${TumorReplicateId}_MHCII_filtered_temp.tsv --out ./${TumorReplicateId}_MHCII_filtered.tsv
     rm ${TumorReplicateId}_MHCII_filtered_temp.tsv
     sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv
-    drop_dups.py --inFile ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCII_all_epitopes.tsv
+    // drop_dups.py --inFile ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv --out ./${TumorReplicateId}_MHCII_all_epitopes.tsv
     rm ${TumorReplicateId}_MHCII_all_epitopes_temp.tsv
     """
 }
