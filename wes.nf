@@ -3714,8 +3714,7 @@ process 'mkPhasedVCF' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
         mkPhasedVCF_out_ch0,
-        mkPhasedVCF_out_pVACseq_ch0,
-        mkPhasedVCF_out_getseq_ch0
+        mkPhasedVCF_out_pVACseq_ch0
     )
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
@@ -4152,8 +4151,8 @@ process gene_annotator {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        _,
-        _,
+        vep_phased_vcf_gz,
+        vep_phased_vcf_gz_tbi,
         vep_somatic_vcf_gz,
         vep_somatic_vcf_gz_tbi,
         final_tpm,
@@ -4173,6 +4172,19 @@ process gene_annotator {
         file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
         file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
     ) into vcf_vep_ex_gz
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(${vep_phased_vcf_gz}),
+        file(${vep_phased_vcf_gz_tbi}),
+        file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
+        file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
+    ) into (
+        gene_annotator_out_getseq_ch0,
+        gene_annotator_out_mixMHC2pred_ch0
+    )
+
+
 
     script:
     """
@@ -4420,11 +4432,12 @@ process 'pVACtools_generate_protein_seq' {
         vep_phased_vcf_idx,
         vep_tumor_vcf_gz,
         vep_tumor_vcf_idx
-    ) from mkPhasedVCF_out_getseq_ch0
+    ) from gene_annotator_out_getseq_ch0
 
     output:
     set(
         TumorReplicateId,
+        NormalReplicateId,
         file("${TumorReplicateId}_protSeq.fasta")
     ) optional true into pVACtools_generate_protein_seq
 
@@ -4451,6 +4464,7 @@ process 'pepare_mixMHC2_seq' {
     input:
     set(
         TumorReplicateId,
+        NormalReplicateId,
         protSeq_fasta,
         hlahd_allel_file
     ) from pVACtools_generate_protein_seq
@@ -4459,6 +4473,7 @@ process 'pepare_mixMHC2_seq' {
     output:
     set(
         TumorReplicateId,
+        NormalReplicateId,
         file("${TumorReplicateId}_peptides.fasta")
     ) optional true into pepare_mixMHC2_seq_out_ch0
     file("${TumorReplicateId}_alleles_translated.txt") optional true into pepare_mixMHC2_seq_out_ch1
@@ -4486,12 +4501,18 @@ process mixMHC2pred {
     input:
     set(
         TumorReplicateId,
-        mut_peps
+        NormalReplicateId,
+        mut_peps,
+        _,
+        _,
+        vep_somatic_gx_vcf_gz,
+        vep_somatic_gx_vcf_gz_tbi
     ) from pepare_mixMHC2_seq_out_ch0
+        .combine(gene_annotator_out_mixMHC2pred_ch0, by: 0)
     val allelesFile from pepare_mixMHC2_seq_out_ch1
 
     output:
-    file("${TumorReplicateId}_mixMHC2pred.tsv")
+    file("${TumorReplicateId}_mixMHC2pred_all.tsv")
     file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
 
     script:
@@ -4501,11 +4522,18 @@ process mixMHC2pred {
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${alleles}
+    parse_mixMHC2pred.py \\
+        --vep_vcf ${vep_somatic_gx_vcf_gz} \\
+        --pep_fasta ${mut_peps} \\
+        --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
+        --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
+        --sample_name ${TumorReplicateId} \\
+        --normal_name ${NormalReplicateId}
     awk \\
         '{
             if (\$0 ~ /\\#/) { print }
             else { if (\$3 <= 2) { print } }
-        }' ${TumorReplicateId}_mixMHC2pred.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
+        }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
     """
 }
 
