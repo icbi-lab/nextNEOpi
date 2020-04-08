@@ -4344,7 +4344,10 @@ process concat_mhcI_files {
         TumorReplicateId,
         file("*_MHCI_filtered.tsv")
     ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
-    file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
+    ) into MHCI_all_epitopes
 
     script:
     """
@@ -4371,7 +4374,10 @@ process concat_mhcII_files {
         TumorReplicateId,
         file("*_MHCII_filtered.tsv")
     ) into MHCII_final_ranked
-    file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
+    ) into MHCII_all_epitopes
 
     script:
     """
@@ -4555,6 +4561,56 @@ process mixMHC2pred {
 //     """
 //     """
 // }
+
+/*
+TODO: Immunogenicity scoring (Giorgos)
+*/
+
+// process csin {
+//     tag "$TumorReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+//         mode: params.publishDirMode
+
+//     input:
+//     set (
+//         TumorReplicateId,
+//         file("*_MHCI_all_epitopes.tsv")
+//         file("**_MHCII_all_epitopes.tsv")
+//     ) from MHCI_all_epitopes
+//     .combine(MHCII_all_epitopes, by:0)
+
+//     output:
+
+    // script:
+    // if (params.MHC_class == "MHCI")
+    // """
+    // CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
+    //     --rank \\
+    //     --ic50 \\
+    //     --gene_exp \\
+    //     --output
+//     """
+    // else if (params.MHC_class == "MHCII")
+//     """
+//     CSiN.py --MHCII_tsv *_MHCII_all_epitopes.tsv \\
+//         --rank \\
+//         --ic50 \\
+//         --gene_exp \\
+//         --output
+//     """
+    // else
+    // """
+//     CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
+//         --MHCII_tsv *_MHCII_all_epitopes.tsv \\
+//         --rank \\
+//         --ic50 \\
+//         --gene_exp \\
+//         --output
+//     """
+
+// }
+
 
 // process immunogenicity_scoring {
 //     tag "$TumorReplicateId"
