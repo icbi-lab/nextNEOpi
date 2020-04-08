@@ -4276,8 +4276,8 @@ process 'pVACseq' {
     tag "$TumorReplicateId"
     // cache false
     // remove publish when done with debuging
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-        mode: params.publishDirMode
+    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    //     mode: params.publishDirMode
 
     input:
     set(
