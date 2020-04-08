@@ -4175,16 +4175,14 @@ process gene_annotator {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(${vep_phased_vcf_gz}),
-        file(${vep_phased_vcf_gz_tbi}),
+        file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi"),
         file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
         file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
     ) into (
         gene_annotator_out_getseq_ch0,
         gene_annotator_out_mixMHC2pred_ch0
     )
-
-
 
     script:
     """
@@ -4228,6 +4226,9 @@ process gene_annotator {
     bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
     tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
 
+    # make dummy
+    ln -s ${vep_phased_vcf_gz} ./${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz
+    ln -s ${vep_phased_vcf_gz_tbi} ./${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi
     """
 }
 
