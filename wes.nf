@@ -4510,12 +4510,10 @@ process mixMHC2pred {
         TumorReplicateId,
         NormalReplicateId,
         mut_peps,
-        _,
-        _,
         vep_somatic_gx_vcf_gz,
         vep_somatic_gx_vcf_gz_tbi
     ) from pepare_mixMHC2_seq_out_ch0
-        .combine(gene_annotator_out_mixMHC2pred_ch0, by: 0)
+        .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
     val allelesFile from pepare_mixMHC2_seq_out_ch1
 
     output:
