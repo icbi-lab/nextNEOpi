@@ -56,8 +56,8 @@ def parse_vcf(vep_vcf, sample_name, normal_name):
         pos = record.POS
         ref = "".join(map(str, record.REF))
         alt = "".join(map(str, record.ALT))
-        af = record.genotype(sample_name)['AF']
-        dp = record.genotype(sample_name)['DP']
+        af = record.genotype(sample_name)['AF'] if 'AF' in str(record.genotype(sample_name)) else 'NA'
+        dp = record.genotype(sample_name)['DP'] if 'DP' in str(record.genotype(sample_name)) else 'NA'
 
         raf = record.genotype(sample_name)['RAF'] if 'RAF' in str(record.genotype(sample_name)) else "NA"
         rdp = record.genotype(sample_name)['RDP'] if 'RDP' in str(record.genotype(sample_name)) else "NA"
