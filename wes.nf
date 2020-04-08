@@ -4542,7 +4542,7 @@ process mixMHC2pred {
     awk \\
         '{
             if (\$0 ~ /\\#/) { print }
-            else { if (\$3 <= 2) { print } }
+            else { if (\$18 <= 2) { print } }
         }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
     """
 }
