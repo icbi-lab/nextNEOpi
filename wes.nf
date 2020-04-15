@@ -978,7 +978,7 @@ if (params.trim_adapters_RNAseq) {
             }
         }
 
-        if(single_end)
+        if(single_end_RNA)
             """
             $FASTP --thread ${task.cpus} \\
                 --in1 ${readsRNAseq_FWD} \\
