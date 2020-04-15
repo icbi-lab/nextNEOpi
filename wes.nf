@@ -722,6 +722,7 @@ if (params.trim_adapters) {
                 --json ${TumorReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
+            touch NO_FILE
             """
         else
             """
@@ -798,6 +799,7 @@ if (params.trim_adapters) {
                 --json ${NormalReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
+            touch NO_FILE
             """
         else
             """
@@ -986,6 +988,7 @@ if (params.trim_adapters_RNAseq) {
                 --json ${TumorReplicateId}_RNA_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
+            touch NO_FILE
             """
         else
             """
