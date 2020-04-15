@@ -4330,7 +4330,7 @@ process 'pVACseq' {
 process concat_mhcI_files {
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_I/",
         mode: params.publishDirMode
 
     input:
@@ -4360,7 +4360,7 @@ process concat_mhcI_files {
 process concat_mhcII_files {
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_II/",
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_II/",
         mode: params.publishDirMode
 
     input:
@@ -4409,15 +4409,15 @@ process ranked_reports {
 
     script:
     """
-    mkdir ./MCH_Class_I/
+    mkdir ./MHC_Class_I/
     pvacseq generate_condensed_ranked_report \\
         -m lowest \\
         $pvacseq_mhcI_file \\
-        ./MCH_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
-    mkdir ./MCH_Class_II/
+        ./MHC_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+    mkdir ./MHC_Class_II/
     pvacseq generate_condensed_ranked_report \\
         -m lowest $pvacseq_mhcII_file \\
-        ./MCH_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+        ./MHC_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
     """
 }
 
@@ -4570,79 +4570,66 @@ process mixMHC2pred {
 TODO: Immunogenicity scoring (Giorgos)
 */
 
-// process csin {
-//     tag "$TumorReplicateId"
+process csin {
+    tag "$TumorReplicateId"
 
-//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-//         mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+        mode: params.publishDirMode
 
-//     input:
-//     set (
-//         TumorReplicateId,
-//         file("*_MHCI_all_epitopes.tsv")
-//         file("**_MHCII_all_epitopes.tsv")
-//     ) from MHCI_all_epitopes
-//     .combine(MHCII_all_epitopes, by:0)
+    input:
+    set (
+        TumorReplicateId,
+        "*_MHCI_all_epitopes.tsv",
+        "*_MHCII_all_epitopes.tsv"
+    ) from MHCI_all_epitopes
+    .combine(MHCII_all_epitopes, by:0)
 
-//     output:
+    output:
+    file("${TumorReplicateId}_CSiN.tsv")
 
-    // script:
-    // if (params.MHC_class == "MHCI")
-    // """
-    // CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
-    //     --rank \\
-    //     --ic50 \\
-    //     --gene_exp \\
-    //     --output
-//     """
-    // else if (params.MHC_class == "MHCII")
-//     """
-//     CSiN.py --MHCII_tsv *_MHCII_all_epitopes.tsv \\
-//         --rank \\
-//         --ic50 \\
-//         --gene_exp \\
-//         --output
-//     """
-    // else
-    // """
-//     CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
-//         --MHCII_tsv *_MHCII_all_epitopes.tsv \\
-//         --rank \\
-//         --ic50 \\
-//         --gene_exp \\
-//         --output
-//     """
-
-// }
+    script:
+    """
+    CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
+        --MHCII_tsv *_MHCII_all_epitopes.tsv \\
+        --rank $params.csin_rank \\
+        --ic50 $params.csin_ic50 \\
+        --gene_exp $params.csin_gene_exp \\
+        --output ./${TumorReplicateId}_CSiN.tsv
+    """
+}
 
 
-// process immunogenicity_scoring {
-//     tag "$TumorReplicateId"
+process immunogenicity_scoring {
+    tag "$TumorReplicateId"
 
-//     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MCH_Class_I/",
-//         mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_I/",
+        mode: params.publishDirMode
 
-//     input:
-//     set (
-//         TumorReplicateId,
-//         mhCI_tag_immunogenicity
-//     ) from MHCI_final_immunogenicity
-//     // val(TumorReplicateId) from mhCI_tag_immunogenicity
-//     // file pvacseq_file from MHCI_final_immunogenicity
+    input:
+    set (
+        TumorReplicateId,
+        pvacseq_file
+    ) from MHCI_final_immunogenicity
+    // val(TumorReplicateId) from mhCI_tag_immunogenicity
+    // file pvacseq_file from MHCI_final_immunogenicity
 
-//     output:
-//     file("*_immunogenicity.tsv") optional true
+    output:
+    file("${TumorReplicateId}_immunogenicity.tsv") optional true
 
-//     script:
-//     """
-//     get_epitopes.py \
-//         --pvacseq_out $pvacseq_file \\
-//         --sample_id $TumorReplicateId \\
-//         --output ./${TumorReplicateId}_epitopes.tsv
-//     NeoAg_immunogenicity_predicition_GBM.R \\
-//         ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_immunogenicity.tsv
-//     """
-// }
+    script:
+    """
+    get_epitopes.py \\
+        --pvacseq_out $pvacseq_file \\
+        --sample_id $TumorReplicateId \\
+        --output ./${TumorReplicateId}_epitopes.tsv
+    NeoAg_immunogenicity_predicition_GBM.R \\
+        ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv
+    immuno_score.py \\
+        --pvacseq_tsv $pvacseq_file \\
+        --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
+        --output ${TumorReplicateId}_immunogenicity.tsv
+    """
+}
 
 if(params.TCR) {
     process mixcr_DNA_tumor {
