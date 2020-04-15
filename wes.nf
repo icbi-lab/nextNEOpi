@@ -1035,7 +1035,7 @@ if (params.trim_adapters_RNAseq) {
         script:
         if (single_end_RNA)
             """
-            fastqc --quiet --threads ${task.cpus} ${tumor_readsFWD}
+            fastqc --quiet --threads ${task.cpus} ${readsRNAseq_FWD}
             """
         else
             """
