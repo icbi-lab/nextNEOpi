@@ -696,7 +696,7 @@ if (params.trim_adapters) {
 
 
         script:
-        trimmedReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "_trimmed_R2.fastq.gz"
+        trimmedReads_2 = (single_end) ? "NO_FILE" : TumorReplicateId + "_trimmed_R2.fastq.gz"
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
@@ -772,7 +772,7 @@ if (params.trim_adapters) {
 
 
         script:
-        trimmedReads_2 = (single_end) ? val("NO_FILE") : NormalReplicateId + "_trimmed_R2.fastq.gz"
+        trimmedReads_2 = (single_end) ? "NO_FILE" : NormalReplicateId + "_trimmed_R2.fastq.gz"
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
@@ -959,7 +959,7 @@ if (params.trim_adapters_RNAseq) {
         ) into ch_fastp_RNAseq // multiQC
 
         script:
-        trimmedReads_2 = (single_end_RNA) ? val("NO_FILE") : TumorReplicateId + "_RNA_trimmed_R2.fastq.gz"
+        trimmedReads_2 = (single_end_RNA) ? "NO_FILE" : TumorReplicateId + "_RNA_trimmed_R2.fastq.gz"
 
 
         def fastpAdapter = ''
