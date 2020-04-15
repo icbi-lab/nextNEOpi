@@ -203,9 +203,16 @@ if (! params.batchFile) {
     // will be handled as such. You might want to process mixed sample data as
     // separate batches.
     batchCSV = file(params.batchFile).splitCsv(header:true)
+    pe_dna_count = 0
+    se_dna_count = 0
+    pe_rna_count = 0
+    se_rna_count = 0
     for ( row in batchCSV ) {
         if (row.readsTumorREV == "None") {
             single_end = true
+            se_dna_count++
+        } else {
+            pe_dna_count++
         }
         if (row.readsNormalFWD == "None") {
             exit 1, "No normal sample defined for " + row.readsTumorFWD
@@ -215,7 +222,16 @@ if (! params.batchFile) {
         }
         if (row.readsRNAseqREV == "None") {
             single_end_RNA = true
+            se_rna_count++
+        } else {
+            pe_rna_count++
         }
+    }
+    if (pe_dna_count != 0 && se_dna_count != 0) {
+        exit 1, "Please do not mix pe and se DNA read samples in batch file. Create a separate batch file for se and pe DNA samples"
+    }
+    if (pe_rna_count != 0 && se_rna_count != 0) {
+        exit 1, "Please do not mix pe and se RNA read samples in batch file. Create a separate batch file for se and pe RNA samples"
     }
 
     Channel
