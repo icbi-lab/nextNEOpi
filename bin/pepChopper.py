@@ -36,7 +36,7 @@ def chop_seqs(fasta_in, fasta_out, pep_len):
         long_name = headerStr.strip().replace('>', '')
         name = long_name.split()[0]
         pep_type = "wt" if name.startswith("WT") else "mt"
-        common_name = re.sub(r'WT\.|MT\.', '', name)
+        common_name = re.sub(r'^WT\.|^MT\.', '', name)
         seq = "".join(str(s).strip() for s in faiter.__next__())
         i = 0
         for l in pep_len:
