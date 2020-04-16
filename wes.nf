@@ -43,6 +43,9 @@ params.batchFile = false
 single_end = params.single_end
 single_end_RNA = params.single_end_RNA
 
+// initialize RNAseq presence
+have_RNAseq = false
+
 /*--------------------------------------------------
   For workflow summary
 ---------------------------------------------------*/
@@ -170,8 +173,7 @@ if (! params.batchFile) {
             have_RNAseq = true
         } else {
             Channel
-                    .of(
-                    .tuple(tumorSampleName, "None", "None", "None")
+                    .of(tuple(tumorSampleName, "None", "None", "None"))
                     .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 
             have_RNAseq = false
@@ -219,6 +221,8 @@ if (! params.batchFile) {
         }
         if (row.readsRNAseqFWD == "None") {
             have_RNAseq = false
+        } else {
+            have_RNAseq = true
         }
         if (row.readsRNAseqREV == "None") {
             single_end_RNA = true
@@ -573,7 +577,7 @@ process FastQC {
     } else {
         if (!single_end) {
             cpus = 4
-        } else
+        } else {
             cpus = 2
         }
     }
@@ -2083,8 +2087,9 @@ process 'Mutect2' {
 
     script:
     if(params.mutect2ponFile != false) {
-        val mutect2ponFile = Channel.fromPath(params.mutect2ponFile)
-        panel_of_normals = "--panel-of-normals ${mutect2ponFile}"
+        // val mutect2ponFile = Channel.fromPath(params.mutect2ponFile)
+        // panel_of_normals = "--panel-of-normals ${mutect2ponFile}"
+        panel_of_normals = "--panel-of-normals ${params.mutect2ponFile}"
     } else {
         panel_of_normals = ""
     }
