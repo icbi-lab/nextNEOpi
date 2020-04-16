@@ -4652,27 +4652,9 @@ process mixMHC2pred {
     """
 }
 
-// process collect_mixMHC2pred_results {
-//     tag "$TumorReplicateId"
-
-//     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
-//         saveAs: { "${TumorReplicateId}_mixMHC2pred.tsv" },
-//         mode: params.publishDirMode
-
-//     input:
-//     val TumorReplicateId from mixMHC2pred_out_ch0
-//     file(collectedResult) from mixMHC2pred_out_ch1.collectFile()
-
-//     output:
-//     file(collectedResult)
-
-//     script:
-//     """
-//     """
-// }
 
 /*
-TODO: Immunogenicity scoring (Giorgos)
+  Immunogenicity scoring
 */
 
 process csin {
@@ -4706,6 +4688,9 @@ process csin {
 
 process immunogenicity_scoring {
     tag "$TumorReplicateId"
+
+    // TODO: check why sometimes this fails: workaround ignore errors
+    errorStrategy 'ignore'
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_I/",
         mode: params.publishDirMode
