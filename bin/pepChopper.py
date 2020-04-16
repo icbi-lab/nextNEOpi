@@ -48,10 +48,11 @@ def chop_seqs(fasta_in, fasta_out, pep_len):
                     mt_seq[pep_name] = pep
                 i += 1
 
-    for pep_name in wt_seq:
-        if pep_name in set(mt_seq.keys()):
+    wt_pep_names = set(wt_seq.keys())
+    for pep_name in mt_seq:
+        if pep_name in wt_pep_names:
             if mt_seq[pep_name] == wt_seq[pep_name]:
-                mt_seq.pop(pep_name)
+                continue
             else:
                 fasta_out.write(">" + pep_name + "\n" +
                                 mt_seq[pep_name] + '\n'
