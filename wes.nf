@@ -4294,10 +4294,6 @@ if (have_RNAseq) {
 
         bgzip -f ${TumorReplicateId}_vep_somatic_gx.vcf
         tabix -p vcf ${TumorReplicateId}_vep_somatic_gx.vcf.gz
-
-        # make dummy
-        ln -s ${vep_phased_vcf_gz} ./${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz
-        ln -s ${vep_phased_vcf_gz_tbi} ./${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi
         """
     }
 } else { // no RNAseq data
@@ -4530,10 +4526,6 @@ process ranked_reports {
         ./MHC_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
     """
 }
-
-// mixMHC2pred
-// boilerplate code to be finished (Didi)
-// /*
 
 process 'pVACtools_generate_protein_seq' {
     tag "$TumorReplicateId"
