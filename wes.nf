@@ -223,12 +223,12 @@ if (! params.batchFile) {
             have_RNAseq = false
         } else {
             have_RNAseq = true
-        }
-        if (row.readsRNAseqREV == "None") {
-            single_end_RNA = true
-            se_rna_count++
-        } else {
-            pe_rna_count++
+            if (row.readsRNAseqREV == "None") {
+                single_end_RNA = true
+                se_rna_count++
+            } else {
+                pe_rna_count++
+            }
         }
     }
     if (pe_dna_count != 0 && se_dna_count != 0) {
