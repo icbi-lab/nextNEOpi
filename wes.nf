@@ -100,7 +100,7 @@ summary['VarScan strand_filter']         = params.strand_filter
 summary['VarScan processSomatic_pvalue'] = params.processSomatic_pvalue
 summary['VarScan max_normal_freq']       = params.max_normal_freq
 summary['VarScan min_tumor_freq']        = params.min_tumor_freq
-summary['VarScan min_map_cov']           = params.min_map_cov
+summary['VarScan min_map_q']             = params.min_map_q
 summary['VarScan min_base_q']            = params.min_base_q
 summary['VEP assembly']                  = params.vep_assembly
 summary['VEP species']                   = params.vep_species
@@ -3212,7 +3212,7 @@ process 'FilterVarscan' {
     cat ${snpSomaticHc} | \\
     awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
     $BAMREADCOUNT \\
-        -q${params.min_map_cov} \\
+        -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
@@ -3225,7 +3225,7 @@ process 'FilterVarscan' {
     cat ${indelSomaticHc} | \\
     awk '{if (! /^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
     $BAMREADCOUNT \\
-        -q${params.min_map_cov} \\
+        -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
