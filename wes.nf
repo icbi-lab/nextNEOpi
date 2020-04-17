@@ -259,14 +259,20 @@ if (! params.batchFile) {
                                 row.group) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                row.normalSampleName,
-                                file(row.readsRNAseqFWD),
-                                file(row.readsRNAseqREV)) }
+    if (have_RNAseq) {
+        Channel
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    row.normalSampleName,
+                                    file(row.readsRNAseqFWD),
+                                    file(row.readsRNAseqREV)) }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    } else {
+        Channel
+            .empty()
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    }
 }
 
 
