@@ -189,14 +189,8 @@ The Pipeline creates an ouput directory with the following structure:
 ```
 RESULTS
 ├── 00_prepare_Intervals
-│   ├── S07604514_Covered.list
-│   ├── S07604514_Regions.list
-│   ├── S07604514_Regions_merged_padded.bed
-│   ├── S07604514_Regions_merged_padded.bed.gz
-│   ├── S07604514_Regions_merged_padded.bed.gz.tbi
-│   ├── S07604514_Regions_merged_padded.list
 │   └── SplitIntervals
-├── CRC26
+├── CRC01
 │   ├── 01_preprocessing
 │   ├── 02_QC
 │   ├── 03_manta_somatic
@@ -207,7 +201,13 @@ RESULTS
 │   ├── 04_haplotypeCaller
 │   ├── 05_hcVCF
 │   ├── 06_vep
-│   └── 07_PhasedVCF
+│   ├── 07_PhasedVCF
+│   ├── 08_OptiType
+│   ├── 09_HLA_HD
+│   ├── 10_NeoFuse
+│   ├── 11_pVACseq
+│   ├── 12_mixMHC2pred
+│   └── 13_TCRs
 ├── Documentation
 │   ├── pipeline_report.html
 │   └── pipeline_report.txt
