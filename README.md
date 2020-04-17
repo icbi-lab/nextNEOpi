@@ -21,7 +21,8 @@ All vcf files are annotatd with VEP. In addition the germline variants are calle
 using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
 HLA class I and class II alleles are predicted with OptiType and HLAHD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
-netMHCIIpan and mhcflurry. Fusion neoantiges are predicted with NeoFuse.
+netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
+neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
 A GBM model is be used to predict immunogenicity scores for MHC class I single nucleotide
 variant (SNV) neoantigens 8-11 amino acid residues in length. https://github.com/vincentlaboratories/.
