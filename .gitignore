@@ -14,3 +14,4 @@ work*/
 wes.nf.back
 .nextflow/
 tmp/
+bin/compareVCF.py
