@@ -60,7 +60,7 @@ def check_hlas(inFile, hlas=[]):
         line = line.strip()
         known_hlas.append(line)
 
-    valid_hlas 0 []
+    valid_hlas = []
     for hla in hlas:
         if hla in known_hlas:
             valid_hlas.append(hla)
