@@ -4392,7 +4392,7 @@ process get_vhla {
         --opti_out ${opti_out} \\
         --hlahd_out ${hlahd_out} \\
         ${user_hlas} \\
-        --ref_hlas ${params.valid_HLAs} \\
+        --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
         > ./${TumorReplicateId}_hlas.txt
     """
 }
