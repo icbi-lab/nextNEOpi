@@ -173,9 +173,8 @@ if (! params.batchFile) {
             have_RNAseq = true
         } else {
             Channel
-                    .of(tuple(tumorSampleName, "None", "None", "None"))
-                    .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
+                .empty()
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
             have_RNAseq = false
         }
     } else  {
