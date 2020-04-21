@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     parse_opti(infile, hla_array)
     parse_hlahd(infile2, hla_array)
-    if args.custom in not False:
+    if args.custom is not False:
         read_custom_hla(args.custom, hla_array)
 
     valid_hlas = check_hlas(infile3, hla_array)
