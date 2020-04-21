@@ -51,7 +51,7 @@ def parse_opti(inFile, hlas=[]):
 def read_custom_hla(inFile, hlas=[]):
     for line in inFile:
         line = line.strip()
-        hla.append(line)
+        hlas.append(line)
     return hlas
 
 def check_hlas(inFile, hlas=[]):
