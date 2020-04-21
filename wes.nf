@@ -259,6 +259,7 @@ if (! params.batchFile) {
                                 row.group) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
+    if (have_RNAseq) {
     Channel
             .fromPath(params.batchFile)
             .splitCsv(header:true)
@@ -267,8 +268,10 @@ if (! params.batchFile) {
                                 file(row.readsRNAseqFWD),
                                 file(row.readsRNAseqREV)) }
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    } else {
+    Channel.empty().into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    }
 }
-
 
 reference = defineReference()
 database = defineDatabases()
@@ -581,7 +584,6 @@ process FastQC {
             cpus = 2
         }
     }
-
 
     input:
     set(
@@ -4130,7 +4132,7 @@ if (have_RNAseq) {
             readRNAREV
         ) from reads_tumor_neofuse_ch
         file STARidx from file(reference.STARidx)
-        file RefFASTA from file(reference.RefFASTA)
+        file RefFasta from file(reference.RefFasta)
         file AnnoFile from file(reference.AnnoFile)
 
         output:
@@ -4159,7 +4161,7 @@ if (have_RNAseq) {
                 -T ${params.rank} \\
                 -c ${params.conf_lvl} \\
                 -s ${STARidx} \\
-                -g ${RefFASTA} \\
+                -g ${RefFasta} \\
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan}
             """
@@ -4175,7 +4177,7 @@ if (have_RNAseq) {
                 -T ${params.rank} \\
                 -c ${params.conf_lvl} \\
                 -s ${STARidx} \\
-                -g ${RefFASTA} \\
+                -g ${RefFasta} \\
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan}
             """
@@ -4230,9 +4232,12 @@ if (have_RNAseq) {
         ) from mkPhasedVCF_out_ch0
             .combine(final_file, by: 0)
             .combine(star_bam_file, by: 0)
-
-        file(RefFasta) from file(reference.RefFASTA)
-        file(RefIdx) from file(reference.RefIDX)
+        set(
+        file(RefFasta),
+        file(RefIdx),
+        ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx ])
 
         output:
         set(
@@ -4353,16 +4358,12 @@ process get_vhla {
         hlahd_out
     ) from optitype_output
         .combine(hlahd_output, by: 0)
-    // file(opti_out) from optitype_output
-    // file(hlahd_out) from hlahd_output
 
     output:
     set (
         TumorReplicateId,
         file("${TumorReplicateId}_hlas.txt")
     ) into hlas
-    // file("${TumorReplicateId}_hlas.txt")
-    // stdout hlas
 
     script:
     """
@@ -4380,10 +4381,6 @@ Run pVACseq
 
 process 'pVACseq' {
     tag "$TumorReplicateId"
-    // cache false
-    // remove publish when done with debuging
-    // publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
-    //     mode: params.publishDirMode
 
     input:
     set(
@@ -4529,9 +4526,6 @@ process ranked_reports {
 
 process 'pVACtools_generate_protein_seq' {
     tag "$TumorReplicateId"
-
-    // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
-    //     mode: params.publishDirMode
 
     input:
     set(
@@ -4895,7 +4889,7 @@ def checkParamReturnFileDatabases(item) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 15) exit 1, """
+        if (params.references.size() != 13) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -4912,12 +4906,10 @@ def defineReference() {
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
             'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile"),
-            'RefFASTA'            : checkParamReturnFileReferences("RefFASTA"),
-            'RefIDX'            : checkParamReturnFileReferences("RefIDX")
+            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
         ]
     } else {
-        if (params.references.size() != 15) exit 1, """
+        if (params.references.size() != 13) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -4932,9 +4924,7 @@ def defineReference() {
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
             'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile"),
-            'RefFASTA'            : checkParamReturnFileReferences("RefFASTA"),
-            'RefIDX'            : checkParamReturnFileReferences("RefIDX")
+            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
         ]
     }
 }
