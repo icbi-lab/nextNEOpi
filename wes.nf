@@ -100,7 +100,7 @@ summary['VarScan strand_filter']         = params.strand_filter
 summary['VarScan processSomatic_pvalue'] = params.processSomatic_pvalue
 summary['VarScan max_normal_freq']       = params.max_normal_freq
 summary['VarScan min_tumor_freq']        = params.min_tumor_freq
-summary['VarScan min_map_cov']           = params.min_map_cov
+summary['VarScan min_map_q']             = params.min_map_q
 summary['VarScan min_base_q']            = params.min_base_q
 summary['VEP assembly']                  = params.vep_assembly
 summary['VEP species']                   = params.vep_species
@@ -260,6 +260,7 @@ if (! params.batchFile) {
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
     if (have_RNAseq) {
+<<<<<<< HEAD
     Channel
             .fromPath(params.batchFile)
             .splitCsv(header:true)
@@ -270,6 +271,20 @@ if (! params.batchFile) {
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
     } else {
     Channel.empty().into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+=======
+        Channel
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    row.normalSampleName,
+                                    file(row.readsRNAseqFWD),
+                                    file(row.readsRNAseqREV)) }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+    } else {
+        Channel
+            .empty()
+            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+>>>>>>> c1f4c0e43f807df4e6aa87511fca71c49c3d5cdd
     }
 }
 
@@ -3208,7 +3223,7 @@ process 'FilterVarscan' {
     cat ${snpSomaticHc} | \\
     awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
     $BAMREADCOUNT \\
-        -q${params.min_map_cov} \\
+        -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
@@ -3221,7 +3236,7 @@ process 'FilterVarscan' {
     cat ${indelSomaticHc} | \\
     awk '{if (! /^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
     $BAMREADCOUNT \\
-        -q${params.min_map_cov} \\
+        -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
