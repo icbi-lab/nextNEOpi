@@ -21,6 +21,7 @@ log.info ""
 if  (params.readsTumor != "NO_FILE") log.info " Reads Tumor: \t\t " + params.readsTumor
 if  (params.readsNormal != "NO_FILE") log.info " Reads Normal: \t\t " + params.readsNormal
 if  (params.readsRNAseq != "NO_FILE") log.info " Reads RNAseq: \t\t " + params.readsRNAseq
+if  (params.customHLA != "NO_FILE") log.info " Custom HLA file: \t\t " + params.customHLA
 log.info ""
 log.info "Please check --help for further instruction"
 log.info "-------------------------------------------------------------------------"
@@ -63,6 +64,7 @@ summary['Pipeline Version']                                = workflow.manifest.v
 if(params.batchFile) summary['Batch file']                 = params.batchFile
 if(params.readsNormal != "NO_FILE") summary['Reads normal fastq files'] = params.readsNormal
 if(params.readsTumor != "NO_FILE") summary['Reads tumor fastq files']   = params.readsTumor
+if(params.customHLA != "NO_FILE") summary['Custom HLA file']   = params.customHLA
 summary['Read length']                   = params.readLength
 summary['Baits bed file']                = params.references.BaitsBed
 summary['Regions bed file']              = params.references.RegionsBed
@@ -194,6 +196,13 @@ if (! params.batchFile) {
     }  else  {
         exit 1, "No normal sample defined"
     }
+    // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
+    Channel
+            .of(tuple(
+                    tumorSampleName,
+                    file(params.customHLA)
+                ))
+            .set { custom_hlas_ch }
 
 } else {
     // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
@@ -272,6 +281,14 @@ if (! params.batchFile) {
             .empty()
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
     }
+
+    // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                file((row.HLAfile == "None") ? "NO_FILE" : row.HLAfile)) }
+            .set { custom_hlas_ch }
 }
 
 reference = defineReference()
@@ -4356,9 +4373,11 @@ process get_vhla {
     set (
         TumorReplicateId,
         opti_out,
-        hlahd_out
+        hlahd_out,
+        custome_hlas
     ) from optitype_output
         .combine(hlahd_output, by: 0)
+        .combine(custom_hlas_ch, by: 0)
 
     output:
     set (
@@ -4367,10 +4386,12 @@ process get_vhla {
     ) into hlas
 
     script:
+    def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
     """
     HLA_parser.py \\
         --opti_out ${opti_out} \\
         --hlahd_out ${hlahd_out} \\
+        ${user_hlas} \\
         --ref_hlas ${params.valid_HLAs} \\
         > ./${TumorReplicateId}_hlas.txt
     """

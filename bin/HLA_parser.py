@@ -48,18 +48,46 @@ def parse_opti(inFile, hlas=[]):
                 hlas.append("HLA-"+line[6])
     return hlas
 
+def read_custom_hla(inFile, hlas=[]):
+    for line in inFile:
+        line = line.strip()
+        hla.append(line)
+    return hlas
+
+def check_hlas(inFile, hlas=[]):
+    known_hlas = []
+    for line in inFile:
+        line = line.strip()
+        known_hlas.append(line)
+
+    valid_hlas 0 []
+    for hla in hlas:
+        if hla in known_hlas:
+            valid_hlas.append(hla)
+
+    return valid_hlas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Parse the output files of OptiType and HLA-HD for all HLA types and alleles')
     parser.add_argument('--opti_out', required=True, help='output file produced by OptiType')
     parser.add_argument('--hlahd_out', required=True, help='output file produced by HLA-HD')
+    parser.add_argument('--custom', required=False, default=False, help='User supplied 4 digit HLA type file')
     parser.add_argument('--ref_hlas', required=True, help='valid HLAs for pVACseq')
+
     args = parser.parse_args()
+
     infile = args.opti_out
     infile2 = args.hlahd_out
     infile3 = args.ref_hlas
+
     hla_array = []
+
     parse_opti(infile, hla_array)
     parse_hlahd(infile2, hla_array)
-    for hla in list(set(hla_array)):
+    if args.custom in not False:
+        read_custom_hla(args.custom, hla_array)
+
+    valid_hlas = check_hlas(infile3, hla_array)
+
+    for hla in list(set(valid_hlas)):
         print(hla)
