@@ -260,7 +260,6 @@ if (! params.batchFile) {
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
     if (have_RNAseq) {
-
         Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
