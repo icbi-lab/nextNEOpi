@@ -4374,7 +4374,7 @@ process get_vhla {
         TumorReplicateId,
         opti_out,
         hlahd_out,
-        custome_hlas
+        custom_hlas
     ) from optitype_output
         .combine(hlahd_output, by: 0)
         .combine(custom_hlas_ch, by: 0)
