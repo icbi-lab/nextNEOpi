@@ -15,3 +15,4 @@ wes.nf.back
 .nextflow/
 tmp/
 bin/compareVCF.py
+.vscode/settings.json
