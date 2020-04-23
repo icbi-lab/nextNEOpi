@@ -4004,28 +4004,17 @@ process 'pre_map_hla' {
     ) into fished_reads
 
     script:
-    if(single_end) {
-        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
-        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
-    } else {
-        yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
-        samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
-    }
+    yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+    samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
     if (single_end)
         """
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
-            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 - > mapped_1.bam
+            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
         """
     else
         """
-        mkfifo R1 R2
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
-            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
-            tee R1 R2 > /dev/null &
-        $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
-        $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
-        wait
-        rm -f R1 R2
+            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
         """
 }
 
@@ -4053,14 +4042,16 @@ process 'OptiType' {
     output:
     set (
         TumorReplicateId,
-        file("**/*_result.tsv")
+        file("${TumorReplicateId}_optitype_result.tsv")
     ) into optitype_output
-    file("**")
-    // file("**/*_result.tsv") into optitype_output
+    file("${TumorReplicateId}_coverage_plot.pdf")
 
     script:
     """
-    $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o .
+    $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
+    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_coverage_plot.pdf && \\
+    rm -rf ./tmp/
     """
 }
 
@@ -4156,7 +4147,7 @@ if (have_RNAseq) {
         output:
         set (
             TumorReplicateId,
-            file("**/*.tpm.txt") // TODO: consider changing wildcards to expected dirnames and filenames
+            file("**/${TumorReplicateId}.tpm.txt") // TODO: consider changing wildcards to expected dirnames and filenames
         ) into tpm_file
         set (
             TumorReplicateId,
