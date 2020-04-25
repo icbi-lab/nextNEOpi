@@ -177,6 +177,13 @@ if (! params.batchFile) {
             Channel
                 .empty()
                 .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+            Channel
+                .of(tuple(
+                    tumorSampleName,
+                    "NO_FILE"
+                ))
+                .set { optitype_RNA_output }
+
             have_RNAseq = false
         }
     } else  {
@@ -280,6 +287,12 @@ if (! params.batchFile) {
         Channel
             .empty()
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+        Channel
+            .of(tuple(
+                tumorSampleName,
+                "NO_FILE"
+            ))
+            .set { optitype_RNA_output }
     }
 
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
@@ -1036,6 +1049,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
             file("${trimmedReads_2}")
         ) into (
             reads_tumor_neofuse_ch,
+            reads_tumor_optitype_ch,
             reads_tumor_mixcr_RNA_ch,
             fastqc_readsRNAseq_trimmed_ch
         )
@@ -1151,6 +1165,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
             file(readsRNAseq_REV),
         ) into (
             reads_tumor_neofuse_ch,
+            reads_tumor_optitype_ch,
             reads_tumor_mixcr_RNA_ch
         )
 
@@ -4044,16 +4059,81 @@ process 'OptiType' {
         TumorReplicateId,
         file("${TumorReplicateId}_optitype_result.tsv")
     ) into optitype_output
-    file("${TumorReplicateId}_coverage_plot.pdf")
+    file("${TumorReplicateId}_optitype_coverage_plot.pdf")
 
     script:
     """
     $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
     mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
-    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_coverage_plot.pdf && \\
+    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
     rm -rf ./tmp/
     """
 }
+
+if (have_RNAseq) {
+    process 'pre_map_hla_RNA' {
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            readRNAFWD,
+            readRNAREV
+        ) from into reads_tumor_optitype_ch
+        val yaraIdx from Channel.value(reference.YaraIndex)
+
+        output:
+        set (
+            TumorReplicateId,
+            file("mapped_{1,2}.bam")
+        ) into fished_reads_RNA
+
+        script:
+        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+        if (single_end_RNA)
+            """
+            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsRNAFWD} | \\
+                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+            """
+        else
+            """
+            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsRNAFWD} ${readsRNAREV} | \\
+                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+            """
+    }
+
+    process 'OptiType_RNA' {
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
+            mode: params.publishDirMode
+
+        input:
+        set (
+            TumorReplicateId,
+            file(reads)
+        ) from fished_reads_RNA
+
+        output:
+        set (
+            TumorReplicateId,
+            file("${TumorReplicateId}_optitype_RNA_result.tsv")
+        ) into optitype_RNA_output
+        file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
+
+        script:
+        """
+        $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+        mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+        mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+        rm -rf ./tmp/
+        """
+    }
+
+}
+
 
 /*
 *********************************************
@@ -4138,8 +4218,11 @@ if (have_RNAseq) {
             TumorReplicateId,
             NormalReplicateId,
             readRNAFWD,
-            readRNAREV
+            readRNAREV,
+            hla_types
         ) from reads_tumor_neofuse_ch
+            .combine(hlas_noFuse, by: 0)
+
         file STARidx from file(reference.STARidx)
         file RefFasta from file(reference.RefFasta)
         file AnnoFile from file(reference.AnnoFile)
@@ -4157,6 +4240,7 @@ if (have_RNAseq) {
         path("${TumorReplicateId}")
 
 
+        // TODO: George: Please adujst the neoFuse options to accept the ${hla_types}
         script:
         if(single_end_RNA)
             """
@@ -4364,9 +4448,11 @@ process get_vhla {
     set (
         TumorReplicateId,
         opti_out,
+        opti_out_rna,
         hlahd_out,
         custom_hlas
     ) from optitype_output
+        .combine(optitype_RNA_output, by: 0)
         .combine(hlahd_output, by: 0)
         .combine(custom_hlas_ch, by: 0)
 
@@ -4374,14 +4460,16 @@ process get_vhla {
     set (
         TumorReplicateId,
         file("${TumorReplicateId}_hlas.txt")
-    ) into hlas
+    ) into (hlas, hlas_noFuse)
 
     script:
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
+    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna" : ''
     """
     HLA_parser.py \\
         --opti_out ${opti_out} \\
         --hlahd_out ${hlahd_out} \\
+        ${rna_hlas} \\
         ${user_hlas} \\
         --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
         > ./${TumorReplicateId}_hlas.txt

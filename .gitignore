@@ -16,3 +16,4 @@ wes.nf.back
 tmp/
 bin/compareVCF.py
 .vscode/settings.json
+.vscode/.ropeproject/config.py
