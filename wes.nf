@@ -4094,12 +4094,12 @@ if (have_RNAseq) {
         samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
         if (single_end_RNA)
             """
-            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsRNAFWD} | \\
+            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
                 $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
             """
         else
             """
-            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsRNAFWD} ${readsRNAREV} | \\
+            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
                 $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
             """
     }
