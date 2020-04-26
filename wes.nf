@@ -4080,7 +4080,7 @@ if (have_RNAseq) {
             NormalReplicateId,
             readRNAFWD,
             readRNAREV
-        ) from into reads_tumor_optitype_ch
+        ) from reads_tumor_optitype_ch
         val yaraIdx from Channel.value(reference.YaraIndex)
 
         output:
