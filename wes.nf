@@ -4191,6 +4191,47 @@ process 'run_hla_hd' {
             ${gSplit} ${dict} $TumorReplicateId .
         """
 }
+
+/*
+Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
+To be used as input for pVACseq
+*/
+
+process get_vhla {
+    tag "$TumorReplicateId"
+
+    input:
+    set (
+        TumorReplicateId,
+        opti_out,
+        opti_out_rna,
+        hlahd_out,
+        custom_hlas
+    ) from optitype_output
+        .combine(optitype_RNA_output, by: 0)
+        .combine(hlahd_output, by: 0)
+        .combine(custom_hlas_ch, by: 0)
+
+    output:
+    set (
+        TumorReplicateId,
+        file("${TumorReplicateId}_hlas.txt")
+    ) into (hlas, hlas_neoFuse)
+
+    script:
+    def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
+    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna" : ''
+    """
+    HLA_parser.py \\
+        --opti_out ${opti_out} \\
+        --hlahd_out ${hlahd_out} \\
+        ${rna_hlas} \\
+        ${user_hlas} \\
+        --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
+        > ./${TumorReplicateId}_hlas.txt
+    """
+}
+
 // END HLA TYPING
 
 // NeoAntigen predictions
@@ -4221,7 +4262,7 @@ if (have_RNAseq) {
             readRNAREV,
             hla_types
         ) from reads_tumor_neofuse_ch
-            .combine(hlas_noFuse, by: 0)
+            .combine(hlas_neoFuse, by: 0)
 
         file STARidx from file(reference.STARidx)
         file RefFasta from file(reference.RefFasta)
@@ -4434,46 +4475,6 @@ if (have_RNAseq) {
         """
         """
     }
-}
-
-/*
-Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
-To be used as input for pVACseq
-*/
-
-process get_vhla {
-    tag "$TumorReplicateId"
-
-    input:
-    set (
-        TumorReplicateId,
-        opti_out,
-        opti_out_rna,
-        hlahd_out,
-        custom_hlas
-    ) from optitype_output
-        .combine(optitype_RNA_output, by: 0)
-        .combine(hlahd_output, by: 0)
-        .combine(custom_hlas_ch, by: 0)
-
-    output:
-    set (
-        TumorReplicateId,
-        file("${TumorReplicateId}_hlas.txt")
-    ) into (hlas, hlas_noFuse)
-
-    script:
-    def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna" : ''
-    """
-    HLA_parser.py \\
-        --opti_out ${opti_out} \\
-        --hlahd_out ${hlahd_out} \\
-        ${rna_hlas} \\
-        ${user_hlas} \\
-        --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
-        > ./${TumorReplicateId}_hlas.txt
-    """
 }
 
 /*
