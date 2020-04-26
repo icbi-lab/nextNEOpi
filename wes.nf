@@ -4805,16 +4805,15 @@ process immunogenicity_scoring {
         --pvacseq_out $pvacseq_file \\
         --sample_id $TumorReplicateId \\
         --output ./${TumorReplicateId}_epitopes.tsv
-    """
-    def epitopes = file(TumorReplicateId + "_epitopes.tsv")
-    if (epitopes.countLines() > 1)
-    """
-    NeoAg_immunogenicity_predicition_GBM.R \\
-        ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv
-    immuno_score.py \\
-        --pvacseq_tsv $pvacseq_file \\
-        --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
-        --output ${TumorReplicateId}_immunogenicity.tsv
+    NR_EPI=`wc -l ./${TumorReplicateId}_epitopes.tsv | cut -d" " -f 1`
+    if [ \$NR_EPI -gt 1 ]; then
+        NeoAg_immunogenicity_predicition_GBM.R \\
+            ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv
+        immuno_score.py \\
+            --pvacseq_tsv $pvacseq_file \\
+            --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
+            --output ${TumorReplicateId}_immunogenicity.tsv
+    fi
     """
 }
 
