@@ -4806,7 +4806,7 @@ process immunogenicity_scoring {
         --sample_id $TumorReplicateId \\
         --output ./${TumorReplicateId}_epitopes.tsv
     """
-    def epitopes = file("./${TumorReplicateId}_epitopes.tsv")
+    def epitopes = file(TumorReplicateId + "_epitopes.tsv")
     if (epitopes.countLines() > 1)
     """
     NeoAg_immunogenicity_predicition_GBM.R \\
