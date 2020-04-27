@@ -1,5 +1,6 @@
 # Conda environment for GATK Python Tools
 #
+# Adapted by ICBI
 name: gatk
 channels:
 - defaults
