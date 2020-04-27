@@ -4028,8 +4028,7 @@ process 'mhc_extract' {
         TumorReplicateId,
         NormalReplicateId,
         file("${mhcReads_1}"),
-        file("${mhcReads_2}"),
-        _,      // unused so far
+        file("${mhcReads_2}")
     ) into (
         reads_tumor_hla_ch,
         reads_tumor_hlaHD_ch
@@ -4112,7 +4111,6 @@ process 'pre_map_hla' {
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
-        sampleGroup,      // unused so far
     ) from reads_tumor_hla_ch
     val yaraIdx from Channel.value(reference.YaraIndex)
 
@@ -4259,8 +4257,7 @@ process 'run_hla_hd' {
         TumorReplicateId,
         _,
         file(readsFWD),
-        file(readsREV),
-        sampleGroup,      // unused so far
+        file(readsREV)
     ) from reads_tumor_hlaHD_ch
     val frData from Channel.value(reference.HLAHDFreqData)
     file gSplit from Channel.value(reference.HLAHDGeneSplit)
