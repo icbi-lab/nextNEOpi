@@ -2284,9 +2284,9 @@ process 'gatherMutect2VCFs' {
         --stats ${stats.join(" --stats ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats
 
-    $GATK LearnReadOrientationModel \\
+    $GATK4 LearnReadOrientationModel \\
         --tmp-dir ${params.tmpDir} \\
-        -I ${r2_tar_gz.join(" -I ")} \\
+        -I ${f1r2_tar_gz.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
     """
 }
@@ -2392,10 +2392,10 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
         #    --tmp-dir ${params.tmpDir} \\
         #    -V ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
         #    -P ${preAdapterDetail} \\
-        #    -O ${TumorReplicateId}_${NormalReplicateId}_twicefitlered.vcf.gz && \\
+        #    -O ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz && \\
         $GATK4 SelectVariants \\
             --tmp-dir ${params.tmpDir} \\
-            --variant ${TumorReplicateId}_${NormalReplicateId}_twicefitlered.vcf.gz \\
+            --variant ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz \\
             -R ${RefFasta} \\
             --exclude-filtered true \\
             --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
@@ -4397,8 +4397,8 @@ if (have_RNAseq) {
                 -s ${STARidx} \\
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
+                -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -N ${params.netMHCpan}
             """
         else
             """
@@ -4414,8 +4414,8 @@ if (have_RNAseq) {
                 -s ${STARidx} \\
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
+                -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -N ${params.netMHCpan}
             """
     }
 
