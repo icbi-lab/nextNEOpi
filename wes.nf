@@ -319,6 +319,7 @@ GATK4         = file(params.GATK4)
 GATK3         = file(params.GATK3)
 MUTECT1       = file(params.MUTECT1)
 SAMTOOLS      = file(params.SAMTOOLS)
+SAMBAMBA      = file(params.SAMBAMBA)
 VEP           = file(params.VEP)
 PICARD        = file(params.PICARD)
 BAMREADCOUNT  = file(params.BAMREADCOUNT)
@@ -1244,8 +1245,61 @@ process 'BwaTumor' {
 }
 
 
+// process 'MarkDuplicatesTumor' {
+// // Mark duplicates with Picard
+
+//     tag "$TumorReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+//         mode: params.publishDirMode
+
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam)
+//     ) from BwaTumor_out_ch0
+
+//     output:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
+//         file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
+//         file("${TumorReplicateId}_aligned_sort_mkdp.txt")
+//     ) into (
+//         MarkDuplicatesTumor_out_ch0,
+//         MarkDuplicatesTumor_out_ch1,
+//         MarkDuplicatesTumor_out_ch2,
+//         MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
+//     )
+
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${TumorReplicateId}_aligned_sort_mkdp.txt")
+//     ) into MarkDuplicatesTumor_out_ch4 // multiQC
+
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
+
+//     $GATK4 MarkDuplicatesSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -O ${TumorReplicateId}_aligned_sort_mkdp.bam \\
+//         -M ${TumorReplicateId}_aligned_sort_mkdp.txt \\
+//         --create-output-bam-index true \\
+//         --read-validation-stringency LENIENT \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
+//     """
+// }
+
 process 'MarkDuplicatesTumor' {
-// Mark duplicates with Picard
+// Mark duplicates with sambamba
 
     tag "$TumorReplicateId"
 
@@ -1264,8 +1318,7 @@ process 'MarkDuplicatesTumor' {
         TumorReplicateId,
         NormalReplicateId,
         file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-        file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
-        file("${TumorReplicateId}_aligned_sort_mkdp.txt")
+        file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai")
     ) into (
         MarkDuplicatesTumor_out_ch0,
         MarkDuplicatesTumor_out_ch1,
@@ -1273,29 +1326,26 @@ process 'MarkDuplicatesTumor' {
         MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
     )
 
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_aligned_sort_mkdp.txt")
-    ) into MarkDuplicatesTumor_out_ch4 // multiQC
-
     script:
     """
     mkdir -p ${params.tmpDir}
-
-    $GATK4 MarkDuplicatesSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -O ${TumorReplicateId}_aligned_sort_mkdp.bam \\
-        -M ${TumorReplicateId}_aligned_sort_mkdp.txt \\
-        --create-output-bam-index true \\
-        --read-validation-stringency LENIENT \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
+    $SAMBAMBA markdup \\
+        -t ${task.cpus} \\
+        --tmpdir ${params.tmpDir} \\
+        --hash-table-size=${params.SB_hash-table-size } \\
+        --overflow-list-size=${params.SB_overflow-list-size} \\
+        --io-buffer-size=${params.SB_io-buffer-size} \\
+        ${bam} \\
+        /dev/stdout | \\
+    samtools sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -O BAM \\
+        -o ${TumorReplicateId}_aligned_sort_mkdp.bam -
+    samtools index -@${task.cpus} ${TumorReplicateId}_aligned_sort_mkdp.bam
     """
 }
+
 
 if(params.WES) {
     process 'alignmentMetricsTumor' {
@@ -1311,8 +1361,7 @@ if(params.WES) {
             TumorReplicateId,
             NormalReplicateId,
             file(bam),
-            file(bai),
-            _
+            file(bai)
         ) from MarkDuplicatesTumor_out_ch0
 
         set(
@@ -1438,10 +1487,62 @@ process 'BwaNormal' {
 }
 
 
-process 'MarkDuplicatesNormal' {
-// Mark duplicates with Picard
+// process 'MarkDuplicatesNormal' {
+// // Mark duplicates with Picard
 
-    tag "$NormalReplicateId"
+//     tag "$NormalReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+//         mode: params.publishDirMode
+
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam)
+//     ) from BwaNormal_out_ch0
+
+//     output:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${NormalReplicateId}_aligned_sort_mkdp.bam"),
+//         file("${NormalReplicateId}_aligned_sort_mkdp.bam.bai"),
+//         file("${NormalReplicateId}_aligned_sort_mkdp.txt")
+//     ) into (
+//         MarkDuplicatesNormal_out_ch0,
+//         MarkDuplicatesNormal_out_ch1,
+//         MarkDuplicatesNormal_out_ch2
+//     )
+
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${NormalReplicateId}_aligned_sort_mkdp.txt")
+//     ) into MarkDuplicatesNormal_out_ch3 // multiQC
+
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
+
+//     $GATK4 MarkDuplicatesSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -O ${NormalReplicateId}_aligned_sort_mkdp.bam \\
+//         -M ${NormalReplicateId}_aligned_sort_mkdp.txt \\
+//         --create-output-bam-index true \\
+//         --read-validation-stringency LENIENT \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
+//     """
+// }
+
+process 'MarkDuplicatesNormal' {
+// Mark duplicates with sambamba
+
+    tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
         mode: params.publishDirMode
@@ -1458,37 +1559,33 @@ process 'MarkDuplicatesNormal' {
         TumorReplicateId,
         NormalReplicateId,
         file("${NormalReplicateId}_aligned_sort_mkdp.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp.bam.bai"),
-        file("${NormalReplicateId}_aligned_sort_mkdp.txt")
+        file("${NormalReplicateId}_aligned_sort_mkdp.bam.bai")
     ) into (
         MarkDuplicatesNormal_out_ch0,
         MarkDuplicatesNormal_out_ch1,
         MarkDuplicatesNormal_out_ch2
     )
 
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_aligned_sort_mkdp.txt")
-    ) into MarkDuplicatesNormal_out_ch3 // multiQC
-
     script:
     """
     mkdir -p ${params.tmpDir}
-
-    $GATK4 MarkDuplicatesSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -O ${NormalReplicateId}_aligned_sort_mkdp.bam \\
-        -M ${NormalReplicateId}_aligned_sort_mkdp.txt \\
-        --create-output-bam-index true \\
-        --read-validation-stringency LENIENT \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
+    $SAMBAMBA markdup \\
+        -t ${task.cpus} \\
+        --tmpdir ${params.tmpDir} \\
+        --hash-table-size=${params.SB_hash-table-size } \\
+        --overflow-list-size=${params.SB_overflow-list-size} \\
+        --io-buffer-size=${params.SB_io-buffer-size} \\
+        ${bam} \\
+        /dev/stdout | \\
+    samtools sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -O BAM \\
+        -o ${NormalReplicateId}_aligned_sort_mkdp.bam -
+    samtools index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp.bam
     """
 }
+
 
 if (params.WES) {
     process 'alignmentMetricsNormal' {
@@ -1504,8 +1601,7 @@ if (params.WES) {
             TumorReplicateId,
             NormalReplicateId,
             file(bam),
-            file(bai),
-            _
+            file(bai)
         ) from MarkDuplicatesNormal_out_ch0
 
         set(
@@ -1598,8 +1694,7 @@ process 'BaseRecalTumorGATK4' {
         TumorReplicateId,
         NormalReplicateId,
         file(bam),
-        file(bai),
-        file(list)
+        file(bai)
     ) from MarkDuplicatesTumor_out_ch1
 
     set(
@@ -1664,20 +1759,7 @@ process 'BaseRecalTumorGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I fixed.bam \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_bqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
+    $GATK4 BaseRecalibratorSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I fixed.bam \\
@@ -1686,7 +1768,20 @@ process 'BaseRecalTumorGATK4' {
         -O ${TumorReplicateId}_bqsr.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} \\
+        --spark-master local[${task.cpus}] \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    # $GATK4 BaseRecalibrator \\
+    #    --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I fixed.bam \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${TumorReplicateId}_bqsr.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -1815,20 +1910,7 @@ process 'AnalyzeCovariates' {
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_postbqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
+    $GATK4 BaseRecalibratorSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
@@ -1837,7 +1919,20 @@ process 'AnalyzeCovariates' {
         -O ${TumorReplicateId}_postbqsr.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} \\
+        --spark-master local[${task.cpus}] \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    # $GATK4 BaseRecalibrator \\
+    #    --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I ${bam} \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${TumorReplicateId}_postbqsr.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} && \\
     $GATK4 AnalyzeCovariates \\
         --tmp-dir ${params.tmpDir} \\
         -before ${recalTable} \\
@@ -1922,8 +2017,7 @@ process 'BaseRecalNormalGATK4' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(bam), file(bai),
-        file(list)
+        file(bam), file(bai)
     ) from MarkDuplicatesNormal_out_ch1
 
     set(
@@ -1986,20 +2080,7 @@ process 'BaseRecalNormalGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I Normal_fixed.bam \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${NormalReplicateId}_bqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
+    $GATK4 BaseRecalibratorSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I Normal_fixed.bam \\
@@ -2008,7 +2089,20 @@ process 'BaseRecalNormalGATK4' {
         -O ${NormalReplicateId}_bqsr.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} \\
+        --spark-master local[${task.cpus}] \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    # $GATK4 BaseRecalibrator \\
+    #    --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I Normal_fixed.bam \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${NormalReplicateId}_bqsr.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -2116,7 +2210,8 @@ process 'Mutect2' {
         NormalReplicateId,
         file("${TumorReplicateId}_${intervals}.vcf.gz"),
         file("${TumorReplicateId}_${intervals}.vcf.gz.stats"),
-        file("${TumorReplicateId}_${intervals}.vcf.gz.tbi")
+        file("${TumorReplicateId}_${intervals}.vcf.gz.tbi"),
+        file("${TumorReplicateId}_${intervals}-f1r2.tar.gz")
     ) into Mutect2_out_ch0
 
 
@@ -2140,6 +2235,7 @@ process 'Mutect2' {
         ${panel_of_normals} \\
         -L ${intervals} \\
         --native-pair-hmm-threads ${task.cpus} \\
+        --f1r2-tar-gz ${TumorReplicateId}_${intervals}-f1r2.tar.gz \\
         -O ${TumorReplicateId}_${intervals}.vcf.gz
     """
 }
@@ -2158,7 +2254,8 @@ process 'gatherMutect2VCFs' {
         NormalReplicateId,
         file(vcf),
         file(stats),
-        file(idx)
+        file(idx),
+        file(f1r2-tar-gz)
     ) from Mutect2_out_ch0
         .groupTuple(by: [0, 1])
 
@@ -2169,7 +2266,8 @@ process 'gatherMutect2VCFs' {
         NormalReplicateId,
         file("${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.tbi"),
-        file("${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats")
+        file("${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats"),
+        file("${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz")
     ) into gatherMutect2VCFs_out_ch0
 
     script:
@@ -2185,6 +2283,11 @@ process 'gatherMutect2VCFs' {
         --tmp-dir ${params.tmpDir} \\
         --stats ${stats.join(" --stats ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats
+
+    $GATK LearnReadOrientationModel \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${r2-tar-gz.join(" -I ")} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
     """
 }
 
@@ -2223,10 +2326,11 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
         _,
         file(vcf),
         file(vcfIdx),
-        file(vcfStats)
+        file(vcfStats),
+        file(f1r2-tar-gz)
     ) from GetPileupTumor_out_ch1
-    .combine(GetPileupNormal_out_ch0, by :0)
-    .combine(gatherMutect2VCFs_out_ch0, by :0)
+        .combine(GetPileupNormal_out_ch0, by :0)
+        .combine(gatherMutect2VCFs_out_ch0, by :0)
 
     file(preAdapterDetail) from CollectSequencingArtifactMetrics_out_ch0
 
@@ -2257,6 +2361,7 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -R ${RefFasta} \\
             -V ${vcf} \\
             --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
+            --ob-priors ${f1r2-tar-gz} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
         $GATK4 SelectVariants \\
             --tmp-dir ${params.tmpDir} \\
@@ -2280,12 +2385,14 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -R ${RefFasta} \\
             -V ${vcf} \\
             --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
-        $GATK4 FilterByOrientationBias \\
-            --tmp-dir ${params.tmpDir} \\
-            -V ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
-            -P ${preAdapterDetail} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_twicefitlered.vcf.gz && \\
+            --ob-priors ${f1r2-tar-gz} \\
+            -O ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz && \\
+        # -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
+        # $GATK4 FilterByOrientationBias \\
+        #    --tmp-dir ${params.tmpDir} \\
+        #    -V ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
+        #    -P ${preAdapterDetail} \\
+        #    -O ${TumorReplicateId}_${NormalReplicateId}_twicefitlered.vcf.gz && \\
         $GATK4 SelectVariants \\
             --tmp-dir ${params.tmpDir} \\
             --variant ${TumorReplicateId}_${NormalReplicateId}_twicefitlered.vcf.gz \\
@@ -2556,8 +2663,7 @@ process 'IndelRealignerTumorIntervals' {
         TumorReplicateId,
         NormalReplicateId,
         file(bam),
-        file(bai),
-        file(list)
+        file(bai)
     ) from MarkDuplicatesTumor_out_ch2
 
     set(
@@ -2728,20 +2834,7 @@ process 'BaseRecalTumorGATK3' {
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_bqsr4.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
+    $GATK4 BaseRecalibratorSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
@@ -2750,7 +2843,20 @@ process 'BaseRecalTumorGATK3' {
         -O ${TumorReplicateId}_bqsr4.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} \\
+        --spark-master local[${task.cpus}] \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    # $GATK4 BaseRecalibrator \\
+    #    --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I ${bam} \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${TumorReplicateId}_bqsr4.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -2778,8 +2884,7 @@ IndelRealigner (GATK3): perform local realignment of reads around indels
         TumorReplicateId,
         NormalReplicateId,
         file(bam),
-        file(bai),
-        file(list)
+        file(bai)
     ) from MarkDuplicatesNormal_out_ch2
 
     set(
@@ -2953,20 +3058,7 @@ all mate-pair information is in sync between reads and its pairs
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${NormalReplicateId}_bqsr4.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
+    $GATK4 BaseRecalibratorSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
@@ -2975,7 +3067,20 @@ all mate-pair information is in sync between reads and its pairs
         -O ${NormalReplicateId}_bqsr4.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} \\
+        --spark-master local[${task.cpus}] \\
+        --conf 'spark.executor.cores=${task.cpus}' \\
+        --conf 'spark.local.dir=${params.tmpDir}' && \\
+    # $GATK4 BaseRecalibrator \\
+    #    --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I ${bam} \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${NormalReplicateId}_bqsr4.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -3914,8 +4019,7 @@ process 'mhc_extract' {
         TumorReplicateId,
         NormalReplicateId,
         file(tumor_BAM_aligned_sort_mkdp),
-        file(tumor_BAI_aligned_sort_mkdp),
-        _
+        file(tumor_BAI_aligned_sort_mkdp)
     ) from MarkDuplicatesTumor_out_ch3
 
 
@@ -4942,8 +5046,6 @@ process multiQC {
         file("*"),
         file("*"),
         file("*"),
-        file("*"),
-        file("*"),
         file("*")
     )   from ch_fastqc
             .combine(ch_fastp_tumor, by: [0,1])
@@ -4951,9 +5053,7 @@ process multiQC {
             .combine(ch_fastqc_trimmed, by: [0,1])
             .combine(ch_fastp_RNAseq, by: [0,1])
             .combine(ch_fastqc_trimmed_RNAseq, by: [0,1])
-            .combine(MarkDuplicatesTumor_out_ch4, by: [0,1])
             .combine(alignmentMetricsTumor_ch, by: [0,1])
-            .combine(MarkDuplicatesNormal_out_ch3, by: [0,1])
             .combine(alignmentMetricsNormal_ch, by: [0,1])
 
     output:
