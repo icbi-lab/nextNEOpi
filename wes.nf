@@ -4923,7 +4923,7 @@ if(params.TCR) {
     process mixcr_DNA_tumor {
         tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+        publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
             mode: params.publishDirMode
 
         input:
@@ -4938,7 +4938,7 @@ if(params.TCR) {
         output:
         set(
             TumorReplicateId,
-            file("${TumorReplicateId}_mixcr_DNA.*.txt"),
+            file("${TumorReplicateId}_mixcr_DNA.clonotypes.ALL.txt"),
         )
 
         script:
@@ -4957,7 +4957,7 @@ if(params.TCR) {
     process mixcr_DNA_normal {
         tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+        publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
             mode: params.publishDirMode
 
         input:
@@ -4972,7 +4972,7 @@ if(params.TCR) {
         output:
         set(
             NormalReplicateId,
-            file("${NormalReplicateId}_mixcr_DNA.*.txt"),
+            file("${NormalReplicateId}_mixcr_DNA.clonotypes.ALL.txt"),
         )
 
         script:
@@ -4992,7 +4992,7 @@ if(params.TCR) {
         process mixcr_RNA {
             tag "$TumorReplicateId"
 
-            publishDir "$params.outputDir/$TumorReplicateId/13_TCRs",
+            publishDir "$params.outputDir/$TumorReplicateId/13_MixCR",
                 mode: params.publishDirMode
 
             input:
@@ -5006,7 +5006,7 @@ if(params.TCR) {
             output:
             set(
                 TumorReplicateId,
-                file("${TumorReplicateId}_mixcr_RNA.*.txt"),
+                file("${TumorReplicateId}_mixcr_RNA.clonotypes.ALL.txt"),
             )
 
             script:
