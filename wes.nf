@@ -1332,9 +1332,9 @@ process 'MarkDuplicatesTumor' {
     $SAMBAMBA markdup \\
         -t ${task.cpus} \\
         --tmpdir ${params.tmpDir} \\
-        --hash-table-size=${params.SB_hash-table-size } \\
-        --overflow-list-size=${params.SB_overflow-list-size} \\
-        --io-buffer-size=${params.SB_io-buffer-size} \\
+        --hash-table-size=${params.SB_hash_table_size } \\
+        --overflow-list-size=${params.SB_overflow_list_size} \\
+        --io-buffer-size=${params.SB_io_buffer_size} \\
         ${bam} \\
         /dev/stdout | \\
     samtools sort \\
@@ -1572,9 +1572,9 @@ process 'MarkDuplicatesNormal' {
     $SAMBAMBA markdup \\
         -t ${task.cpus} \\
         --tmpdir ${params.tmpDir} \\
-        --hash-table-size=${params.SB_hash-table-size } \\
-        --overflow-list-size=${params.SB_overflow-list-size} \\
-        --io-buffer-size=${params.SB_io-buffer-size} \\
+        --hash-table-size=${params.SB_hash_table_size } \\
+        --overflow-list-size=${params.SB_overflow_list_size} \\
+        --io-buffer-size=${params.SB_io_buffer_size} \\
         ${bam} \\
         /dev/stdout | \\
     samtools sort \\
