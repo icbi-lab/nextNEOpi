@@ -4382,7 +4382,6 @@ if (have_RNAseq) {
         path("${TumorReplicateId}")
 
 
-        // TODO: George: Please adujst the neoFuse options to accept the ${hla_types}
         script:
         if(single_end_RNA)
             """
@@ -4398,6 +4397,7 @@ if (have_RNAseq) {
                 -s ${STARidx} \\
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
+                -C ${hla_types} \\
                 -N ${params.netMHCpan}
             """
         else
@@ -4414,6 +4414,7 @@ if (have_RNAseq) {
                 -s ${STARidx} \\
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
+                -C ${hla_types} \\
                 -N ${params.netMHCpan}
             """
     }
