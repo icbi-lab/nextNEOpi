@@ -2255,7 +2255,7 @@ process 'gatherMutect2VCFs' {
         file(vcf),
         file(stats),
         file(idx),
-        file(f1r2-tar-gz)
+        file(f1r2_tar_gz)
     ) from Mutect2_out_ch0
         .groupTuple(by: [0, 1])
 
@@ -2286,7 +2286,7 @@ process 'gatherMutect2VCFs' {
 
     $GATK LearnReadOrientationModel \\
         --tmp-dir ${params.tmpDir} \\
-        -I ${r2-tar-gz.join(" -I ")} \\
+        -I ${r2_tar_gz.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
     """
 }
