@@ -2327,7 +2327,7 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
         file(vcf),
         file(vcfIdx),
         file(vcfStats),
-        file(f1r2-tar-gz)
+        file(f1r2_tar_gz)
     ) from GetPileupTumor_out_ch1
         .combine(GetPileupNormal_out_ch0, by :0)
         .combine(gatherMutect2VCFs_out_ch0, by :0)
@@ -2361,7 +2361,7 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -R ${RefFasta} \\
             -V ${vcf} \\
             --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
-            --ob-priors ${f1r2-tar-gz} \\
+            --ob-priors ${f1r2_tar_gz} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
         $GATK4 SelectVariants \\
             --tmp-dir ${params.tmpDir} \\
@@ -2385,7 +2385,7 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -R ${RefFasta} \\
             -V ${vcf} \\
             --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
-            --ob-priors ${f1r2-tar-gz} \\
+            --ob-priors ${f1r2_tar_gz} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz && \\
         # -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
         # $GATK4 FilterByOrientationBias \\
