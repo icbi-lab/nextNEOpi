@@ -4398,7 +4398,7 @@ if (have_RNAseq) {
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
-                -C ${hla_types} \\
+                -C ${hla_types}
             """
         else
             """
@@ -4415,7 +4415,7 @@ if (have_RNAseq) {
                 -g ${RefFasta} \\
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
-                -C ${hla_types} \\
+                -C ${hla_types}
             """
     }
 
