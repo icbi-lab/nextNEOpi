@@ -1761,20 +1761,7 @@ process 'BaseRecalTumorGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    $GATK4 BaseRecalibratorSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I fixed.bam \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_bqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' && \\
-    # $GATK4 BaseRecalibrator \\
+    # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
     #    --tmp-dir ${params.tmpDir} \\
     #    -I fixed.bam \\
@@ -1783,7 +1770,20 @@ process 'BaseRecalTumorGATK4' {
     #    -O ${TumorReplicateId}_bqsr.table \\
     #    --known-sites ${DBSNP} \\
     #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} && \\
+    #    --known-sites ${MillsGold} \\
+    #    --spark-master local[${task.cpus}] \\
+    #    --conf 'spark.executor.cores=${task.cpus}' \\
+    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I fixed.bam \\
+        -R ${RefFasta} \\
+        -L ${IntervalsList} \\
+        -O ${TumorReplicateId}_bqsr.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -1912,7 +1912,20 @@ process 'AnalyzeCovariates' {
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    $GATK4 BaseRecalibratorSpark \\
+    # $GATK4 BaseRecalibratorSpark \\
+    #   --java-options '${params.JAVA_Xmx_spark}' \\
+    #    --tmp-dir ${params.tmpDir} \\
+    #    -I ${bam} \\
+    #    -R ${RefFasta} \\
+    #    -L ${IntervalsList} \\
+    #    -O ${TumorReplicateId}_postbqsr.table \\
+    #    --known-sites ${DBSNP} \\
+    #    --known-sites ${KnownIndels} \\
+    #    --known-sites ${MillsGold} \\
+    #    --spark-master local[${task.cpus}] \\
+    #    --conf 'spark.executor.cores=${task.cpus}' \\
+    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 BaseRecalibrator \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
@@ -1921,20 +1934,7 @@ process 'AnalyzeCovariates' {
         -O ${TumorReplicateId}_postbqsr.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' && \\
-    # $GATK4 BaseRecalibrator \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_postbqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} && \\
+        --known-sites ${MillsGold} && \\
     $GATK4 AnalyzeCovariates \\
         --tmp-dir ${params.tmpDir} \\
         -before ${recalTable} \\
@@ -2082,20 +2082,7 @@ process 'BaseRecalNormalGATK4' {
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    $GATK4 BaseRecalibratorSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I Normal_fixed.bam \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_bqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' && \\
-    # $GATK4 BaseRecalibrator \\
+    # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
     #    --tmp-dir ${params.tmpDir} \\
     #    -I Normal_fixed.bam \\
@@ -2104,7 +2091,20 @@ process 'BaseRecalNormalGATK4' {
     #    -O ${NormalReplicateId}_bqsr.table \\
     #    --known-sites ${DBSNP} \\
     #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} && \\
+    #    --known-sites ${MillsGold} \\
+    #    --spark-master local[${task.cpus}] \\
+    #    --conf 'spark.executor.cores=${task.cpus}' \\
+    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I Normal_fixed.bam \\
+        -R ${RefFasta} \\
+        -L ${IntervalsList} \\
+        -O ${NormalReplicateId}_bqsr.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -2836,20 +2836,7 @@ process 'BaseRecalTumorGATK3' {
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    $GATK4 BaseRecalibratorSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_bqsr4.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' && \\
-    # $GATK4 BaseRecalibrator \\
+    # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
     #    --tmp-dir ${params.tmpDir} \\
     #    -I ${bam} \\
@@ -2858,7 +2845,20 @@ process 'BaseRecalTumorGATK3' {
     #    -O ${TumorReplicateId}_bqsr4.table \\
     #    --known-sites ${DBSNP} \\
     #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} && \\
+    #    --known-sites ${MillsGold} \\
+    #    --spark-master local[${task.cpus}] \\
+    #    --conf 'spark.executor.cores=${task.cpus}' \\
+    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${bam} \\
+        -R ${RefFasta} \\
+        -L ${IntervalsList} \\
+        -O ${TumorReplicateId}_bqsr4.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
@@ -3060,20 +3060,7 @@ all mate-pair information is in sync between reads and its pairs
     mkdir -p ${params.tmpDir}
 
     # TODO: re-add later when more stable. Commented out do to crashing randomly
-    $GATK4 BaseRecalibratorSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_bqsr4.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}' && \\
-    # $GATK4 BaseRecalibrator \\
+    # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
     #    --tmp-dir ${params.tmpDir} \\
     #    -I ${bam} \\
@@ -3082,7 +3069,20 @@ all mate-pair information is in sync between reads and its pairs
     #    -O ${NormalReplicateId}_bqsr4.table \\
     #    --known-sites ${DBSNP} \\
     #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} && \\
+    #    --known-sites ${MillsGold} \\
+    #    --spark-master local[${task.cpus}] \\
+    #    --conf 'spark.executor.cores=${task.cpus}' \\
+    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx_spark}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${bam} \\
+        -R ${RefFasta} \\
+        -L ${IntervalsList} \\
+        -O ${NormalReplicateId}_bqsr4.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold} && \\
     $GATK4 ApplyBQSRSpark \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
