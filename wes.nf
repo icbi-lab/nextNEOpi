@@ -784,6 +784,7 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_tumor_ch,
+            reads_tumor_uBAM_ch,
             reads_tumor_mixcr_DNA_ch,
             fastqc_reads_tumor_trimmed_ch
         )
@@ -861,6 +862,7 @@ if (params.trim_adapters) {
             sampleGroup
         ) into (
             reads_normal_ch,
+            reads_normal_uBAM_ch,
             reads_normal_mixcr_DNA_ch,
             fastqc_reads_normal_trimmed_ch
         )
@@ -997,6 +999,7 @@ if (params.trim_adapters) {
             sampleGroup,      // unused so far
         ) into (
             reads_tumor_ch,
+            reads_tumor_uBAM_ch,
             reads_tumor_mixcr_DNA_ch
         )
         set(
@@ -1007,6 +1010,7 @@ if (params.trim_adapters) {
             sampleGroup,      // unused so far
         ) into (
             reads_normal_ch,
+            reads_normal_uBAM_ch,
             reads_normal_mixcr_DNA_ch
         )
 
@@ -1187,6 +1191,60 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
 
 
 /// start processing reads
+process 'make_uBAM_Tumor' {
+// make uBAM tumor
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsFWD),
+        file(readsREV),
+        sampleGroup,      // unused so far
+    ) from reads_tumor_uBAM_ch
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_unaligned.bam")
+    ) into tumor_uBAM_out_ch0
+
+    script:
+    if (single_end)
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
+            TMP_DIR=${params.tmpDir} \\
+            F1=${readsFWD} \\
+            READ_GROUP_NAME=${TumorReplicateId} \\
+            SAMPLE_NAME=${TumorReplicateId} \\
+            LIBRARY_NAME=${TumorReplicateId} \\
+            PLATFORM=ILLUMINA \\
+            O=${TumorReplicateId}_unaligned.bam
+        """
+    else
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
+            TMP_DIR=${params.tmpDir} \\
+            F1=${readsFWD} \\
+            F2=${readsREV} \\
+            READ_GROUP_NAME=${TumorReplicateId} \\
+            SAMPLE_NAME=${TumorReplicateId} \\
+            LIBRARY_NAME=${TumorReplicateId} \\
+            PLATFORM=ILLUMINA \\
+            O=${TumorReplicateId}_unaligned.bam
+        """
+}
+
+
 process 'BwaTumor' {
 // Aligning tumor reads to reference, sort and index; create BAMs
 
@@ -1429,6 +1487,61 @@ if(params.WES) {
         """
     }
 }
+
+
+process 'make_uBAM_Normal' {
+// make uBAM normal
+
+    tag "$NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(readsFWD),
+        file(readsREV),
+        sampleGroup,      // unused so far
+    ) from reads_normal_uBAM_ch
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${NormalReplicateId}_unaligned.bam")
+    ) into normal_uBAM_out_ch0
+
+    script:
+    if (single_end)
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
+            TMP_DIR=${params.tmpDir} \\
+            F1=${readsFWD} \\
+            READ_GROUP_NAME=${NormalReplicateId} \\
+            SAMPLE_NAME=${NormalReplicateId} \\
+            LIBRARY_NAME=${NormalReplicateId} \\
+            PLATFORM=ILLUMINA \\
+            O=${NormalReplicateId}_unaligned.bam
+        """
+    else
+        """
+        mkdir -p ${params.tmpDir}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
+            TMP_DIR=${params.tmpDir} \\
+            F1=${readsFWD} \\
+            F2=${readsREV} \\
+            READ_GROUP_NAME=${NormalReplicateId} \\
+            SAMPLE_NAME=${NormalReplicateId} \\
+            LIBRARY_NAME=${NormalReplicateId} \\
+            PLATFORM=ILLUMINA \\
+            O=${NormalReplicateId}_unaligned.bam
+        """
+}
+
 
 process 'BwaNormal' {
 // Aligning Normal reads to reference, sort and index; create BAMs
