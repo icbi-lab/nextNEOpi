@@ -1453,7 +1453,7 @@ process 'MarkDuplicatesTumor' {
         TumorReplicateId,
         NormalReplicateId,
         file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-        file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai")
+        file("${TumorReplicateId}_aligned_sort_mkdp.bai")
     ) into (
         MarkDuplicatesTumor_out_ch0,
         MarkDuplicatesTumor_out_ch1,
@@ -1833,7 +1833,7 @@ process 'MarkDuplicatesNormal' {
         TumorReplicateId,
         NormalReplicateId,
         file("${NormalReplicateId}_aligned_sort_mkdp.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp.bam.bai")
+        file("${NormalReplicateId}_aligned_sort_mkdp.bai")
     ) into (
         MarkDuplicatesNormal_out_ch0,
         MarkDuplicatesNormal_out_ch1,
