@@ -1305,6 +1305,71 @@ process 'BwaTumor' {
 }
 
 
+process 'merge_uBAM_BAM_Tumor' {
+// merge alinged BAM and uBAM tumor
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(BAM),
+        file(uBAM)
+    ) from BwaTumor_out_ch0
+        .combine(tumor_uBAM_out_ch0, by: [0,1])
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_merged.bam")
+    ) into tumor_uBAM_BAM_out_ch
+
+    script:
+    paired_run = (single_end) ? 'false' : 'true'
+    """
+    mkdir -p ${params.tmpDir}
+
+    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
+        TMP_DIR=${params.tmpDir} \\
+        --VALIDATION_STRINGENCY SILENT \\
+        --EXPECTED_ORIENTATIONS FR \\
+        --ATTRIBUTES_TO_RETAIN X0 \\
+        --REFERENCE_SEQUENCE ${RefFasta} \\
+        --PAIRED_RUN ${paired_run} \\
+        --SORT_ORDER "unsorted" \\
+        --IS_BISULFITE_SEQUENCE false \\
+        --ALIGNED_READS_ONLY false \\
+        --CLIP_ADAPTERS false \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
+        --ADD_MATE_CIGAR true \\
+        --MAX_INSERTIONS_OR_DELETIONS -1 \\
+        --PRIMARY_ALIGNMENT_STRATEGY MostDistant \\
+        --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
+        --ALIGNER_PROPER_PAIR_FLAGS true \\
+        --UNMAP_CONTAMINANT_READS true \\
+        --ALIGNED_BAM ${BAM} \\
+        --UNMAPPED_BAM ${uBAM} \\
+        --OUTPUT  ${TumorReplicateId}_merged.bam \\
+    """
+}
+
+
 // process 'MarkDuplicatesTumor' {
 // // Mark duplicates with Picard
 
@@ -1371,7 +1436,17 @@ process 'MarkDuplicatesTumor' {
         TumorReplicateId,
         NormalReplicateId,
         file(bam)
-    ) from BwaTumor_out_ch0
+    ) from tumor_uBAM_BAM_out_ch // BwaTumor_out_ch0
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
 
     output:
     set(
@@ -1401,8 +1476,18 @@ process 'MarkDuplicatesTumor' {
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
         -O BAM \\
-        -o ${TumorReplicateId}_aligned_sort_mkdp.bam -
-    samtools index -@${task.cpus} ${TumorReplicateId}_aligned_sort_mkdp.bam
+        -l 0 \\
+        /dev/stdin | \\
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
+        TMP_DIR=${params.tmpDir} \\
+        R=${RefFasta} \\
+        I=/dev/stdin \\
+        O=${TumorReplicateId}_aligned_sort_mkdp.bam \\
+        CREATE_INDEX=true \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        VALIDATION_STRINGENCY=LENIENT
+
+    # samtools index -@${task.cpus} ${TumorReplicateId}_aligned_sort_mkdp.bam
     """
 }
 
@@ -1601,6 +1686,70 @@ process 'BwaNormal' {
     """
 }
 
+process 'merge_uBAM_BAM_Normal' {
+// merge alinged BAM and uBAM normal
+
+    tag "$NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(BAM),
+        file(uBAM)
+    ) from BwaNormal_out_ch0
+        .combine(normal_uBAM_out_ch0, by: [0,1])
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${NormalReplicateId}_merged.bam")
+    ) into normal_uBAM_BAM_out_ch
+
+    script:
+    paired_run = (single_end) ? 'false' : 'true'
+    """
+    mkdir -p ${params.tmpDir}
+
+    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
+        TMP_DIR=${params.tmpDir} \\
+        --VALIDATION_STRINGENCY SILENT \\
+        --EXPECTED_ORIENTATIONS FR \\
+        --ATTRIBUTES_TO_RETAIN X0 \\
+        --REFERENCE_SEQUENCE ${RefFasta} \\
+        --PAIRED_RUN ${paired_run} \\
+        --SORT_ORDER "unsorted" \\
+        --IS_BISULFITE_SEQUENCE false \\
+        --ALIGNED_READS_ONLY false \\
+        --CLIP_ADAPTERS false \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
+        --ADD_MATE_CIGAR true \\
+        --MAX_INSERTIONS_OR_DELETIONS -1 \\
+        --PRIMARY_ALIGNMENT_STRATEGY MostDistant \\
+        --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
+        --ALIGNER_PROPER_PAIR_FLAGS true \\
+        --UNMAP_CONTAMINANT_READS true \\
+        --ALIGNED_BAM ${BAM} \\
+        --UNMAPPED_BAM ${uBAM} \\
+        --OUTPUT  ${NormalReplicateId}_merged.bam \\
+    """
+}
+
 
 // process 'MarkDuplicatesNormal' {
 // // Mark duplicates with Picard
@@ -1667,7 +1816,17 @@ process 'MarkDuplicatesNormal' {
         TumorReplicateId,
         NormalReplicateId,
         file(bam)
-    ) from BwaNormal_out_ch0
+    ) from normal_uBAM_BAM_out_ch  // BwaNormal_out_ch0
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
 
     output:
     set(
@@ -1696,8 +1855,18 @@ process 'MarkDuplicatesNormal' {
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
         -O BAM \\
-        -o ${NormalReplicateId}_aligned_sort_mkdp.bam -
-    samtools index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp.bam
+        -l 0 \\
+        /dev/stdin | \\
+    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
+        TMP_DIR=${params.tmpDir} \\
+        R=${RefFasta} \\
+        I=/dev/stdin \\
+        O=${NormalReplicateId}_aligned_sort_mkdp.bam \\
+        CREATE_INDEX=true \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        VALIDATION_STRINGENCY=LENIENT
+
+    # samtools index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp.bam
     """
 }
 
@@ -1865,14 +2034,15 @@ process 'BaseRecalTumorGATK4' {
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-        TMP_DIR=${params.tmpDir} \\
-        R=${RefFasta} \\
-        I=${bam} \\
-        O=fixed.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-        VALIDATION_STRINGENCY=LENIENT && \\
+    # Done in markduplcates process
+    # $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
+    #    TMP_DIR=${params.tmpDir} \\
+    #    R=${RefFasta} \\
+    #    I=${bam} \\
+    #    O=fixed.bam \\
+    #    CREATE_INDEX=true \\
+    #    MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+    #    VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
     # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
@@ -1890,7 +2060,7 @@ process 'BaseRecalTumorGATK4' {
     $GATK4 BaseRecalibrator \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
-        -I fixed.bam \\
+        -I ${bam} \\
         -R ${RefFasta} \\
         -L ${IntervalsList} \\
         -O ${TumorReplicateId}_bqsr.table \\
@@ -2186,14 +2356,15 @@ process 'BaseRecalNormalGATK4' {
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-        TMP_DIR=${params.tmpDir} \\
-        R=${RefFasta} \\
-        I=${bam} \\
-        O=Normal_fixed.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-        VALIDATION_STRINGENCY=LENIENT && \\
+    # Done in markduplicates process
+    # $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
+    #    TMP_DIR=${params.tmpDir} \\
+    #    R=${RefFasta} \\
+    #    I=${bam} \\
+    #    O=Normal_fixed.bam \\
+    #    CREATE_INDEX=true \\
+    #    MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+    #    VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
     # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
@@ -2211,7 +2382,7 @@ process 'BaseRecalNormalGATK4' {
     $GATK4 BaseRecalibrator \\
         --java-options '${params.JAVA_Xmx_spark}' \\
         --tmp-dir ${params.tmpDir} \\
-        -I Normal_fixed.bam \\
+        -I ${bam} \\
         -R ${RefFasta} \\
         -L ${IntervalsList} \\
         -O ${NormalReplicateId}_bqsr.table \\
