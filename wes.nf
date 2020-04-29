@@ -1229,6 +1229,7 @@ process 'BwaTumor' {
             -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
+            -Y \\
             ${readsFWD} | \\
             $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
         """
@@ -1238,6 +1239,7 @@ process 'BwaTumor' {
             -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
+            -Y \\
             ${readsFWD} \\
             ${readsREV}  | \\
             $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
@@ -4399,7 +4401,7 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -k
+                -k true
             """
         else
             """
@@ -4417,7 +4419,7 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -k
+                -k true
             """
     }
 
