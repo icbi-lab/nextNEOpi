@@ -1347,25 +1347,25 @@ process 'merge_uBAM_BAM_Tumor' {
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
         TMP_DIR=${params.tmpDir} \\
-        --VALIDATION_STRINGENCY SILENT \\
-        --EXPECTED_ORIENTATIONS FR \\
-        --ATTRIBUTES_TO_RETAIN X0 \\
-        --REFERENCE_SEQUENCE ${RefFasta} \\
-        --PAIRED_RUN ${paired_run} \\
-        --SORT_ORDER "unsorted" \\
-        --IS_BISULFITE_SEQUENCE false \\
-        --ALIGNED_READS_ONLY false \\
-        --CLIP_ADAPTERS false \\
-        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
-        --ADD_MATE_CIGAR true \\
-        --MAX_INSERTIONS_OR_DELETIONS -1 \\
-        --PRIMARY_ALIGNMENT_STRATEGY MostDistant \\
-        --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
-        --ALIGNER_PROPER_PAIR_FLAGS true \\
-        --UNMAP_CONTAMINANT_READS true \\
-        --ALIGNED_BAM ${BAM} \\
-        --UNMAPPED_BAM ${uBAM} \\
-        --OUTPUT  ${TumorReplicateId}_merged.bam \\
+        VALIDATION_STRINGENCY=SILENT \\
+        EXPECTED_ORIENTATIONS=FR \\
+        ATTRIBUTES_TO_RETAIN=X0 \\
+        REFERENCE_SEQUENCE=${RefFasta} \\
+        PAIRED_RUN=${paired_run} \\
+        SORT_ORDER="unsorted" \\
+        IS_BISULFITE_SEQUENCE=false \\
+        ALIGNED_READS_ONLY=false \\
+        CLIP_ADAPTERS=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        ADD_MATE_CIGAR=true \\
+        MAX_INSERTIONS_OR_DELETIONS=-1 \\
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \\
+        ALIGNER_PROPER_PAIR_FLAGS=true \\
+        UNMAP_CONTAMINANT_READS=true \\
+        ALIGNED_BAM=${BAM} \\
+        UNMAPPED_BAM=${uBAM} \\
+        OUTPUT=${TumorReplicateId}_merged.bam
     """
 }
 
@@ -1728,25 +1728,25 @@ process 'merge_uBAM_BAM_Normal' {
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
         TMP_DIR=${params.tmpDir} \\
-        --VALIDATION_STRINGENCY SILENT \\
-        --EXPECTED_ORIENTATIONS FR \\
-        --ATTRIBUTES_TO_RETAIN X0 \\
-        --REFERENCE_SEQUENCE ${RefFasta} \\
-        --PAIRED_RUN ${paired_run} \\
-        --SORT_ORDER "unsorted" \\
-        --IS_BISULFITE_SEQUENCE false \\
-        --ALIGNED_READS_ONLY false \\
-        --CLIP_ADAPTERS false \\
-        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
-        --ADD_MATE_CIGAR true \\
-        --MAX_INSERTIONS_OR_DELETIONS -1 \\
-        --PRIMARY_ALIGNMENT_STRATEGY MostDistant \\
-        --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
-        --ALIGNER_PROPER_PAIR_FLAGS true \\
-        --UNMAP_CONTAMINANT_READS true \\
-        --ALIGNED_BAM ${BAM} \\
-        --UNMAPPED_BAM ${uBAM} \\
-        --OUTPUT  ${NormalReplicateId}_merged.bam \\
+        VALIDATION_STRINGENCY=SILENT \\
+        EXPECTED_ORIENTATIONS=FR \\
+        ATTRIBUTES_TO_RETAIN=X0 \\
+        REFERENCE_SEQUENCE=${RefFasta} \\
+        PAIRED_RUN=${paired_run} \\
+        SORT_ORDER="unsorted" \\
+        IS_BISULFITE_SEQUENCE=false \\
+        ALIGNED_READS_ONLY=false \\
+        CLIP_ADAPTERS=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        ADD_MATE_CIGAR=true \\
+        MAX_INSERTIONS_OR_DELETIONS=-1 \\
+        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
+        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \\
+        ALIGNER_PROPER_PAIR_FLAGS=true \\
+        UNMAP_CONTAMINANT_READS=true \\
+        ALIGNED_BAM=${BAM} \\
+        UNMAPPED_BAM=${uBAM} \\
+        OUTPUT=${NormalReplicateId}_merged.bam
     """
 }
 
