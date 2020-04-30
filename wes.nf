@@ -1290,7 +1290,7 @@ process 'BwaTumor' {
             -t ${task.cpus} \\
             -Y \\
             ${readsFWD} | \\
-        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS view -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1307,7 +1307,7 @@ process 'BwaTumor' {
             -Y \\
             ${readsFWD} \\
             ${readsREV}  | \\
-        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS view -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1636,7 +1636,7 @@ process 'BwaNormal' {
             -t ${task.cpus} \\
             -Y \\
             ${readsFWD} | \\
-        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS view -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1653,7 +1653,7 @@ process 'BwaNormal' {
             -Y \\
             ${readsFWD} \\
             ${readsREV} | \\
-        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS view -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
