@@ -1358,7 +1358,7 @@ process 'merge_uBAM_BAM_Tumor' {
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam * 5} \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRamMerge} \\
         ADD_MATE_CIGAR=true \\
         MAX_INSERTIONS_OR_DELETIONS=-1 \\
         PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
@@ -1688,7 +1688,7 @@ process 'merge_uBAM_BAM_Normal' {
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam * 5} \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRamMerge} \\
         ADD_MATE_CIGAR=true \\
         MAX_INSERTIONS_OR_DELETIONS=-1 \\
         PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
