@@ -1367,7 +1367,7 @@ process 'merge_uBAM_BAM_Tumor' {
         ATTRIBUTES_TO_RETAIN=X0 \\
         REFERENCE_SEQUENCE=${RefFasta} \\
         PAIRED_RUN=${paired_run} \\
-        SORT_ORDER="unsorted" \\
+        SORT_ORDER="queryname" \\
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
@@ -1713,7 +1713,7 @@ process 'merge_uBAM_BAM_Normal' {
         ATTRIBUTES_TO_RETAIN=X0 \\
         REFERENCE_SEQUENCE=${RefFasta} \\
         PAIRED_RUN=${paired_run} \\
-        SORT_ORDER="read" \\
+        SORT_ORDER="queryname" \\
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
