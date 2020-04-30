@@ -1294,7 +1294,7 @@ process 'BwaTumor' {
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
-            -m ${STperThreadMem} \\
+            -m ${params.STperThreadMem} \\
             -l 6 \\
             -o ${TumorReplicateId}_aligned.bam -
         """
@@ -1311,7 +1311,7 @@ process 'BwaTumor' {
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
-            -m ${STperThreadMem} \\
+            -m ${params.STperThreadMem} \\
             -l 6 \\
             -o ${TumorReplicateId}_aligned.bam -
         """
@@ -1640,7 +1640,7 @@ process 'BwaNormal' {
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
-            -m ${STperThreadMem} \\
+            -m ${params.STperThreadMem} \\
             -l 6 \\
             -o ${NormalReplicateId}_aligned.bam -
         """
@@ -1657,7 +1657,7 @@ process 'BwaNormal' {
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
-            -m ${STperThreadMem} \\
+            -m ${params.STperThreadMem} \\
             -l 6 \\
             -o ${NormalReplicateId}_aligned.bam -
 
