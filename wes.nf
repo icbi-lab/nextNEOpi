@@ -1293,6 +1293,7 @@ process 'BwaTumor' {
         $SAMTOOLS view -@2 -Shbu - | \\
         $SAMBAMBA sort \\
             --sort-picard \\
+            --tmpdir=${params.tmpDir} \\
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
@@ -1311,6 +1312,7 @@ process 'BwaTumor' {
         $SAMTOOLS view -@2 -Shbu - | \\
         $SAMBAMBA sort \\
             --sort-picard \\
+            --tmpdir=${params.tmpDir} \\
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
@@ -1358,12 +1360,10 @@ process 'merge_uBAM_BAM_Tumor' {
     script:
     paired_run = (single_end) ? 'false' : 'true'
     """
-    # // mkdir -p ${params.tmpDir}
-    # // use a local tmp dir merging needs a lot of disk space
-    mkdir -p ./tmp
+    mkdir -p ${params.tmpDir}
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=./tmp \\
+        TMP_DIR=${params.tmpDir} \\
         VALIDATION_STRINGENCY=SILENT \\
         EXPECTED_ORIENTATIONS=FR \\
         ATTRIBUTES_TO_RETAIN=X0 \\
@@ -1641,6 +1641,7 @@ process 'BwaNormal' {
         $SAMTOOLS view -@2 -Shbu - | \\
         $SAMBAMBA sort \\
             --sort-picard \\
+            --tmpdir=${params.tmpDir} \\
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
@@ -1659,6 +1660,7 @@ process 'BwaNormal' {
         $SAMTOOLS view -@2 -Shbu - | \\
         $SAMBAMBA sort \\
             --sort-picard \\
+            --tmpdir=${params.tmpDir} \\
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
@@ -1705,12 +1707,10 @@ process 'merge_uBAM_BAM_Normal' {
     script:
     paired_run = (single_end) ? 'false' : 'true'
     """
-    # // mkdir -p ${params.tmpDir}
-    # // use a local tmp dir merging needs a lot of disk space
-    mkdir -p ./tmp
+    mkdir -p ${params.tmpDir}
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=./tmp \\
+        TMP_DIR=${params.tmpDir} \\
         VALIDATION_STRINGENCY=SILENT \\
         EXPECTED_ORIENTATIONS=FR \\
         ATTRIBUTES_TO_RETAIN=X0 \\
