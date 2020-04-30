@@ -1281,6 +1281,7 @@ process 'BwaTumor' {
     ) into BwaTumor_out_ch0
 
     script:
+    sort_threads = (task.cpus > 8) ? 8 : 2
     if (single_end)
         """
         $BWA mem \\
@@ -1289,7 +1290,13 @@ process 'BwaTumor' {
             -t ${task.cpus} \\
             -Y \\
             ${readsFWD} | \\
-            $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
+        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS sort \\
+            -n \\
+            -@${sort_threads} \\
+            -m ${STperThreadMem} \\
+            -l 6 \\
+            -o ${TumorReplicateId}_aligned.bam -
         """
     else
         """
@@ -1300,7 +1307,13 @@ process 'BwaTumor' {
             -Y \\
             ${readsFWD} \\
             ${readsREV}  | \\
-            $SAMTOOLS view -Shb -o ${TumorReplicateId}_aligned.bam -
+        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS sort \\
+            -n \\
+            -@${sort_threads} \\
+            -m ${STperThreadMem} \\
+            -l 6 \\
+            -o ${TumorReplicateId}_aligned.bam -
         """
 }
 
@@ -1614,14 +1627,22 @@ process 'BwaNormal' {
     ) into BwaNormal_out_ch0
 
     script:
+    sort_threads = (task.cpus > 8) ? 8 : 2
     if(single_end)
         """
         $BWA mem \\
             -R "@RG\\tID:${NormalReplicateId}\\tLB:${NormalReplicateId}\\tSM:${NormalReplicateId}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
+            -Y \\
             ${readsFWD} | \\
-        $SAMTOOLS  view -Shb -o ${NormalReplicateId}_aligned.bam -
+        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS sort \\
+            -n \\
+            -@${sort_threads} \\
+            -m ${STperThreadMem} \\
+            -l 6 \\
+            -o ${NormalReplicateId}_aligned.bam -
         """
     else
         """
@@ -1629,9 +1650,17 @@ process 'BwaNormal' {
             -R "@RG\\tID:${NormalReplicateId}\\tLB:${NormalReplicateId}\\tSM:${NormalReplicateId}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
+            -Y \\
             ${readsFWD} \\
             ${readsREV} | \\
-        $SAMTOOLS view -Shb -o ${NormalReplicateId}_aligned.bam -
+        $SAMTOOLS view -Shb -l 0 - | \\
+        $SAMTOOLS sort \\
+            -n \\
+            -@${sort_threads} \\
+            -m ${STperThreadMem} \\
+            -l 6 \\
+            -o ${NormalReplicateId}_aligned.bam -
+
     """
 }
 
@@ -1684,7 +1713,7 @@ process 'merge_uBAM_BAM_Normal' {
         ATTRIBUTES_TO_RETAIN=X0 \\
         REFERENCE_SEQUENCE=${RefFasta} \\
         PAIRED_RUN=${paired_run} \\
-        SORT_ORDER="unsorted" \\
+        SORT_ORDER="read" \\
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
