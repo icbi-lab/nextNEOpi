@@ -1370,59 +1370,6 @@ process 'merge_uBAM_BAM_Tumor' {
 }
 
 
-// process 'MarkDuplicatesTumor' {
-// // Mark duplicates with Picard
-
-//     tag "$TumorReplicateId"
-
-//     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-//         mode: params.publishDirMode
-
-//     input:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file(bam)
-//     ) from BwaTumor_out_ch0
-
-//     output:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-//         file("${TumorReplicateId}_aligned_sort_mkdp.bam.bai"),
-//         file("${TumorReplicateId}_aligned_sort_mkdp.txt")
-//     ) into (
-//         MarkDuplicatesTumor_out_ch0,
-//         MarkDuplicatesTumor_out_ch1,
-//         MarkDuplicatesTumor_out_ch2,
-//         MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
-//     )
-
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("${TumorReplicateId}_aligned_sort_mkdp.txt")
-//     ) into MarkDuplicatesTumor_out_ch4 // multiQC
-
-//     script:
-//     """
-//     mkdir -p ${params.tmpDir}
-
-//     $GATK4 MarkDuplicatesSpark \\
-//         --java-options '${params.JAVA_Xmx_spark}' \\
-//         --tmp-dir ${params.tmpDir} \\
-//         -I ${bam} \\
-//         -O ${TumorReplicateId}_aligned_sort_mkdp.bam \\
-//         -M ${TumorReplicateId}_aligned_sort_mkdp.txt \\
-//         --create-output-bam-index true \\
-//         --read-validation-stringency LENIENT \\
-//         --spark-master local[${task.cpus}] \\
-//         --conf 'spark.executor.cores=${task.cpus}' \\
-//         --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
-//     """
-// }
-
 process 'MarkDuplicatesTumor' {
 // Mark duplicates with sambamba
 
@@ -1751,58 +1698,6 @@ process 'merge_uBAM_BAM_Normal' {
 }
 
 
-// process 'MarkDuplicatesNormal' {
-// // Mark duplicates with Picard
-
-//     tag "$NormalReplicateId"
-
-//     publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-//         mode: params.publishDirMode
-
-//     input:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file(bam)
-//     ) from BwaNormal_out_ch0
-
-//     output:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("${NormalReplicateId}_aligned_sort_mkdp.bam"),
-//         file("${NormalReplicateId}_aligned_sort_mkdp.bam.bai"),
-//         file("${NormalReplicateId}_aligned_sort_mkdp.txt")
-//     ) into (
-//         MarkDuplicatesNormal_out_ch0,
-//         MarkDuplicatesNormal_out_ch1,
-//         MarkDuplicatesNormal_out_ch2
-//     )
-
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("${NormalReplicateId}_aligned_sort_mkdp.txt")
-//     ) into MarkDuplicatesNormal_out_ch3 // multiQC
-
-//     script:
-//     """
-//     mkdir -p ${params.tmpDir}
-
-//     $GATK4 MarkDuplicatesSpark \\
-//         --java-options '${params.JAVA_Xmx_spark}' \\
-//         --tmp-dir ${params.tmpDir} \\
-//         -I ${bam} \\
-//         -O ${NormalReplicateId}_aligned_sort_mkdp.bam \\
-//         -M ${NormalReplicateId}_aligned_sort_mkdp.txt \\
-//         --create-output-bam-index true \\
-//         --read-validation-stringency LENIENT \\
-//         --spark-master local[${task.cpus}] \\
-//         --conf 'spark.executor.cores=${task.cpus}' \\
-//         --conf 'spark.local.dir=${params.tmpDir}' 2> /dev/stdout
-//     """
-// }
-
 process 'MarkDuplicatesNormal' {
 // Mark duplicates with sambamba
 
@@ -2034,15 +1929,6 @@ process 'BaseRecalTumorGATK4' {
     """
     mkdir -p ${params.tmpDir}
 
-    # Done in markduplcates process
-    # $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-    #    TMP_DIR=${params.tmpDir} \\
-    #    R=${RefFasta} \\
-    #    I=${bam} \\
-    #    O=fixed.bam \\
-    #    CREATE_INDEX=true \\
-    #    MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-    #    VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
     # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
@@ -2356,15 +2242,6 @@ process 'BaseRecalNormalGATK4' {
     """
     mkdir -p ${params.tmpDir}
 
-    # Done in markduplicates process
-    # $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-    #    TMP_DIR=${params.tmpDir} \\
-    #    R=${RefFasta} \\
-    #    I=${bam} \\
-    #    O=Normal_fixed.bam \\
-    #    CREATE_INDEX=true \\
-    #    MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-    #    VALIDATION_STRINGENCY=LENIENT && \\
     # TODO: re-add later when more stable. Commented out do to crashing randomly
     # $GATK4 BaseRecalibratorSpark \\
     #    --java-options '${params.JAVA_Xmx_spark}' \\
@@ -5280,7 +5157,7 @@ if(params.TCR) {
         process mixcr_RNA {
             tag "$TumorReplicateId"
 
-            publishDir "$params.outputDir/$TumorReplicateId/13_MixCR",
+            publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
                 mode: params.publishDirMode
 
             input:
