@@ -467,11 +467,10 @@ process 'preprocessIntervalList' {
         """
     else
         """
-        $GATK4 PreprocessIntervals \\
-            -R $RefFasta \\
-            --bin-length 10000 \\
-            --padding 0 \\
-            -O ${interval_list.baseName}_merged_padded.interval_list
+        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ScatterIntervalsByNs \\
+            REFERENCE=$RefFasta \\
+            OUTPUT_TYPE=ACGT \\
+            OUTPUT=${interval_list.baseName}_merged_padded.interval_list
         """
 }
 
