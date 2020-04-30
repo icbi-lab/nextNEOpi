@@ -1281,7 +1281,7 @@ process 'BwaTumor' {
     ) into BwaTumor_out_ch0
 
     script:
-    sort_threads = (task.cpus > 8) ? 8 : 2
+    sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
     if (single_end)
         """
         $BWA mem \\
@@ -1290,7 +1290,7 @@ process 'BwaTumor' {
             -t ${task.cpus} \\
             -Y \\
             ${readsFWD} | \\
-        $SAMTOOLS view -Shbu - | \\
+        $SAMTOOLS view -@2 -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1307,7 +1307,7 @@ process 'BwaTumor' {
             -Y \\
             ${readsFWD} \\
             ${readsREV}  | \\
-        $SAMTOOLS view -Shbu - | \\
+        $SAMTOOLS view -@2 -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1627,7 +1627,7 @@ process 'BwaNormal' {
     ) into BwaNormal_out_ch0
 
     script:
-    sort_threads = (task.cpus > 8) ? 8 : 2
+    sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
     if(single_end)
         """
         $BWA mem \\
@@ -1636,7 +1636,7 @@ process 'BwaNormal' {
             -t ${task.cpus} \\
             -Y \\
             ${readsFWD} | \\
-        $SAMTOOLS view -Shbu - | \\
+        $SAMTOOLS view -@2 -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
@@ -1653,7 +1653,7 @@ process 'BwaNormal' {
             -Y \\
             ${readsFWD} \\
             ${readsREV} | \\
-        $SAMTOOLS view -Shbu - | \\
+        $SAMTOOLS view -@2 -Shbu - | \\
         $SAMTOOLS sort \\
             -n \\
             -@${sort_threads} \\
