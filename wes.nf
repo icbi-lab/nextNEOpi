@@ -1291,12 +1291,13 @@ process 'BwaTumor' {
             -Y \\
             ${readsFWD} | \\
         $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMTOOLS sort \\
-            -n \\
-            -@${sort_threads} \\
-            -m ${params.STperThreadMem} \\
+        $SAMBAMBA sort \\
+            --sort-picard \\
+            -m ${params.SB_sort_mem} \\
             -l 6 \\
-            -o ${TumorReplicateId}_aligned.bam -
+            -t ${sort_threads} \\
+            -o ${TumorReplicateId}_aligned.bam \\
+            /dev/stdin
         """
     else
         """
@@ -1308,12 +1309,13 @@ process 'BwaTumor' {
             ${readsFWD} \\
             ${readsREV}  | \\
         $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMTOOLS sort \\
-            -n \\
-            -@${sort_threads} \\
-            -m ${params.STperThreadMem} \\
+        $SAMBAMBA sort \\
+            --sort-picard \\
+            -m ${params.SB_sort_mem} \\
             -l 6 \\
-            -o ${TumorReplicateId}_aligned.bam -
+            -t ${sort_threads} \\
+            -o ${TumorReplicateId}_aligned.bam \\
+            /dev/stdin
         """
 }
 
@@ -1637,12 +1639,13 @@ process 'BwaNormal' {
             -Y \\
             ${readsFWD} | \\
         $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMTOOLS sort \\
-            -n \\
-            -@${sort_threads} \\
-            -m ${params.STperThreadMem} \\
+        $SAMBAMBA sort \\
+            --sort-picard \\
+            -m ${params.SB_sort_mem} \\
             -l 6 \\
-            -o ${NormalReplicateId}_aligned.bam -
+            -t ${sort_threads} \\
+            -o ${NormalReplicateId}_aligned.bam \\
+            /dev/stdin
         """
     else
         """
@@ -1654,13 +1657,13 @@ process 'BwaNormal' {
             ${readsFWD} \\
             ${readsREV} | \\
         $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMTOOLS sort \\
-            -n \\
-            -@${sort_threads} \\
-            -m ${params.STperThreadMem} \\
+        $SAMBAMBA sort \\
+            --sort-picard \\
+            -m ${params.SB_sort_mem} \\
             -l 6 \\
-            -o ${NormalReplicateId}_aligned.bam -
-
+            -t ${sort_threads} \\
+            -o ${NormalReplicateId}_aligned.bam \\
+            /dev/stdin
     """
 }
 
