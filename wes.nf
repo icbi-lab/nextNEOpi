@@ -469,7 +469,7 @@ process 'preprocessIntervalList' {
         """
         $GATK4 PreprocessIntervals \\
             -R $RefFasta \\
-            --bin-length 1000 \\
+            --bin-length 10000 \\
             --padding 0 \\
             -O ${interval_list.baseName}_merged_padded.interval_list
         """
@@ -1343,10 +1343,12 @@ process 'merge_uBAM_BAM_Tumor' {
     script:
     paired_run = (single_end) ? 'false' : 'true'
     """
-    mkdir -p ${params.tmpDir}
+    # // mkdir -p ${params.tmpDir}
+    # // use a local tmp dir merging needs a lot of disk space
+    mkdir -p ./tmp
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=${params.tmpDir} \\
+        TMP_DIR=./tmp \\
         VALIDATION_STRINGENCY=SILENT \\
         EXPECTED_ORIENTATIONS=FR \\
         ATTRIBUTES_TO_RETAIN=X0 \\
@@ -1356,7 +1358,7 @@ process 'merge_uBAM_BAM_Tumor' {
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam * 5} \\
         ADD_MATE_CIGAR=true \\
         MAX_INSERTIONS_OR_DELETIONS=-1 \\
         PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
@@ -1671,10 +1673,12 @@ process 'merge_uBAM_BAM_Normal' {
     script:
     paired_run = (single_end) ? 'false' : 'true'
     """
-    mkdir -p ${params.tmpDir}
+    # // mkdir -p ${params.tmpDir}
+    # // use a local tmp dir merging needs a lot of disk space
+    mkdir -p ./tmp
 
     $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=${params.tmpDir} \\
+        TMP_DIR=./tmp \\
         VALIDATION_STRINGENCY=SILENT \\
         EXPECTED_ORIENTATIONS=FR \\
         ATTRIBUTES_TO_RETAIN=X0 \\
@@ -1684,7 +1688,7 @@ process 'merge_uBAM_BAM_Normal' {
         IS_BISULFITE_SEQUENCE=false \\
         ALIGNED_READS_ONLY=false \\
         CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam * 5} \\
         ADD_MATE_CIGAR=true \\
         MAX_INSERTIONS_OR_DELETIONS=-1 \\
         PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
