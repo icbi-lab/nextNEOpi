@@ -287,12 +287,13 @@ if (! params.batchFile) {
         Channel
             .empty()
             .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+
         Channel
-            .of(tuple(
-                tumorSampleName,
-                "NO_FILE"
-            ))
-            .set { optitype_RNA_output }
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    file("NO_FILE")) }
+                .set { optitype_RNA_output }
     }
 
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
@@ -503,6 +504,10 @@ process 'SplitIntervals' {
         SplitIntervals_out_ch0,
         SplitIntervals_out_ch1,
         SplitIntervals_out_ch2,
+        SplitIntervals_out_scatterBaseRecalTumorGATK4_ch,
+        SplitIntervals_out_scatterTumorGATK4applyBQSRS_ch,
+        SplitIntervals_out_scatterBaseRecalNormalGATK4_ch,
+        SplitIntervals_out_scatterNormalGATK4applyBQSRS_ch,
         SplitIntervals_out_ch3,
         SplitIntervals_out_ch4,
         SplitIntervals_out_ch5,
@@ -1421,7 +1426,8 @@ process 'MarkDuplicatesTumor' {
         MarkDuplicatesTumor_out_ch0,
         MarkDuplicatesTumor_out_ch1,
         MarkDuplicatesTumor_out_ch2,
-        MarkDuplicatesTumor_out_ch3 // mhc_extract -> hld-hd, optitype
+        MarkDuplicatesTumor_out_ch3,
+        MarkDuplicatesTumor_out_ch4 // mhc_extract -> hld-hd, optitype
     )
 
     script:
@@ -1767,7 +1773,8 @@ process 'MarkDuplicatesNormal' {
     ) into (
         MarkDuplicatesNormal_out_ch0,
         MarkDuplicatesNormal_out_ch1,
-        MarkDuplicatesNormal_out_ch2
+        MarkDuplicatesNormal_out_ch2,
+        MarkDuplicatesNormal_out_ch3
     )
 
     script:
@@ -1891,7 +1898,119 @@ if (params.WES) {
 *********************************************
 */
 
-process 'BaseRecalTumorGATK4' {
+// process 'BaseRecalTumorGATK4' {
+// /*
+//  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
+//  Recalibration (BQSR)
+//  ApplyBQSR (GATK4): apply BQSR table to reads
+// */
+
+//     tag "$TumorReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
+//         mode: params.publishDirMode
+
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam),
+//         file(bai)
+//     ) from MarkDuplicatesTumor_out_ch1
+
+//     set(
+//         file(RefFasta),
+//         file(RefIdx),
+//         file(RefDict)
+//     ) from Channel.value(
+//         [ reference.RefFasta,
+//           reference.RefIdx,
+//           reference.RefDict ]
+//     )
+
+//     file(IntervalsList) from preprocessIntervalList_out_ch2
+
+//     set(
+//         file(MillsGold),
+//         file(MillsGoldIdx),
+//         file(DBSNP),
+//         file(DBSNPIdx),
+//         file(KnownIndels),
+//         file(KnownIndelsIdx)
+//     ) from Channel.value(
+//         [ database.MillsGold,
+//           database.MillsGoldIdx,
+//           database.DBSNP,
+//           database.DBSNPIdx,
+//           database.KnownIndels,
+//           database.KnownIndelsIdx ]
+//     )
+
+//     output:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${TumorReplicateId}_bqsr.table")
+//     ) into BaseRecalTumorGATK4_out_ch0
+
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${TumorReplicateId}_recal4.bam"),
+//         file("${TumorReplicateId}_recal4.bam.bai")
+//     ) into (
+//         BaseRecalTumorGATK4_out_ch1,
+//         BaseRecalTumorGATK4_out_ch2,
+//         BaseRecalTumorGATK4_out_ch3,
+//         BaseRecalTumorGATK4_out_ch4,
+//         BaseRecalTumorGATK4_out_ch5
+//     )
+
+
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
+
+//     # TODO: re-add later when more stable. Commented out do to crashing randomly
+//     # $GATK4 BaseRecalibratorSpark \\
+//     #    --java-options '${params.JAVA_Xmx_spark}' \\
+//     #    --tmp-dir ${params.tmpDir} \\
+//     #    -I fixed.bam \\
+//     #    -R ${RefFasta} \\
+//     #    -L ${IntervalsList} \\
+//     #    -O ${TumorReplicateId}_bqsr.table \\
+//     #    --known-sites ${DBSNP} \\
+//     #    --known-sites ${KnownIndels} \\
+//     #    --known-sites ${MillsGold} \\
+//     #    --spark-master local[${task.cpus}] \\
+//     #    --conf 'spark.executor.cores=${task.cpus}' \\
+//     #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+//     $GATK4 BaseRecalibrator \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${TumorReplicateId}_bqsr.table \\
+//         --known-sites ${DBSNP} \\
+//         --known-sites ${KnownIndels} \\
+//         --known-sites ${MillsGold} && \\
+//     $GATK4 ApplyBQSRSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${TumorReplicateId}_recal4.bam \\
+//         --bqsr-recal-file ${TumorReplicateId}_bqsr.table \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}'
+//     """
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////
+process 'scatterBaseRecalTumorGATK4' {
 /*
  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
  Recalibration (BQSR)
@@ -1900,16 +2019,17 @@ process 'BaseRecalTumorGATK4' {
 
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-        mode: params.publishDirMode
-
     input:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(bam),
-        file(bai)
+        file(Tumorbam),
+        file(Tumorbai),
+        file(intervals)
     ) from MarkDuplicatesTumor_out_ch1
+        .combine(
+            SplitIntervals_out_scatterBaseRecalTumorGATK4_ch.flatten()
+        )
 
     set(
         file(RefFasta),
@@ -1920,8 +2040,6 @@ process 'BaseRecalTumorGATK4' {
           reference.RefIdx,
           reference.RefDict ]
     )
-
-    file(IntervalsList) from preprocessIntervalList_out_ch2
 
     set(
         file(MillsGold),
@@ -1939,13 +2057,157 @@ process 'BaseRecalTumorGATK4' {
           database.KnownIndelsIdx ]
     )
 
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${intervals}_bqsr.table")
+    ) into BaseRecalTumorGATK4_out_ch0
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${Tumorbam} \\
+        -R ${RefFasta} \\
+        -L ${intervals} \\
+        -O ${TumorReplicateId}_${intervals}_bqsr.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold}
+    """
+}
+
+process 'gatherTumorGATK4scsatteredBQSRtables' {
+// gather scattered bqsr tables
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bqsr_table)
+    ) from BaseRecalTumorGATK4_out_ch0
+        .groupTuple(by: [0, 1])
+
+
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
         file("${TumorReplicateId}_bqsr.table")
-    ) into BaseRecalTumorGATK4_out_ch0
+    ) into gatherBQSRtablesTumor_out_ch0
 
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $GATK4 GatherBQSRReports \\
+        -I ${bqsr_table.join(" -I ")} \\
+        -O ${TumorReplicateId}_bqsr.table
+    """
+}
+
+process 'scatterTumorGATK4applyBQSRS' {
+/*
+ ApplyBQSR (GATK4): apply BQSR table to reads
+*/
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(Tumorbam),
+        file(Tumorbai),
+        file(bqsr_table),
+        file(intervals)
+    ) from MarkDuplicatesTumor_out_ch2
+        .combine(gatherBQSRtablesTumor_out_ch0, by: [0,1])
+        .combine(
+            SplitIntervals_out_scatterTumorGATK4applyBQSRS_ch.flatten()
+        )
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        file(MillsGold),
+        file(MillsGoldIdx),
+        file(DBSNP),
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx)
+    ) from Channel.value(
+        [ database.MillsGold,
+          database.MillsGoldIdx,
+          database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx ]
+    )
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${intervals}_recal4.bam"),
+        file("${TumorReplicateId}_${intervals}_recal4.bai")
+    ) into scatterTumorGATK4applyBQSRS_out_GatherRecalBamFilesTumor_ch0
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+    $GATK4 ApplyBQSR \\
+        --java-options '${params.JAVA_Xmx}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${Tumorbam} \\
+        -R ${RefFasta} \\
+        -L ${intervals} \\
+        -O ${TumorReplicateId}_${intervals}_recal4.bam \\
+        --bqsr-recal-file ${bqsr_table}
+    """
+}
+
+process 'GatherRecalBamFilesTumor' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bam),
+        file(bai)
+    ) from scatterTumorGATK4applyBQSRS_out_GatherRecalBamFilesTumor_ch0
+        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+        .flatten()
+        .collate(4)
+        .groupTuple(by: [0,1])
+
+    output:
     set(
         TumorReplicateId,
         NormalReplicateId,
@@ -1956,51 +2218,31 @@ process 'BaseRecalTumorGATK4' {
         BaseRecalTumorGATK4_out_ch2,
         BaseRecalTumorGATK4_out_ch3,
         BaseRecalTumorGATK4_out_ch4,
-        BaseRecalTumorGATK4_out_ch5
+        BaseRecalTumorGATK4_out_ch5,
+        GatherRecalBamFilesTumor_out_IndelRealignerTumorIntervals_ch0
     )
-
 
     script:
     """
     mkdir -p ${params.tmpDir}
 
-    # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I fixed.bam \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_bqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_bqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
-    $GATK4 ApplyBQSRSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_recal4.bam \\
-        --bqsr-recal-file ${TumorReplicateId}_bqsr.table \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}'
+    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
+        TMP_DIR=${params.tmpDir} \\
+        I=${bam.join(" I=")} \\
+        O=/dev/stdout \\
+        CREATE_INDEX=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
+    $SAMTOOLS sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -o ${TumorReplicateId}_recal4.bam -
+    $SAMTOOLS index -@${task.cpus} ${TumorReplicateId}_recal4.bam
     """
 }
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////
 
 process 'GetPileupTumor' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
@@ -2048,102 +2290,6 @@ process 'GetPileupTumor' {
         -O ${TumorReplicateId}_pileup.table \\
         -L ${IntervalsList} \\
         --variant ${GnomAD}
-    """
-}
-
-process 'AnalyzeCovariates' {
-/*
- 2nd BaseRecalibrator (GATK4)
- AnalyzeCovariates (GATK4): creates plots to visualize base recalibration results
-*/
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    file(IntervalsList) from preprocessIntervalList_out_ch4
-
-    set(
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(recalTable)
-    ) from BaseRecalTumorGATK4_out_ch0
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from BaseRecalTumorGATK4_out_ch2
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_postbqsr.table")
-    ) into AnalyzeCovariates_out_ch0
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #   --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_postbqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_postbqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
-    $GATK4 AnalyzeCovariates \\
-        --tmp-dir ${params.tmpDir} \\
-        -before ${recalTable} \\
-        -after ${TumorReplicateId}_postbqsr.table \\
-        -csv ${TumorReplicateId}_BQSR.csv
     """
 }
 
@@ -2207,24 +2353,135 @@ If single-end reads are used, do nothing, just create an empty file!!!
 }
 
 
-process 'BaseRecalNormalGATK4' {
+// process 'BaseRecalNormalGATK4' {
+// /*
+//     BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
+//     Recalibration (BQSR)
+//     ApplyBQSR (GATK4): apply BQSR table to reads
+// */
+
+//     tag "$NormalReplicateId"
+
+//     publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
+//         mode: params.publishDirMode
+
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam), file(bai)
+//     ) from MarkDuplicatesNormal_out_ch1
+
+//     set(
+//         file(RefFasta),
+//         file(RefIdx),
+//         file(RefDict)
+//     ) from Channel.value(
+//         [ reference.RefFasta,
+//           reference.RefIdx,
+//           reference.RefDict
+//         ]
+//     )
+
+//     file(IntervalsList) from preprocessIntervalList_out_ch5
+
+//     set(
+//         file(MillsGold),
+//         file(MillsGoldIdx),
+//         file(DBSNP),
+//         file(DBSNPIdx),
+//         file(KnownIndels),
+//         file(KnownIndelsIdx)
+//     ) from Channel.value(
+//         [ database.MillsGold,
+//           database.MillsGoldIdx,
+//           database.DBSNP,
+//           database.DBSNPIdx,
+//           database.KnownIndels,
+//           database.KnownIndelsIdx ]
+//     )
+
+//     output:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${NormalReplicateId}_bqsr.table")
+//     ) into BaseRecalNormal_out_ch0
+
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${NormalReplicateId}_recal4.bam"),
+//         file("${NormalReplicateId}_recal4.bam.bai")
+//     ) into (
+//         BaseRecalNormal_out_ch1,
+//         BaseRecalNormal_out_ch2,
+//         BaseRecalNormal_out_ch3  // for HaploTypeCaller
+//     )
+
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
+
+//     # TODO: re-add later when more stable. Commented out do to crashing randomly
+//     # $GATK4 BaseRecalibratorSpark \\
+//     #    --java-options '${params.JAVA_Xmx_spark}' \\
+//     #    --tmp-dir ${params.tmpDir} \\
+//     #    -I Normal_fixed.bam \\
+//     #    -R ${RefFasta} \\
+//     #    -L ${IntervalsList} \\
+//     #    -O ${NormalReplicateId}_bqsr.table \\
+//     #    --known-sites ${DBSNP} \\
+//     #    --known-sites ${KnownIndels} \\
+//     #    --known-sites ${MillsGold} \\
+//     #    --spark-master local[${task.cpus}] \\
+//     #    --conf 'spark.executor.cores=${task.cpus}' \\
+//     #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+//     $GATK4 BaseRecalibrator \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${NormalReplicateId}_bqsr.table \\
+//         --known-sites ${DBSNP} \\
+//         --known-sites ${KnownIndels} \\
+//         --known-sites ${MillsGold} && \\
+//     $GATK4 ApplyBQSRSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${NormalReplicateId}_recal4.bam \\
+//         --bqsr-recal-file ${NormalReplicateId}_bqsr.table \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}'
+//     """
+// }
+
+//////////////////////////////////////////////////////////////////////////////////////
+process 'scatterBaseRecalNormalGATK4' {
 /*
-    BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
-    Recalibration (BQSR)
-    ApplyBQSR (GATK4): apply BQSR table to reads
+ BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
+ Recalibration (BQSR)
+ ApplyBQSR (GATK4): apply BQSR table to reads
 */
 
     tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-        mode: params.publishDirMode
 
     input:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(bam), file(bai)
+        file(Normalbam),
+        file(Normalbai),
+        file(intervals)
     ) from MarkDuplicatesNormal_out_ch1
+        .combine(
+            SplitIntervals_out_scatterBaseRecalNormalGATK4_ch.flatten()
+        )
 
     set(
         file(RefFasta),
@@ -2233,11 +2490,8 @@ process 'BaseRecalNormalGATK4' {
     ) from Channel.value(
         [ reference.RefFasta,
           reference.RefIdx,
-          reference.RefDict
-        ]
+          reference.RefDict ]
     )
-
-    file(IntervalsList) from preprocessIntervalList_out_ch5
 
     set(
         file(MillsGold),
@@ -2255,13 +2509,156 @@ process 'BaseRecalNormalGATK4' {
           database.KnownIndelsIdx ]
     )
 
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${NormalReplicateId}_${intervals}_bqsr.table")
+    ) into BaseRecalNormalGATK4_out_ch0
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+    $GATK4 BaseRecalibrator \\
+        --java-options '${params.JAVA_Xmx}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${Normalbam} \\
+        -R ${RefFasta} \\
+        -L ${intervals} \\
+        -O ${NormalReplicateId}_${intervals}_bqsr.table \\
+        --known-sites ${DBSNP} \\
+        --known-sites ${KnownIndels} \\
+        --known-sites ${MillsGold}
+    """
+}
+
+process 'gatherNormalGATK4scsatteredBQSRtables' {
+// gather scattered bqsr tables
+
+    tag "$NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bqsr_table)
+    ) from BaseRecalNormalGATK4_out_ch0
+        .groupTuple(by: [0, 1])
+
+
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
         file("${NormalReplicateId}_bqsr.table")
-    ) into BaseRecalNormal_out_ch0
+    ) into gatherBQSRtablesNormal_out_ch0
 
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    $GATK4 GatherBQSRReports \\
+        -I ${bqsr_table.join(" -I ")} \\
+        -O ${NormalReplicateId}_bqsr.table
+    """
+}
+
+process 'scatterNormalGATK4applyBQSRS' {
+/*
+ ApplyBQSR (GATK4): apply BQSR table to reads
+*/
+
+    tag "$NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(Normalbam),
+        file(Normalbai),
+        file(bqsr_table),
+        file(intervals)
+    ) from MarkDuplicatesNormal_out_ch2
+        .combine(gatherBQSRtablesNormal_out_ch0, by: [0,1])
+        .combine(
+            SplitIntervals_out_scatterNormalGATK4applyBQSRS_ch.flatten()
+        )
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    set(
+        file(MillsGold),
+        file(MillsGoldIdx),
+        file(DBSNP),
+        file(DBSNPIdx),
+        file(KnownIndels),
+        file(KnownIndelsIdx)
+    ) from Channel.value(
+        [ database.MillsGold,
+          database.MillsGoldIdx,
+          database.DBSNP,
+          database.DBSNPIdx,
+          database.KnownIndels,
+          database.KnownIndelsIdx ]
+    )
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${NormalReplicateId}_${intervals}_recal4.bam"),
+        file("${NormalReplicateId}_${intervals}_recal4.bai")
+    ) into scatterNormalGATK4applyBQSRS_out_GatherRecalBamFilesNormal_ch0
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+    $GATK4 ApplyBQSR \\
+        --java-options '${params.JAVA_Xmx}' \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${Normalbam} \\
+        -R ${RefFasta} \\
+        -L ${intervals} \\
+        -O ${NormalReplicateId}_${intervals}_recal4.bam \\
+        --bqsr-recal-file ${bqsr_table}
+    """
+}
+
+process 'GatherRecalBamFilesNormal' {
+
+    tag "$NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bam),
+        file(bai)
+    ) from scatterNormalGATK4applyBQSRS_out_GatherRecalBamFilesNormal_ch0
+        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+        .flatten()
+        .collate(4)
+        .groupTuple(by: [0,1])
+
+    output:
     set(
         TumorReplicateId,
         NormalReplicateId,
@@ -2270,50 +2667,31 @@ process 'BaseRecalNormalGATK4' {
     ) into (
         BaseRecalNormal_out_ch1,
         BaseRecalNormal_out_ch2,
-        BaseRecalNormal_out_ch3  // for HaploTypeCaller
+        BaseRecalNormal_out_ch3,  // for HaploTypeCaller
+        GatherRecalBamFilesNormal_out_IndelRealignerNormalIntervals_ch0
     )
 
     script:
     """
     mkdir -p ${params.tmpDir}
 
-    # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I Normal_fixed.bam \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${NormalReplicateId}_bqsr.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_bqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
-    $GATK4 ApplyBQSRSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_recal4.bam \\
-        --bqsr-recal-file ${NormalReplicateId}_bqsr.table \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}'
+    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
+        TMP_DIR=${params.tmpDir} \\
+        I=${bam.join(" I=")} \\
+        O=/dev/stdout \\
+        CREATE_INDEX=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
+    $SAMTOOLS sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -o ${NormalReplicateId}_recal4.bam -
+    $SAMTOOLS index -@${task.cpus} ${NormalReplicateId}_recal4.bam
     """
 }
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////
 
 process 'GetPileupNormal' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
@@ -2862,7 +3240,7 @@ process 'IndelRealignerTumorIntervals' {
         NormalReplicateId,
         file(bam),
         file(bai)
-    ) from MarkDuplicatesTumor_out_ch2
+    ) from GatherRecalBamFilesTumor_out_IndelRealignerTumorIntervals_ch0 // MarkDuplicatesTumor_out_ch3
 
     set(
         file(RefFasta),
@@ -2892,9 +3270,9 @@ process 'IndelRealignerTumorIntervals' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_aligned_sort_mkdp_realign_${interval}.bam"),
-        file("${TumorReplicateId}_aligned_sort_mkdp_realign_${interval}.bai")
-    ) into IndelRealignerTumorIntervals_out_ch0
+        file("${TumorReplicateId}_recal4_realign_${interval}.bam"),
+        file("${TumorReplicateId}_recal4_realign_${interval}.bai")
+    ) into IndelRealignerTumorIntervals_out_GatherRealignedBamFilesTumor_ch0
 
     script:
     """
@@ -2935,7 +3313,7 @@ process 'GatherRealignedBamFilesTumor' {
         NormalReplicateId,
         file(bam),
         file(bai)
-    ) from IndelRealignerTumorIntervals_out_ch0
+    ) from IndelRealignerTumorIntervals_out_GatherRealignedBamFilesTumor_ch0
         .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
         .flatten()
         .collate(4)
@@ -2945,9 +3323,17 @@ process 'GatherRealignedBamFilesTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_aligned_sort_mkdp_realign.bam"),
-        file("${TumorReplicateId}_aligned_sort_mkdp_realign.bai")
-    ) into GatherRealignedBamFilesTumor_out_ch0
+        file("${TumorReplicateId}_recal_realign.bam"),
+        file("${TumorReplicateId}_recal_realign.bam.bai")
+    ) into (
+        // GatherRealignedBamFilesTumor_out_ch0
+        GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0,
+        GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
+        GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0,
+        GatherRealignedBamFilesTumor_out_Mutect1scattered_ch0,
+        GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0,
+        GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0
+    )
 
     script:
     """
@@ -2956,118 +3342,123 @@ process 'GatherRealignedBamFilesTumor' {
     $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
         TMP_DIR=${params.tmpDir} \\
         I=${bam.join(" I=")} \\
-        O=${TumorReplicateId}_aligned_sort_mkdp_realign.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam}
+        O=/dev/stdout \\
+        CREATE_INDEX=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
+    $SAMTOOLS sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -o ${TumorReplicateId}_recal_realign.bam -
+    $SAMTOOLS index -@${task.cpus} ${TumorReplicateId}_recal_realign.bam
     """
 }
 
-process 'BaseRecalTumorGATK3' {
-/*
- FixMateInformation (Picard): verify mate-pair information between mates; ensure that
- all mate-pair information is in sync between reads and its pairs
-*/
+// process 'BaseRecalTumorGATK3' {
+// /*
+//  FixMateInformation (Picard): verify mate-pair information between mates; ensure that
+//  all mate-pair information is in sync between reads and its pairs
+// */
 
-    tag "$TumorReplicateId"
+//     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_varscan/processing/",
-        mode: params.publishDirMode
+//     publishDir "$params.outputDir/$TumorReplicateId/03_varscan/processing/",
+//         mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from GatherRealignedBamFilesTumor_out_ch0
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam),
+//         file(bai)
+//     ) from GatherRealignedBamFilesTumor_out_ch0
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+//     set(
+//         file(RefFasta),
+//         file(RefIdx),
+//         file(RefDict)
+//     ) from Channel.value(
+//         [ reference.RefFasta,
+//           reference.RefIdx,
+//           reference.RefDict ]
+//     )
 
-    file(IntervalsList) from preprocessIntervalList_out_ch7
+//     file(IntervalsList) from preprocessIntervalList_out_ch7
 
-    set(
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
+//     set(
+//         file(DBSNP),
+//         file(DBSNPIdx),
+//         file(KnownIndels),
+//         file(KnownIndelsIdx),
+//         file(MillsGold),
+//         file(MillsGoldIdx)
+//     ) from Channel.value(
+//         [ database.DBSNP,
+//           database.DBSNPIdx,
+//           database.KnownIndels,
+//           database.KnownIndelsIdx,
+//           database.MillsGold,
+//           database.MillsGoldIdx ]
+//     )
 
-    output:
-    file("${TumorReplicateId}_bqsr4.table")
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_recal4.bam"),
-        file("${TumorReplicateId}_recal4.bam.bai"),
-    ) into (
-        BaseRecalTumorGATK3_out_ch0,
-        BaseRecalTumorGATK3_out_ch1,
-        BaseRecalTumorGATK3_out_ch2,
-        BaseRecalTumorGATK3_out_ch3,
-        BaseRecalTumorGATK3_out_ch4,
-        BaseRecalTumorGATK3_out_ch5
-    )
+//     output:
+//     file("${TumorReplicateId}_bqsr4.table")
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${TumorReplicateId}_recal4.bam"),
+//         file("${TumorReplicateId}_recal4.bam.bai"),
+//     ) into (
+//         BaseRecalTumorGATK3_out_ch0,
+//         BaseRecalTumorGATK3_out_ch1,
+//         BaseRecalTumorGATK3_out_ch2,
+//         BaseRecalTumorGATK3_out_ch3,
+//         BaseRecalTumorGATK3_out_ch4,
+//         BaseRecalTumorGATK3_out_ch5
+//     )
 
 
-    ///
-    script:
-    """
-    mkdir -p ${params.tmpDir}
+//     ///
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
 
-    # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${TumorReplicateId}_bqsr4.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_bqsr4.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
-    $GATK4 ApplyBQSRSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${TumorReplicateId}_recal4.bam \\
-        --bqsr-recal-file ${TumorReplicateId}_bqsr4.table \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}'
-    """
-}
+//     # TODO: re-add later when more stable. Commented out do to crashing randomly
+//     # $GATK4 BaseRecalibratorSpark \\
+//     #    --java-options '${params.JAVA_Xmx_spark}' \\
+//     #    --tmp-dir ${params.tmpDir} \\
+//     #    -I ${bam} \\
+//     #    -R ${RefFasta} \\
+//     #    -L ${IntervalsList} \\
+//     #    -O ${TumorReplicateId}_bqsr4.table \\
+//     #    --known-sites ${DBSNP} \\
+//     #    --known-sites ${KnownIndels} \\
+//     #    --known-sites ${MillsGold} \\
+//     #    --spark-master local[${task.cpus}] \\
+//     #    --conf 'spark.executor.cores=${task.cpus}' \\
+//     #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+//     $GATK4 BaseRecalibrator \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${TumorReplicateId}_bqsr4.table \\
+//         --known-sites ${DBSNP} \\
+//         --known-sites ${KnownIndels} \\
+//         --known-sites ${MillsGold} && \\
+//     $GATK4 ApplyBQSRSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${TumorReplicateId}_recal4.bam \\
+//         --bqsr-recal-file ${TumorReplicateId}_bqsr4.table \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}'
+//     """
+// }
 
 process 'IndelRealignerNormalIntervals' {
 /*
@@ -3083,7 +3474,7 @@ IndelRealigner (GATK3): perform local realignment of reads around indels
         NormalReplicateId,
         file(bam),
         file(bai)
-    ) from MarkDuplicatesNormal_out_ch2
+    ) from GatherRecalBamFilesNormal_out_IndelRealignerNormalIntervals_ch0 // MarkDuplicatesNormal_out_ch3
 
     set(
         file(RefFasta),
@@ -3113,8 +3504,8 @@ IndelRealigner (GATK3): perform local realignment of reads around indels
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${NormalReplicateId}_aligned_sort_mkdp_realign_${interval}.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp_realign_${interval}.bai")
+        file("${NormalReplicateId}_recal4_realign_${interval}.bam"),
+        file("${NormalReplicateId}_recal4_realign_${interval}.bai")
     ) into IndelRealignerNormalIntervals_out_ch0
 
     script:
@@ -3170,8 +3561,14 @@ process 'GatherRealignedBamFilesNormal' {
         TumorReplicateId,
         NormalReplicateId,
         file("${NormalReplicateId}_aligned_sort_mkdp_realign.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp_realign.bai")
-    ) into GatherRealignedBamFilesNormal_out_ch0
+        file("${NormalReplicateId}_aligned_sort_mkdp_realign.bam.bai")
+    ) into (
+        // GatherRealignedBamFilesNormal_out_ch0
+        GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0,
+        GatherRealignedBamFilesNormal_out_Mutect1scattered_ch0,
+        GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0,
+        GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0
+    )
 
     script:
     """
@@ -3180,118 +3577,123 @@ process 'GatherRealignedBamFilesNormal' {
     $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
         TMP_DIR=${params.tmpDir} \\
         I=${bam.join(" I=")} \\
-        O=${NormalReplicateId}_aligned_sort_mkdp_realign.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam}
+        O=/dev/stdout \\
+        CREATE_INDEX=false \\
+        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
+    $SAMTOOLS sort \\
+        -@${task.cpus} \\
+        -m ${params.STperThreadMem} \\
+        -o ${NormalReplicateId}_aligned_sort_mkdp_realign.bam -
+    $SAMTOOLS index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp_realign.bam
     """
 }
 
-process 'BaseRecalNormalGATK3' {
-/*
-FixMateInformation (Picard): verify mate-pair information between mates; ensure that
-all mate-pair information is in sync between reads and its pairs
-*/
+// process 'BaseRecalNormalGATK3' {
+// /*
+// FixMateInformation (Picard): verify mate-pair information between mates; ensure that
+// all mate-pair information is in sync between reads and its pairs
+// */
 
-    tag "$NormalReplicateId"
-    // There was a reason for this?
-    publishDir "$params.outputDir/${TumorReplicateId}/03_varscan/processing/",
-        mode: params.publishDirMode
-    // publishDir "$params.outputDir/${TumorReplicateId[0]}/05_varscan/processing/",
-    //     mode: params.publishDirMode
+//     tag "$NormalReplicateId"
+//     // There was a reason for this?
+//     publishDir "$params.outputDir/${TumorReplicateId}/03_varscan/processing/",
+//         mode: params.publishDirMode
+//     // publishDir "$params.outputDir/${TumorReplicateId[0]}/05_varscan/processing/",
+//     //     mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from GatherRealignedBamFilesNormal_out_ch0
+//     input:
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file(bam),
+//         file(bai)
+//     ) from GatherRealignedBamFilesNormal_out_ch0
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+//     set(
+//         file(RefFasta),
+//         file(RefIdx),
+//         file(RefDict)
+//     ) from Channel.value(
+//         [ reference.RefFasta,
+//           reference.RefIdx,
+//           reference.RefDict ]
+//     )
 
-    file(IntervalsList) from preprocessIntervalList_out_ch8
+//     file(IntervalsList) from preprocessIntervalList_out_ch8
 
-    set(
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
+//     set(
+//         file(DBSNP),
+//         file(DBSNPIdx),
+//         file(KnownIndels),
+//         file(KnownIndelsIdx),
+//         file(MillsGold),
+//         file(MillsGoldIdx)
+//     ) from Channel.value(
+//         [ database.DBSNP,
+//           database.DBSNPIdx,
+//           database.KnownIndels,
+//           database.KnownIndelsIdx,
+//           database.MillsGold,
+//           database.MillsGoldIdx ]
+//     )
 
-    output:
-    file("${NormalReplicateId}_bqsr4.table")
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_recal4.bam"),
-        file("${NormalReplicateId}_recal4.bam.bai")
-    ) into (
-        BaseRecalNormalGATK3_out_ch0,
-        BaseRecalNormalGATK3_out_ch1,
-        BaseRecalNormalGATK3_out_ch2,
-        BaseRecalNormalGATK3_out_ch3
-    )
+//     output:
+//     file("${NormalReplicateId}_bqsr4.table")
+//     set(
+//         TumorReplicateId,
+//         NormalReplicateId,
+//         file("${NormalReplicateId}_recal4.bam"),
+//         file("${NormalReplicateId}_recal4.bam.bai")
+//     ) into (
+//         BaseRecalNormalGATK3_out_ch0,
+//         BaseRecalNormalGATK3_out_ch1,
+//         BaseRecalNormalGATK3_out_ch2,
+//         BaseRecalNormalGATK3_out_ch3
+//     )
 
 
-    ///
-    script:
-    """
-    mkdir -p ${params.tmpDir}
+//     ///
+//     script:
+//     """
+//     mkdir -p ${params.tmpDir}
 
-    # TODO: re-add later when more stable. Commented out do to crashing randomly
-    # $GATK4 BaseRecalibratorSpark \\
-    #    --java-options '${params.JAVA_Xmx_spark}' \\
-    #    --tmp-dir ${params.tmpDir} \\
-    #    -I ${bam} \\
-    #    -R ${RefFasta} \\
-    #    -L ${IntervalsList} \\
-    #    -O ${NormalReplicateId}_bqsr4.table \\
-    #    --known-sites ${DBSNP} \\
-    #    --known-sites ${KnownIndels} \\
-    #    --known-sites ${MillsGold} \\
-    #    --spark-master local[${task.cpus}] \\
-    #    --conf 'spark.executor.cores=${task.cpus}' \\
-    #    --conf 'spark.local.dir=${params.tmpDir}' && \\
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_bqsr4.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold} && \\
-    $GATK4 ApplyBQSRSpark \\
-        --java-options '${params.JAVA_Xmx_spark}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -R ${RefFasta} \\
-        -L ${IntervalsList} \\
-        -O ${NormalReplicateId}_recal4.bam \\
-        --bqsr-recal-file ${NormalReplicateId}_bqsr4.table \\
-        --spark-master local[${task.cpus}] \\
-        --conf 'spark.executor.cores=${task.cpus}' \\
-        --conf 'spark.local.dir=${params.tmpDir}'
-    """
-}
+//     # TODO: re-add later when more stable. Commented out do to crashing randomly
+//     # $GATK4 BaseRecalibratorSpark \\
+//     #    --java-options '${params.JAVA_Xmx_spark}' \\
+//     #    --tmp-dir ${params.tmpDir} \\
+//     #    -I ${bam} \\
+//     #    -R ${RefFasta} \\
+//     #    -L ${IntervalsList} \\
+//     #    -O ${NormalReplicateId}_bqsr4.table \\
+//     #    --known-sites ${DBSNP} \\
+//     #    --known-sites ${KnownIndels} \\
+//     #    --known-sites ${MillsGold} \\
+//     #    --spark-master local[${task.cpus}] \\
+//     #    --conf 'spark.executor.cores=${task.cpus}' \\
+//     #    --conf 'spark.local.dir=${params.tmpDir}' && \\
+//     $GATK4 BaseRecalibrator \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${NormalReplicateId}_bqsr4.table \\
+//         --known-sites ${DBSNP} \\
+//         --known-sites ${KnownIndels} \\
+//         --known-sites ${MillsGold} && \\
+//     $GATK4 ApplyBQSRSpark \\
+//         --java-options '${params.JAVA_Xmx_spark}' \\
+//         --tmp-dir ${params.tmpDir} \\
+//         -I ${bam} \\
+//         -R ${RefFasta} \\
+//         -L ${IntervalsList} \\
+//         -O ${NormalReplicateId}_recal4.bam \\
+//         --bqsr-recal-file ${NormalReplicateId}_bqsr4.table \\
+//         --spark-master local[${task.cpus}] \\
+//         --conf 'spark.executor.cores=${task.cpus}' \\
+//         --conf 'spark.local.dir=${params.tmpDir}'
+//     """
+// }
 
 process 'VarscanSomaticScattered' {
 
@@ -3307,8 +3709,8 @@ process 'VarscanSomaticScattered' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from BaseRecalTumorGATK3_out_ch0
-        .combine(BaseRecalNormalGATK3_out_ch0, by: 0)
+    ) from GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0 //BaseRecalTumorGATK3_out_ch0
+        .combine(GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0, by: 0)
         .combine(
             ScatteredIntervalListToBed_out_ch0.flatten()
         )
@@ -3512,7 +3914,7 @@ process 'FilterVarscan' {
         file(indelLOHhc),
         file(indelGerm),
         file(indelGemHc)
-    ) from BaseRecalTumorGATK3_out_ch1
+    ) from GatherRealignedBamFilesTumor_out_FilterVarscan_ch0 // BaseRecalTumorGATK3_out_ch1
         .combine(ProcessVarscanSNP_out_ch0, by :0)
         .combine(ProcessVarscanIndel_out_ch0, by :0)
 
@@ -3661,8 +4063,8 @@ process 'Mutect1scattered' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from BaseRecalTumorGATK3_out_ch3
-        .combine(BaseRecalNormalGATK3_out_ch1, by: 0)
+    ) from GatherRealignedBamFilesTumor_out_Mutect1scattered_ch0
+        .combine(GatherRealignedBamFilesNormal_out_Mutect1scattered_ch0, by: 0)
         .combine(
             SplitIntervals_out_ch6.flatten()
         )
@@ -3809,8 +4211,8 @@ process 'MantaSomaticIndels' {
         file(Normalbai),
         file(RegionsBedGz),
         file(RegionsBedGzTbi)
-    ) from BaseRecalTumorGATK3_out_ch4
-        .combine(BaseRecalNormalGATK3_out_ch2, by:0)
+    ) from GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0 // BaseRecalTumorGATK3_out_ch4
+        .combine(GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0, by:0)
         .combine(RegionsBedToTabix_out_ch1)
 
     set(
@@ -3877,8 +4279,8 @@ process StrelkaSomatic {
         file(manta_indel_tbi),
         file(RegionsBedGz),
         file(RegionsBedGzTbi)
-    ) from BaseRecalTumorGATK3_out_ch5
-        .combine(BaseRecalNormalGATK3_out_ch3, by:0)
+    ) from GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0 // BaseRecalTumorGATK3_out_ch5
+        .combine(GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0, by:0)
         .combine(MantaSomaticIndels_out_ch0, by:0)
         .combine(RegionsBedToTabix_out_ch0)
 
@@ -4106,7 +4508,7 @@ process 'mkPhasedVCF' {
         _,
         file(tumorVCF),
         file(tumorVCFidx)
-    ) from BaseRecalTumorGATK3_out_ch2
+    ) from GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0 // BaseRecalTumorGATK3_out_ch2
         .combine(FilterGermlineVariantTranches_out_ch0, by: [0,1])
         .combine(mkHCsomaticVCF_out_ch1, by: [0,1])             // uses confirmed mutect2 variants
 
@@ -4218,7 +4620,7 @@ process 'mhc_extract' {
         NormalReplicateId,
         file(tumor_BAM_aligned_sort_mkdp),
         file(tumor_BAI_aligned_sort_mkdp)
-    ) from MarkDuplicatesTumor_out_ch3
+    ) from MarkDuplicatesTumor_out_ch4
 
 
     output:
