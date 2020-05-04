@@ -18,3 +18,4 @@ bin/compareVCF.py
 .vscode/settings.json
 .vscode/.ropeproject/config.py
 bin/mkPlots.R
+bin/filterVCF.py
