@@ -259,7 +259,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsTumorFWD),
-                                file(row.readsTumorREV),
+                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV),
                                 row.group) }
             .into { raw_reads_tumor_ch;
                     fastqc_reads_tumor_ch }
@@ -270,7 +270,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsNormalFWD),
-                                file(row.readsNormalREV),
+                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV),
                                 row.group) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
