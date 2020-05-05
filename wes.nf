@@ -1029,7 +1029,11 @@ if (params.trim_adapters) {
         )
 
         // do nothing
+        script:
+        if(single_end)
         """
+            touch ${tumor_readsREV}
+            touch ${normal_readsREV}
         """
     }
 }
@@ -1188,7 +1192,10 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
         )
 
         // do nothing
+        script:
+        if(single_end_RNA)
         """
+            touch ${readsRNAseq_REV}
         """
     }
 }
