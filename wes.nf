@@ -4205,7 +4205,7 @@ process 'mhc_extract' {
     }
 
     mhcReads_1 = (single_end) ? TumorReplicateId + "_reads_mhc.fastq.gz" : TumorReplicateId + "_reads_mhc_R1.fastq.gz"
-    mhcReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "_reads_mhc_R2.fastq.gz"
+    mhcReads_2 = (single_end) ? "NO_FILE" : TumorReplicateId + "_reads_mhc_R2.fastq.gz"
 
     if(single_end)
         """
@@ -4223,6 +4223,7 @@ process 'mhc_extract' {
         $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
 
         wait
+        touch NO_FILE
 
         rm -f unmapped_bam mhc_mapped_bam R.fastq
         """
