@@ -3755,71 +3755,79 @@ process 'gatherMutect1VCFs' {
 
 
 // Strelka2 and Manta
-process 'MantaSomaticIndels' {
-    conda 'bioconda::manta=1.6.0'
+if (single_end != false) {
+    process 'MantaSomaticIndels' {
+        conda 'bioconda::manta=1.6.0'
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_manta_somatic",
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/03_manta_somatic",
+            mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(Tumorbam),
-        file(Tumorbai),
-        _,                    // unused TumorReplicateId from manta_inputNormal
-        file(Normalbam),
-        file(Normalbai),
-        file(RegionsBedGz),
-        file(RegionsBedGzTbi)
-    ) from GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0 // BaseRecalTumorGATK3_out_ch4
-        .combine(GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0, by:0)
-        .combine(RegionsBedToTabix_out_ch1)
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(Tumorbam),
+            file(Tumorbai),
+            _,                    // unused TumorReplicateId from manta_inputNormal
+            file(Normalbam),
+            file(Normalbai),
+            file(RegionsBedGz),
+            file(RegionsBedGzTbi)
+        ) from GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0 // BaseRecalTumorGATK3_out_ch4
+            .combine(GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0, by:0)
+            .combine(RegionsBedToTabix_out_ch1)
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz"),
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz"),
+            file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
+        ) into MantaSomaticIndels_out_ch0
+
+        file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz")
         file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
-    ) into MantaSomaticIndels_out_ch0
+        file("${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv")
 
-    file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv")
-
-    script:
-    """
-    configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
-        --referenceFasta ${RefFasta} \\
-        --runDir manta_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
-    manta_${TumorReplicateId}/runWorkflow.py -m local -j  ${task.cpus} &&
-    cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
-    """
+        script:
+        """
+        configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
+            --referenceFasta ${RefFasta} \\
+            --runDir manta_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
+        manta_${TumorReplicateId}/runWorkflow.py -m local -j  ${task.cpus} &&
+        cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
+        """
+    }
+} else {
+    GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0
+        .map {  item -> tuple(item.tumorSampleName,
+                              item.normalSampleName,
+                              "NO_FILE",
+                              "NO_FILE_IDX") }
+        .set { MantaSomaticIndels_out_ch0 }
 }
-
 
 process StrelkaSomatic {
     conda 'bioconda::strelka=2.9.10'
@@ -3873,12 +3881,13 @@ process StrelkaSomatic {
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.xml")
 
     script:
+    manta_indel_candidates = single_end ? "" : "--indelCandidates ${manta_indel}"
     """
     configureStrelkaSomaticWorkflow.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
         --referenceFasta ${RefFasta} \\
-        --indelCandidates ${manta_indel} \\
-        --runDir strelka_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
-    strelka_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus} &&
+        ${manta_indel_candidates} \\
+        --runDir strelka_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome
+    strelka_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus}
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz.tbi
     cp strelka_${TumorReplicateId}/results/variants/somatic.snvs.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz
