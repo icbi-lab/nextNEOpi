@@ -220,20 +220,32 @@ if (! params.batchFile) {
     // will be handled as such. You might want to process mixed sample data as
     // separate batches.
     batchCSV = file(params.batchFile).splitCsv(header:true)
+
     pe_dna_count = 0
     se_dna_count = 0
     pe_rna_count = 0
     se_rna_count = 0
+
+    def genderMap = [:]
+
     for ( row in batchCSV ) {
+        if(row.gender && row.gender != "None") {
+            genderMap[row.tumorSampleName] = (row.gender == "Female") ? "XX" : "XY"
+        } else {
+            genderMap[row.tumorSampleName] = "XY"
+        }
+
         if (row.readsTumorREV == "None") {
             single_end = true
             se_dna_count++
         } else {
             pe_dna_count++
         }
+
         if (row.readsNormalFWD == "None") {
             exit 1, "No normal sample defined for " + row.readsTumorFWD
         }
+
         if (row.readsRNAseqFWD == "None") {
             have_RNAseq = false
         } else {
@@ -246,9 +258,11 @@ if (! params.batchFile) {
             }
         }
     }
+
     if (pe_dna_count != 0 && se_dna_count != 0) {
         exit 1, "Please do not mix pe and se DNA read samples in batch file. Create a separate batch file for se and pe DNA samples"
     }
+
     if (pe_rna_count != 0 && se_rna_count != 0) {
         exit 1, "Please do not mix pe and se RNA read samples in batch file. Create a separate batch file for se and pe RNA samples"
     }
@@ -336,6 +350,7 @@ OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
 MIXCR		  = file(params.MIXCR)
 MiXMHC2PRED   = file(params.MiXMHC2PRED)
+ALLELECOUNT   = file(params.ALLELECOUNT)
 
 /*
 ________________________________________________________________________________
@@ -584,7 +599,8 @@ process 'ScatteredIntervalListToBed' {
     file(
         "*.bed"
     ) into (
-        ScatteredIntervalListToBed_out_ch0
+        ScatteredIntervalListToBed_out_ch0,
+        ScatteredIntervalListToBed_out_ch1
     )
 
     script:
@@ -3107,7 +3123,9 @@ process 'GatherRealignedBamFilesTumor' {
         GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0,
         GatherRealignedBamFilesTumor_out_Mutect1scattered_ch0,
         GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0,
-        GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0
+        GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0,
+        GatherRealignedBamFilesTumor_out_AlleleCounter_ch0,
+        GatherRealignedBamFilesTumor_out_Mpileup4ControFREEC_ch0
     )
 
     script:
@@ -3236,7 +3254,9 @@ process 'GatherRealignedBamFilesNormal' {
         GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0,
         GatherRealignedBamFilesNormal_out_Mutect1scattered_ch0,
         GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0,
-        GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0
+        GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0,
+        GatherRealignedBamFilesNormal_out_AlleleCounter_ch0,
+        GatherRealignedBamFilesNormal_out_Mpileup4ControFREEC_ch0
     )
 
     script:
@@ -3272,7 +3292,7 @@ process 'VarscanSomaticScattered' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0 //BaseRecalTumorGATK3_out_ch0
+    ) from GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0
         .combine(GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0, by: 0)
         .combine(
             ScatteredIntervalListToBed_out_ch0.flatten()
@@ -3755,7 +3775,7 @@ process 'gatherMutect1VCFs' {
 
 
 // Strelka2 and Manta
-if (single_end != false) {
+if (! single_end) {
     process 'MantaSomaticIndels' {
         conda 'bioconda::manta=1.6.0'
 
@@ -3822,8 +3842,8 @@ if (single_end != false) {
     }
 } else {
     GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0
-        .map {  item -> tuple(item.tumorSampleName,
-                              item.normalSampleName,
+        .map {  item -> tuple(item[0],
+                              item[1],
                               "NO_FILE",
                               "NO_FILE_IDX") }
         .set { MantaSomaticIndels_out_ch0 }
@@ -4180,6 +4200,376 @@ process 'mkPhasedVCF' {
     """
 }
 // END CREATE phased VCF
+
+// CNVs: ASCAT + FREEC
+
+// mix tumor normal channels and add sampleType (T/N) so that we can split again
+AlleleCounter_in_ch = Channel.empty()
+                        .mix(
+                            GatherRealignedBamFilesTumor_out_AlleleCounter_ch0
+                                .combine(Channel.of("T")),
+                            GatherRealignedBamFilesNormal_out_AlleleCounter_ch0
+                                .combine(Channel.of("N"))
+                        )
+
+// adopted from sarek nfcore
+process AlleleCounter {
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(BAM),
+        file(BAI),
+        sampleType
+    ) from AlleleCounter_in_ch
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(acLoci)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.acLoci ]
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file("${outFileName}.alleleCount")
+    ) into AlleleCounter_out_ch0
+
+
+    script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + ".alleleCount" : NormalReplicateId + ".alleleCount"
+    """
+    $ALLELECOUNT \\
+        -l ${acLoci} \\
+        -r ${RefFasta} \\
+        -b ${tumorBAM} \\
+        -o ${outFileName}
+    """
+}
+
+alleleCountOutNormal = Channel.create()
+alleleCountOutTumor = Channel.create()
+
+AlleleCounter_out_ch0
+    .choice(
+        alleleCountOutTumor, alleleCountOutNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+AlleleCounter_out_ch0 = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0,1])
+
+
+// R script from Malin Larssons bitbucket repo:
+// https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
+process ConvertAlleleCounts {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/14_ASCAT/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        _,
+        file(alleleCountTumor),
+        _,
+        file(alleleCountNormal),
+    ) from AlleleCounter_out_ch0
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.BAF"),
+        file("${TumorReplicateId}.LogR"),
+        file("${NormalReplicateId}.BAF"),
+        file("${NormalReplicateId}.LogR")
+    ) into ConvertAlleleCounts_out_ch
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    Rscript ${workflow.projectDir}/bin/convertAlleleCounts.r \\
+        ${TumorReplicateId} ${alleleCountTumor} ${NormalReplicateId} ${alleleCountNormal} ${gender}
+    """
+}
+
+// R scripts from Malin Larssons bitbucket repo:
+// https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
+process 'Ascat' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/14_ASCAT/",
+        mode: params.publishDirMode
+
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bafTumor),
+        file(logrTumor),
+        file(bafNormal),
+        file(logrNormal)
+    ) into ConvertAlleleCounts_out_ch
+
+    file(acLociGC) from Channel.value(reference.acLociGC)
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.*.{png,txt}")
+    ) into Ascat_out_ch
+
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    # get rid of "chr" string if there is any
+    for f in *BAF *LogR; do sed 's/chr//g' \$f > tmpFile; mv tmpFile \$f;done
+    Rscript ${workflow.projectDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${gender}
+    """
+}
+
+// mix tumor normal channels and add sampleType (T/N) so that we can split again
+Mpileup4ControFREEC_in_ch = Channel.empty()
+                            .mix(
+                                GatherRealignedBamFilesTumor_out_Mpileup4ControFREEC_ch0
+                                    .combine(Channel.of("T")),
+                                GatherRealignedBamFilesNormal_out_Mpileup4ControFREEC_ch0
+                                    .combine(Channel.of("N"))
+                            )
+
+process 'Mpileup4ControFREEC' {
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(BAM),
+        file(BAI),
+        sampleType,
+        file(intervals)
+    ) from Mpileup4ControFREEC_in_ch
+        .combine(
+            ScatteredIntervalListToBed_out_ch1.flatten()
+        )
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${intervals}.pileup.gz")
+    ) into Mpileup4ControFREEC_out_ch0
+
+    script:
+    """
+    $SAMTOOLS mpileup \\
+        -q 1 \\
+        -f ${RefFasta} \\
+        -l ${intervals} | \\
+    $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${intervals}.pileup.gz
+    """
+
+
+}
+
+ Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0, 1, 2])
+
+process 'gatherMpileups' {
+// Merge scattered Varscan vcfs
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(mpileup)
+    ) from Mpileup4ControFREEC_out_ch0
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}.pileup.gz")
+    ) into gatherMpileups_out_ch0
+
+    script:
+    """
+    scatters=`ls -1v *.pileup.gz`
+    zcat \$scatters | \\
+    bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}.pileup.gz
+    """
+}
+
+mpileupOutNormal = Channel.create()
+mpileupOutTumor = Channel.create()
+
+gatherMpileups_out_ch0
+    .choice(
+        mpileupOutTumor, mpileupOutNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
+
+// run ControlFREEC : adopted from nfcore sarek
+process 'ControlFREEC' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        _,
+        file(mpileupTumor),
+        _,
+        file(mpileupNormal)
+    ) from gatherMpileups_out_ch0
+
+    set(
+        file(RefChrDir),
+        file(RefChrLen),
+        file(DBSNP),
+        file(DBSNPIdx)
+    ) from Channel.value(
+        [ reference.RefChrDir,
+          reference.RefChrLen,
+          database.DBSNP,
+          database.DBSNPIdx ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.pileup.gz_CNVs"),
+        file("${TumorReplicateId}.pileup.gz_ratio.txt"),
+        file("${TumorReplicateId}.pileup.gz_normal_CNVs"),
+        file("${TumorReplicateId}.pileup.gz_normal_ratio.txt"),
+        file("${TumorReplicateId}.pileup.gz_BAF.txt"),
+        file("${NormalReplicateId}.pileup.gz_BAF.txt"),
+    ) into into controlControlFREEC_out_ch0
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("*.pileup.gz*"),
+        file("${TumorReplicateId}_vs_${NormalReplicateId}.config.txt")
+    ) into ControlFREEC_out_ch1
+
+
+    script:
+    config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
+    gender = genderMap[idPatient]
+    """
+    touch ${config}
+    echo "[general]" >> ${config}
+    echo "BedGraphOutput = TRUE" >> ${config}
+    echo "chrFiles = \${PWD}/${RefChrDir.fileName}" >> ${config}
+    echo "chrLenFile = \${PWD}/${RefChrLen.fileName}" >> ${config}
+    echo "coefficientOfVariation = 0.05" >> ${config}
+    echo "contaminationAdjustment = TRUE" >> ${config}
+    echo "forceGCcontentNormalization = 0" >> ${config}
+    echo "maxThreads = ${task.cpus}" >> ${config}
+    echo "minimalSubclonePresence = 20" >> ${config}
+    echo "ploidy = 2,3,4" >> ${config}
+    echo "sex = ${gender}" >> ${config}
+    echo "window = 50000" >> ${config}
+    echo "" >> ${config}
+    echo "[control]" >> ${config}
+    echo "inputFormat = pileup" >> ${config}
+    echo "mateFile = \${PWD}/${mpileupNormal}" >> ${config}
+    echo "mateOrientation = FR" >> ${config}
+    echo "" >> ${config}
+    echo "[sample]" >> ${config}
+    echo "inputFormat = pileup" >> ${config}
+    echo "mateFile = \${PWD}/${mpileupTumor}" >> ${config}
+    echo "mateOrientation = FR" >> ${config}
+    echo "" >> ${config}
+    echo "[BAF]" >> ${config}
+    echo "SNPfile = ${DBSNP.fileName}" >> ${config}
+    freec -conf ${config}
+    """
+}
+
+
+process 'ControlFREECviz' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+        mode: params.publishDirMode
+
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(cnvTumor),
+        file(ratioTumor),
+        file(cnvNormal),
+        file(ratioNormal),
+        file(bafTumor),
+        file(bafNormal)
+    ) from ControlFREEC_out_ch0
+
+    output:
+    set(
+        file("*.txt"),
+        file("*.png"),
+        file("*.bed"),
+        file("*.circos")
+     ) into ControlFREECviz_out_ch0
+
+
+    script:
+    """
+    Rscript ${workflow.projectDir}/bin/bin/assess_significance.R ${cnvTumor} ${ratioTumor}
+    Rscript ${workflow.projectDir}/bin/assess_significance.R ${cnvNormal} ${ratioNormal}
+    Rscript ${workflow.projectDir}/bin/makeGraph.R 2 ${ratioTumor} ${bafTumor}
+    Rscript ${workflow.projectDir}/bin/makeGraph.R 2 ${ratioNormal} ${bafNormal}
+    $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
+    $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioNormal} > ${NormalReplicateId}.bed
+    $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
+    $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioNormal} > ${NormalReplicateId}.circos
+    """
+}
+
+// END CNVs
+
 
 // HLA TYPING
 
@@ -5267,7 +5657,7 @@ def checkParamReturnFileDatabases(item) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 13) exit 1, """
+        if (params.references.size() != 17) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5275,19 +5665,23 @@ def defineReference() {
             'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
             'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
             'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
+            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
             'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
             'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
+            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'acLoci'            : checkParamReturnFileReferences("acLoci"),
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC")
         ]
     } else {
-        if (params.references.size() != 13) exit 1, """
+        if (params.references.size() != 16) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5295,14 +5689,18 @@ def defineReference() {
             'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
             'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
             'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
+            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
+            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'acLoci'            : checkParamReturnFileReferences("acLoci"),
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC")
         ]
     }
 }
