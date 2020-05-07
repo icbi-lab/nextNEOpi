@@ -351,6 +351,7 @@ HLAHD		  = file(params.HLAHD)
 MIXCR		  = file(params.MIXCR)
 MiXMHC2PRED   = file(params.MiXMHC2PRED)
 ALLELECOUNT   = file(params.ALLELECOUNT)
+FREEC         = file(params.FREEC)
 
 /*
 ________________________________________________________________________________
@@ -4521,7 +4522,7 @@ process 'ControlFREEC' {
     echo "" >> ${config}
     echo "[BAF]" >> ${config}
     echo "SNPfile = ${DBSNP.fileName}" >> ${config}
-    freec -conf ${config}
+    $FREEC -conf ${config}
     """
 }
 
