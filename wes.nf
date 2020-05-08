@@ -4669,9 +4669,18 @@ process gatherSequenzaInput {
 
     script:
     """
+    first=1
     scatters=`ls -1v *_${TumorReplicateId}_seqz.gz`
-    zcat \$scatters | \\
-    sed '1d' | \\
+    for f in \$scatters
+    do
+        if [ "\$first" ]
+        then
+            zcat "\$f"
+            first=
+        else
+            zcat "\$f" | tail -n +2
+        fi
+    done | \\
     bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_seqz.gz
     """
 }
