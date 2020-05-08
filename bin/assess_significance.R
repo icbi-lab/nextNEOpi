@@ -4,10 +4,10 @@ library(rtracklayer)
 
 args <- commandArgs()
 
-dataTable <-read.table(args[5], header=TRUE);
+dataTable <-read.table(args[5], fill = TRUE, header=TRUE);
 ratio<-data.frame(dataTable)
 
-dataTable <- read.table(args[4], header=FALSE)
+dataTable <- read.table(args[4], fill = TRUE, header=FALSE)
 cnvs<- data.frame(dataTable)
 
 ratio$Ratio[which(ratio$Ratio==-1)]=NA

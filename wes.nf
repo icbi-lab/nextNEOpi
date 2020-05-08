@@ -226,7 +226,7 @@ if (! params.batchFile) {
     pe_rna_count = 0
     se_rna_count = 0
 
-    def genderMap = [:]
+    genderMap = [:]
 
     for ( row in batchCSV ) {
         if(row.gender && row.gender != "None") {
@@ -352,6 +352,7 @@ MIXCR		  = file(params.MIXCR)
 MiXMHC2PRED   = file(params.MiXMHC2PRED)
 ALLELECOUNT   = file(params.ALLELECOUNT)
 FREEC         = file(params.FREEC)
+RSCRIPT       = file(params.RSCRIPT)
 
 /*
 ________________________________________________________________________________
@@ -2850,8 +2851,6 @@ process 'CNNScoreVariants' {
 
     // TODO: deal with this smarter
     conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
-    // conda 'bioconda::gatk4-spark=4.1.4.1'
 
     tag "$TumorReplicateId"
 
@@ -3126,7 +3125,8 @@ process 'GatherRealignedBamFilesTumor' {
         GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0,
         GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0,
         GatherRealignedBamFilesTumor_out_AlleleCounter_ch0,
-        GatherRealignedBamFilesTumor_out_Mpileup4ControFREEC_ch0
+        GatherRealignedBamFilesTumor_out_Mpileup4ControFREEC_ch0,
+        GatherRealignedBamFilesTumor_out_Sequenza_ch0
     )
 
     script:
@@ -3257,7 +3257,8 @@ process 'GatherRealignedBamFilesNormal' {
         GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0,
         GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0,
         GatherRealignedBamFilesNormal_out_AlleleCounter_ch0,
-        GatherRealignedBamFilesNormal_out_Mpileup4ControFREEC_ch0
+        GatherRealignedBamFilesNormal_out_Mpileup4ControFREEC_ch0,
+        GatherRealignedBamFilesNormal_out_Sequenza_ch0
     )
 
     script:
@@ -4237,13 +4238,14 @@ process AlleleCounter {
           reference.RefIdx,
           reference.RefDict,
           reference.acLoci ]
+    )
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
         sampleType,
-        file("${outFileName}.alleleCount")
+        file(outFileName)
     ) into AlleleCounter_out_ch0
 
 
@@ -4253,7 +4255,7 @@ process AlleleCounter {
     $ALLELECOUNT \\
         -l ${acLoci} \\
         -r ${RefFasta} \\
-        -b ${tumorBAM} \\
+        -b ${BAM} \\
         -o ${outFileName}
     """
 }
@@ -4325,7 +4327,7 @@ process 'Ascat' {
         file(logrTumor),
         file(bafNormal),
         file(logrNormal)
-    ) into ConvertAlleleCounts_out_ch
+    ) from ConvertAlleleCounts_out_ch
 
     file(acLociGC) from Channel.value(reference.acLociGC)
 
@@ -4395,7 +4397,8 @@ process 'Mpileup4ControFREEC' {
     $SAMTOOLS mpileup \\
         -q 1 \\
         -f ${RefFasta} \\
-        -l ${intervals} | \\
+        -l ${intervals} \\
+        ${BAM} | \\
     $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${intervals}.pileup.gz
     """
 
@@ -4422,14 +4425,15 @@ process 'gatherMpileups' {
         TumorReplicateId,
         NormalReplicateId,
         sampleType,
-        file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}.pileup.gz")
+        file(outFileName)
     ) into gatherMpileups_out_ch0
 
     script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + ".pileup.gz" : NormalReplicateId + ".pileup.gz"
     """
     scatters=`ls -1v *.pileup.gz`
     zcat \$scatters | \\
-    bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}.pileup.gz
+    bgzip --threads ${task.cpus} -c > ${outFileName}
     """
 }
 
@@ -4479,23 +4483,26 @@ process 'ControlFREEC' {
         NormalReplicateId,
         file("${TumorReplicateId}.pileup.gz_CNVs"),
         file("${TumorReplicateId}.pileup.gz_ratio.txt"),
-        file("${TumorReplicateId}.pileup.gz_normal_CNVs"),
-        file("${TumorReplicateId}.pileup.gz_normal_ratio.txt"),
-        file("${TumorReplicateId}.pileup.gz_BAF.txt"),
-        file("${NormalReplicateId}.pileup.gz_BAF.txt"),
-    ) into into controlControlFREEC_out_ch0
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("*.pileup.gz*"),
-        file("${TumorReplicateId}_vs_${NormalReplicateId}.config.txt")
-    ) into ControlFREEC_out_ch1
-
+        file("${TumorReplicateId}.pileup.gz_BAF.txt")
+    ) into ControlFREEC_out_ch0
 
     script:
     config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
-    gender = genderMap[idPatient]
+    gender = genderMap[TumorReplicateId]
+
+    read_orientation = (single_end) ? "0" : "FR"
+    minimalSubclonePresence = (params.WES) ? 30 : 20
+    degree = (params.WES) ? 1 : 4
+    noisyData = (params.WES) ? "TRUE" : "FALSE"
+    window = (params.WES) ? 0 : 50000
+    breakPointType = (params.WES) ? 4 : 2
+    breakPointThreshold = (params.WES) ? "1.2" : "0.8"
+    printNA = (params.WES) ? "FALSE" :  "TRUE"
+    readCountThreshold = (params.WES) ? 50 : 10
+    minimalCoveragePerPosition = (params.WES) ? 5 : 0
+    captureRegions = (params.WES) ? reference.RegionsBed : ""
     """
+    rm -f ${config}
     touch ${config}
     echo "[general]" >> ${config}
     echo "BedGraphOutput = TRUE" >> ${config}
@@ -4505,23 +4512,33 @@ process 'ControlFREEC' {
     echo "contaminationAdjustment = TRUE" >> ${config}
     echo "forceGCcontentNormalization = 0" >> ${config}
     echo "maxThreads = ${task.cpus}" >> ${config}
-    echo "minimalSubclonePresence = 20" >> ${config}
+    echo "minimalSubclonePresence = ${minimalSubclonePresence}" >> ${config}
     echo "ploidy = 2,3,4" >> ${config}
+    echo "degree = ${degree}" >> ${config}
+    echo "noisyData = ${noisyData}" >> ${config}
     echo "sex = ${gender}" >> ${config}
-    echo "window = 50000" >> ${config}
+    echo "window = ${window}" >> ${config}
+    echo "breakPointType = ${breakPointType}" >> ${config}
+    echo "breakPointThreshold = ${breakPointThreshold}" >> ${config}
+    echo "printNA = ${printNA}" >> ${config}
+    echo "readCountThreshold = ${readCountThreshold}" >> ${config}
     echo "" >> ${config}
     echo "[control]" >> ${config}
     echo "inputFormat = pileup" >> ${config}
     echo "mateFile = \${PWD}/${mpileupNormal}" >> ${config}
-    echo "mateOrientation = FR" >> ${config}
+    echo "mateOrientation = ${read_orientation}" >> ${config}
     echo "" >> ${config}
     echo "[sample]" >> ${config}
     echo "inputFormat = pileup" >> ${config}
     echo "mateFile = \${PWD}/${mpileupTumor}" >> ${config}
-    echo "mateOrientation = FR" >> ${config}
+    echo "mateOrientation = ${read_orientation}" >> ${config}
     echo "" >> ${config}
     echo "[BAF]" >> ${config}
     echo "SNPfile = ${DBSNP.fileName}" >> ${config}
+    echo "minimalCoveragePerPosition = ${minimalCoveragePerPosition}" >> ${config}
+    echo "" >> ${config}
+    echo "[target]" >> ${config}
+    echo "captureRegions = ${captureRegions}" >> ${config}
     $FREEC -conf ${config}
     """
 }
@@ -4530,6 +4547,9 @@ process 'ControlFREEC' {
 process 'ControlFREECviz' {
 
     tag "$TumorReplicateId"
+
+    // makeGraph.R and assess_significance.R seem to be instable
+    errorStrategy 'ignore'
 
     publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
         mode: params.publishDirMode
@@ -4541,10 +4561,7 @@ process 'ControlFREECviz' {
         NormalReplicateId,
         file(cnvTumor),
         file(ratioTumor),
-        file(cnvNormal),
-        file(ratioNormal),
         file(bafTumor),
-        file(bafNormal)
     ) from ControlFREEC_out_ch0
 
     output:
@@ -4558,16 +4575,138 @@ process 'ControlFREECviz' {
 
     script:
     """
-    Rscript ${workflow.projectDir}/bin/bin/assess_significance.R ${cnvTumor} ${ratioTumor}
-    Rscript ${workflow.projectDir}/bin/assess_significance.R ${cnvNormal} ${ratioNormal}
-    Rscript ${workflow.projectDir}/bin/makeGraph.R 2 ${ratioTumor} ${bafTumor}
-    Rscript ${workflow.projectDir}/bin/makeGraph.R 2 ${ratioNormal} ${bafNormal}
+    cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
+    cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
     $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
-    $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioNormal} > ${NormalReplicateId}.bed
     $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
-    $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioNormal} > ${NormalReplicateId}.circos
     """
 }
+
+
+Channel
+    .fromPath(reference.RefChrLen)
+    .splitCsv(sep: "\t")
+    .map { row -> row[1] }
+    .set { chromosomes_ch }
+
+process 'SequenzaUtils' {
+
+    tag "$TumorReplicateId"
+
+    conda "assets/sequenza-utils.yml"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(tumorBAM),
+        file(tumorBAI),
+        file(normalBAM),
+        file(normalBAI)
+    ) from GatherRealignedBamFilesTumor_out_Sequenza_ch0
+        .combine(GatherRealignedBamFilesNormal_out_Sequenza_ch0, by:[0,1])
+    each chromosome from chromosomes_ch
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(SequnzaGC)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.SequenzaGC ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${chromosome}_${TumorReplicateId}_seqz.gz")
+    )  into SequenzaUtils_out_ch0
+
+    script:
+    """
+    sequenza-utils \\
+        bam2seqz \\
+        --fasta ${RefFasta} \\
+        --tumor ${tumorBAM} \\
+        --normal ${normalBAM} \\
+        -gc ${SequnzaGC} \\
+        --chromosome ${chromosome} \\
+        | \\
+    sequenza-utils \\
+        seqz_binning \\
+        -w 50 \\
+        -s - \\
+        | \\
+    $BGZIP \\
+        --threads ${task.cpus} -c > ${chromosome}_${TumorReplicateId}_seqz.gz
+
+    """
+}
+
+process gatherSequenzaInput {
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(chromosome_seqz_binned)
+    ) from SequenzaUtils_out_ch0
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_seqz.gz")
+    ) into gatherSequenzaInput_out_ch0
+
+    script:
+    """
+    scatters=`ls -1v *.pileup.gz`
+    zcat \$scatters | \\
+    bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_seqz.gz
+    """
+}
+
+process Sequenza {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/16_Sequenza/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(seqz_file)
+    ) from gatherSequenzaInput_out_ch0
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_sequenzaResults/${TumorReplicateId}_confints_CP.txt"),
+        file("${TumorReplicateId}_sequenzaResults/${TumorReplicateId}_segments.txt")
+    ) into Sequenza_out_ch0
+    file("${TumorReplicateId}_sequenzaResults/*")
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    $RSCRIPT \\
+        ${workflow.projectDir}/bin/SequenzaScript.R \\
+        ${seqz_file} \\
+        ${TumorReplicateId} \\
+        ${gender}
+    """
+}
+
 
 // END CNVs
 
@@ -5658,7 +5797,7 @@ def checkParamReturnFileDatabases(item) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 17) exit 1, """
+        if (params.references.size() != 18) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5679,10 +5818,11 @@ def defineReference() {
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
             'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC")
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() != 16) exit 1, """
+        if (params.references.size() != 17) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5701,7 +5841,8 @@ def defineReference() {
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
             'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC")
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     }
 }

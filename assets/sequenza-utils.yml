@@ -1,0 +1,10 @@
+# Conda environment for sequenza-utils
+#
+name: sequenza-utils
+channels:
+- conda-forge
+- bioconda
+dependencies:
+- python=3.7
+- pip:
+  - sequenza-utils
