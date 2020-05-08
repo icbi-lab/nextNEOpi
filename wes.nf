@@ -4656,7 +4656,9 @@ process gatherSequenzaInput {
         TumorReplicateId,
         NormalReplicateId,
         file(chromosome_seqz_binned)
-    ) from SequenzaUtils_out_ch0.collect()
+    ) from SequenzaUtils_out_ch0
+        .groupTuple(by: [0,1])
+
 
     output:
     set(
