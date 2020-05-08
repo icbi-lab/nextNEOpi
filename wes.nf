@@ -4656,7 +4656,7 @@ process gatherSequenzaInput {
         TumorReplicateId,
         NormalReplicateId,
         file(chromosome_seqz_binned)
-    ) from SequenzaUtils_out_ch0
+    ) from SequenzaUtils_out_ch0.collect()
 
     output:
     set(
@@ -4667,8 +4667,9 @@ process gatherSequenzaInput {
 
     script:
     """
-    scatters=`ls -1v *.pileup.gz`
+    scatters=`ls -1v *_${TumorReplicateId}_seqz.gz`
     zcat \$scatters | \\
+    sed '1d' | \\
     bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_seqz.gz
     """
 }
