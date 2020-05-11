@@ -4068,7 +4068,7 @@ process 'Clonality' {
         --min_vaf 0.01 \\
         --result_table ${TumorReplicateId}_segments.txt
     ${RSCRIPT} \\
-        ${workflow.projectDir}/bin/CCF_main.R \\
+        ${workflow.projectDir}/bin/CCF.R \\
         ${TumorReplicateId}_segments.txt \\
         ${TumorReplicateId}_CCFest.tsv \\
     """

@@ -1,3 +1,11 @@
+args = commandArgs(trailingOnly=TRUE)
+
+varDataIn <- args[1]
+outFile <- args[2]
+
+varData<-read.csv(varDataIn, sep="\t", stringsAsFactors=TRUE)
+
+
 getCCF<-function(data) {
   
   # Restrict to Chromosomes 1-22
@@ -92,3 +100,7 @@ absCCF2<-function(idata) {
   return(est)
   
 }
+
+CCFest<-getCCF(varData)
+
+write.table(CCFest, file=outFile, sep="\t", quote=FALSE)
