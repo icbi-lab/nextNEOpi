@@ -4054,7 +4054,6 @@ process 'Clonality' {
     output:
     set(
         TumorReplicateId,
-        NormalReplicateId,
         file("${TumorReplicateId}_CCFest.tsv"),
     ) into Clonality_out_ch0
 
@@ -4721,12 +4720,19 @@ process concat_mhcI_files {
     output:
     set(
         TumorReplicateId,
-        file("*_MHCI_filtered.tsv")
-    ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
+        file("${TumorReplicateId}_MHCI_filtered.tsv")
+    ) into (
+        MHCI_final_ranked,
+        MHCI_final_immunogenicity,
+        concat_mhcI_filtered_files_out_addCCF_ch0
+    )
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
-    ) into MHCI_all_epitopes
+    ) into (
+        MHCI_all_epitopes,
+        concat_mhcI_all_files_out_addCCF_ch0
+    )
 
     script:
     """
@@ -4751,12 +4757,18 @@ process concat_mhcII_files {
     output:
     set(
         TumorReplicateId,
-        file("*_MHCII_filtered.tsv")
-    ) into MHCII_final_ranked
+        file("${TumorReplicateId}_MHCII_filtered.tsv")
+    ) into (
+        MHCII_final_ranked,
+        concat_mhcII_filtered_files_out_addCCF_ch0
+    )
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
-    ) into MHCII_all_epitopes
+    ) into (
+        MHCII_all_epitopes,
+        concat_mhcII_all_files_out_addCCF_ch0
+    )
 
     script:
     """
@@ -4913,6 +4925,41 @@ process mixMHC2pred {
             if (\$0 ~ /\\#/) { print }
             else { if (\$18 <= 2) { print } }
         }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
+    """
+}
+
+// add CCF clonality to neoepitopes result files
+process addCCF {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
+        mode: params.publishDirMode
+
+    conda 'assets/py3_icbi.yml'
+
+    input:
+    set(
+        TumorReplicateId,
+        file(epitopes),
+        file(CCF)
+    ) from concat_mhcI_filtered_files_out_addCCF_ch0
+        .concat(
+                concat_mhcI_all_files_out_addCCF_ch0,
+                concat_mhcII_filtered_files_out_addCCF_ch0,
+                concat_mhcII_all_files_out_addCCF_ch0
+        )
+        .combine(Clonality_out_ch0, by: 0)
+
+    output:
+    file("${TumorReplicateId}_mixMHC2pred_all.tsv")
+
+    script:
+    outfile = epitopes.baseName + "_ccf.tsv"
+    """
+    add_CCF.py \\
+        --neoepitopes \\
+        --ccf \\
+        --outfile ${outfile}
     """
 }
 
