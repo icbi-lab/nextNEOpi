@@ -3444,6 +3444,12 @@ process 'mkPhasedVCF' {
         mkPhasedVCF_out_ch0,
         mkPhasedVCF_out_pVACseq_ch0
     )
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
+    ) into mkPhasedVCF_out_Clonality_ch0
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
 
@@ -3653,8 +3659,10 @@ process 'Ascat' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}.*.{png,txt}")
-    ) into Ascat_out_ch
+        file("${TumorReplicateId}.cnvs.txt")
+        file("${TumorReplicateId}.purityploidy.txt")
+    ) into Ascat_out_Clonality_ch0
+    file("${TumorReplicateId}.*.{png,txt}")
 
 
     script:
@@ -4027,6 +4035,46 @@ process Sequenza {
 }
 
 
+process 'Clonality' {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(hc_vep_vcf),
+        file(CNVs),
+        file(purity)
+    ) from mkPhasedVCF_out_Clonality_ch0
+        .combine(Ascat_out_Clonality_ch0)
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_CCFest.tsv"),
+    ) into Clonality_out_ch0
+
+    script:
+    """
+    mkCCF_input.py \\
+        --PatientID ${TumorReplicateId} \\
+        --vcf ${hc_vep_vcf} \\
+        --seg ${CNVs} \\
+        --purity ${purity} \\
+        --min_vaf 0.01 \\
+        --result_table ${TumorReplicateId}_segments.txt
+    ${RSCRIPT} \\
+        ${workflow.projectDir}/bin/CCF_main.R \\
+        ${TumorReplicateId}_segments.txt \\
+        ${TumorReplicateId}_CCFest.tsv \\
+    """
+}
+
+
 // END CNVs
 
 
@@ -4107,7 +4155,6 @@ process 'mhc_extract' {
         rm -f unmapped_bam mhc_mapped_bam R1.fastq R2.fastq
         """
 }
-
 
 /*
 *********************************************

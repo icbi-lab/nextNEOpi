@@ -1,7 +1,12 @@
 source("CCF_functions.R")
 
-exdata<-read.csv("ex_data.tsv", sep="\t",
-  stringsAsFactors=TRUE)
+args = commandArgs(trailingOnly=TRUE)
 
-CCFest<-getCCF(exdata)
+varDataIn <- args[1]
+outFile <- args[2]
 
+varData<-read.csv(varDataIn, sep="\t", stringsAsFactors=TRUE)
+
+CCFest<-getCCF(varData)
+
+write.table(CCFest, file=outFile, sep="\t", quote=FALSE)
