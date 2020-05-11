@@ -4951,14 +4951,14 @@ process addCCF {
         .combine(Clonality_out_ch0, by: 0)
 
     output:
-    file("${TumorReplicateId}_mixMHC2pred_all.tsv")
+    file(outfile)
 
     script:
     outfile = epitopes.baseName + "_ccf.tsv"
     """
     add_CCF.py \\
-        --neoepitopes \\
-        --ccf \\
+        --neoepitopes ${epitopes} \\
+        --ccf ${CCF} \\
         --outfile ${outfile}
     """
 }
