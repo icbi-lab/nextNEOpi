@@ -64,6 +64,35 @@ def get_segments(seg_file):
         if chrom != old_chrom:
             i = 0
             old_chrom = chrom
+            segments["chr_prefix"] = True if chrom.startswith("chr") else False
+            segments[chrom] = []
+
+        segments[chrom].append(
+            {"start_pos": int(start_pos), "end_pos": int(end_pos), "n_major": int(n_major), "n_minor": int(n_minor)}
+        )
+
+    seg_file.close()
+
+    return segments
+
+
+def get_segments_seqz(seg_file):
+    segments = {}
+
+    i = 0
+    old_chrom = ""
+
+    # skip headr
+    seg_file.readline()
+
+    for line in seg_file:
+        line = line.strip()
+        fields = line.split("\t")
+        chrom, start_pos, end_pos, n_major, n_minor = [fields[0], fields[1], fields[2], fields[10], fields[11]]
+        if chrom != old_chrom:
+            i = 0
+            old_chrom = chrom
+            segments["chr_prefix"] = True if chrom.startswith("chr") else False
             segments[chrom] = []
 
         segments[chrom].append(
@@ -82,6 +111,19 @@ def get_purity(purity_file):
     purity_file.close()
 
     return line
+
+
+def get_purity_seqz(purity_file):
+
+    purity_file.readline()
+    purity_file.readline()
+
+    line = purity_file.readline()
+    purity = line.strip().split("\t")[0]
+
+    purity_file.close()
+
+    return purity
 
 
 def is_coding(variant_type):
@@ -107,7 +149,8 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
         "ploidy",
         "cnA",
         "cnB",
-        "purity" "coding",
+        "purity",
+        "coding",
     ]
     write_fh.write("\t".join(header_fields) + "\n")
 
@@ -119,7 +162,9 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
         variant_type = rec.INFO["CSQ"][0].split("|")[1]
         coding = "T" if is_coding(variant_type) else "F"
 
-        chrom_key = rec.CHROM.lstrip("chr") if (rec.CHROM.startswith("chr")) else rec.CHROM
+        chrom_key = (
+            rec.CHROM.lstrip("chr") if (rec.CHROM.startswith("chr")) and not segments["chr_prefix"] else rec.CHROM
+        )
 
         for seg in segments[chrom_key]:
             if rec.POS >= seg["start_pos"] and rec.POS <= seg["end_pos"]:
@@ -157,14 +202,23 @@ if __name__ == "__main__":
     parser.add_argument("--PatientID", required=True, default="", type=str, help="Patient ID")
     parser.add_argument("--sample_type", required=False, default="Tumor", type=str, help="Sample type string")
     parser.add_argument("--vcf", required=True, type=str, help="VCF file")
-    parser.add_argument("--seg", required=True, type=str, help="ASCAT segment/cnv file *.cnvs.txt")
+    parser.add_argument("--seg", required=False, default="", type=str, help="ASCAT segment/cnv file *.cnvs.txt")
+    parser.add_argument(
+        "--seg_sequenza", required=False, default="", type=str, help="Sequenza segment/cnv file segments.txt"
+    )
     parser.add_argument(
         "--purity",
         required=False,
-        default="0.75",
         type=str,
         help="Tumor purity as nmuber or ASCAT tumor purity file *.purityploidy.txt",
     )
+    parser.add_argument(
+        "--purity_sequenza",
+        required=False,
+        type=str,
+        help="Tumor purity as nmuber or sequenza tumor purity file confints_CP.txt",
+    )
+
     parser.add_argument("--min_vaf", required=False, default=0.05, type=float, help="minimum VAF to consider")
     parser.add_argument(
         "--result_table",
@@ -177,14 +231,29 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    purity = args.purity if is_number(args.purity) else get_purity(_file_read(args.purity))
+    if args.seg != "" and args.seg_sequenza != "":
+        print("ERROR: please provide a segments file from ASCAT or Sequenza")
+        sys.exit(1)
+
+    if args.purity_sequenza:
+        purity = (
+            args.purity_sequenza
+            if is_number(args.purity_sequenza)
+            else get_purity_seqz(_file_read(args.purity_sequenza))
+        )
+    else:
+        purity = args.purity if is_number(args.purity) else get_purity(_file_read(args.purity))
 
     if float(purity) > 1 or float(purity) <= 0 or is_number(purity) is False:
         print(is_number(purity))
-        print("ERROR: purity should be 0> p <=1, got: " + str(purity))
-        sys.exit(1)
+        print("Warning: purity should be 0> p <=1, got: " + str(purity) + " - setting it to 0.75")
+        purity = "0.75"
 
-    segments = get_segments(_file_read(args.seg))
+    if args.seg_sequenza:
+        segments = get_segments_seqz(_file_read(args.seg_sequenza))
+    else:
+        segments = get_segments(_file_read(args.seg))
+
     make_ccf_calc_input(
         args.PatientID,
         args.sample_type,

@@ -19,12 +19,10 @@ if (gender == "XX") {
 seqzData <- sequenza.extract(seqzFile,
                              chromosome.list = chromosomes);
 
-seqzRes <- paste(subjectID, "_sequenzaResults", sep = "");
-
 dir.create(seqzRes, showWarnings = TRUE, recursive = FALSE, mode = "0755")
 
 for(i in 1:length(seqzData$chromosomes)) {
-    pngOut <- paste(seqzRes, "/", subjectID, "_MAF_BAF_DPR_", seqzData$chromosomes[i], ".png", sep = "")
+    pngOut <- paste(subjectID, "_MAF_BAF_DPR_", seqzData$chromosomes[i], ".png", sep = "")
     png(pngOut);
     chromosome.view(mut.tab = seqzData$mutations[[i]],
                     baf.windows = seqzData$BAF[[i]],
@@ -40,4 +38,4 @@ CP.subjectID <- sequenza.fit(seqzData)
 sequenza.results(sequenza.extract = seqzData,
                  cp.table = CP.subjectID,
                  sample.id = subjectID,
-                 out.dir = seqzRes);
+                 out.dir = "./");

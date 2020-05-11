@@ -4010,10 +4010,10 @@ process Sequenza {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_sequenzaResults/${TumorReplicateId}_confints_CP.txt"),
-        file("${TumorReplicateId}_sequenzaResults/${TumorReplicateId}_segments.txt")
+        file("${TumorReplicateId}_confints_CP.txt"),
+        file("${TumorReplicateId}_segments.txt")
     ) into Sequenza_out_ch0
-    file("${TumorReplicateId}_sequenzaResults/*")
+    file("${TumorReplicateId}/*")
 
     script:
     gender = genderMap[TumorReplicateId]
