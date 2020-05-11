@@ -1523,10 +1523,40 @@ if(params.WES) {
         $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${procSampleName}.flagstat.txt
         """
     }
+
+    alignmentMetricsTumor_ch = Channel.create()
+    alignmentMetricsNormal_ch = Channel.create()
+
+    alignmentMetrics_ch
+        .choice(
+            alignmentMetricsTumor_ch, alignmentMetricsNormal_ch
+        ) { it[2] == "T" ? 0 : 1 }
+
+    alignmentMetricsTumor_ch = alignmentMetricsTumor_ch
+            .map{
+                    TumorReplicateId, NormalReplicateId,
+                    sampleTypeN, metricFiles -> tuple(
+                        TumorReplicateId,
+                        NormalReplicateId,
+                        metricFiles
+                    )
+                }
+
+    alignmentMetricsNormal_ch = alignmentMetricsNormal_ch
+            .map{
+                    TumorReplicateId, NormalReplicateId,
+                    sampleTypeN, metricFiles -> tuple(
+                        TumorReplicateId,
+                        NormalReplicateId,
+                        metricFiles
+                    )
+                }
+
 } else {
     // bogus channel for multiqc
-    alignmentMetrics_ch = MarkDuplicates_out_ch0
-                            .map{ it -> tuple(it[0],it[1],it[2], "")}
+    alignmentMetricsTumor_ch = MarkDuplicates_out_ch0
+                            .map{ it -> tuple(it[0],it[1], "")}
+    (alignmentMetricsNormal_ch, alignmentMetricsTumor_ch) = alignmentMetricsTumor_ch.into(2)
 }
 
 
@@ -2804,7 +2834,7 @@ process 'FilterVarscan' {
         file(indelGemHc)
     ) from GatherRealignedBamFilesTumor_out_FilterVarscan_ch0 // BaseRecalTumorGATK3_out_ch1
         .combine(ProcessVarscanSNP_out_ch0, by :[0,1])
-        .combine(ProcessVarscanIndel_out_ch0, by :0)
+        .combine(ProcessVarscanIndel_out_ch0, by :[0,1])
 
     set(
         file(RefFasta),
@@ -5023,41 +5053,41 @@ if(params.TCR) {
 *  Generate final multiQC output  *
 ***********************************
 */
-// process multiQC {
+process multiQC {
 
-//     publishDir "${params.outputDir}/$TumorReplicateId/02_QC", mode: params.publishDirMode
+    publishDir "${params.outputDir}/$TumorReplicateId/02_QC", mode: params.publishDirMode
 
-//     input:
-//     set(
-//         TumorReplicateId,
-//         NormalReplicateId,
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*"),
-//         file("*")
-//     )   from ch_fastqc
-//             .combine(ch_fastp_tumor, by: [0,1])
-//             .combine(ch_fastp_normal, by: [0,1])
-//             .combine(ch_fastqc_trimmed, by: [0,1])
-//             .combine(ch_fastp_RNAseq, by: [0,1])
-//             .combine(ch_fastqc_trimmed_RNAseq, by: [0,1])
-//             .combine(alignmentMetricsTumor_ch, by: [0,1])
-//             .combine(alignmentMetricsNormal_ch, by: [0,1])
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*"),
+        file("*")
+    )   from ch_fastqc
+            .combine(ch_fastp_tumor, by: [0,1])
+            .combine(ch_fastp_normal, by: [0,1])
+            .combine(ch_fastqc_trimmed, by: [0,1])
+            .combine(ch_fastp_RNAseq, by: [0,1])
+            .combine(ch_fastqc_trimmed_RNAseq, by: [0,1])
+            .combine(alignmentMetricsTumor_ch, by: [0,1])
+            .combine(alignmentMetricsNormal_ch, by: [0,1])
 
-//     output:
-//     file("multiqc_data/*")
-//     file("multiqc_report.html")
+    output:
+    file("multiqc_data/*")
+    file("multiqc_report.html")
 
-//     script:
-//     """
-//     multiqc .
-//     """
+    script:
+    """
+    multiqc .
+    """
 
-// }
+}
 
 
 /*
