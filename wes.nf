@@ -2275,9 +2275,6 @@ process 'CNNScoreVariants' {
 
     tag "$TumorReplicateId"
 
-    // publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/processing",
-    // mode: params.publishDirMode
-
     input:
     set(
         file(RefFasta),
@@ -2369,7 +2366,6 @@ process 'FilterGermlineVariantTranches' {
 
     // TODO: deal with this smarter
     conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
 
     tag "$TumorReplicateId"
 
@@ -3289,8 +3285,7 @@ process 'mkHCsomaticVCF' {
 */
 
     // TODO: deal with this smarter
-    conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    conda 'assets/py3_icbi.yml'
 
     tag "$TumorReplicateId"
 
@@ -3659,8 +3654,8 @@ process 'Ascat' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}.cnvs.txt")
-        file("${TumorReplicateId}.purityploidy.txt")
+        file("${TumorReplicateId}.cnvs.txt"),
+        file("${TumorReplicateId}.purityploidy.txt"),
     ) into Ascat_out_Clonality_ch0
     file("${TumorReplicateId}.*.{png,txt}")
 
@@ -3909,7 +3904,7 @@ process 'SequenzaUtils' {
 
     tag "$TumorReplicateId"
 
-    conda "assets/sequenza-utils.yml"
+    conda "assets/py3_icbi.yml"
 
     input:
     set(
@@ -4022,7 +4017,7 @@ process Sequenza {
         file("${TumorReplicateId}_confints_CP.txt"),
         file("${TumorReplicateId}_segments.txt")
     ) into Sequenza_out_ch0
-    file("${TumorReplicateId}/*")
+    file("${TumorReplicateId}_*.{png,pdf,txt}")
 
     script:
     gender = genderMap[TumorReplicateId]
@@ -4042,15 +4037,19 @@ process 'Clonality' {
     publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
         mode: params.publishDirMode
 
+
+    conda "assets/py3_icbi.yml"
+
     input:
     set(
         TumorReplicateId,
         NormalReplicateId,
         file(hc_vep_vcf),
+        file(hc_vep_idx),
         file(CNVs),
         file(purity)
     ) from mkPhasedVCF_out_Clonality_ch0
-        .combine(Ascat_out_Clonality_ch0)
+        .combine(Ascat_out_Clonality_ch0, by: [0,1])
 
     output:
     set(
@@ -4837,8 +4836,7 @@ process 'pepare_mixMHC2_seq' {
     // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
     //     mode: params.publishDirMode
 
-    // TODO: fix me, maybe us a separate conda, need py3
-    conda 'assets/gatkcondaenv.yml'
+    conda 'assets/py3_icbi.yml'
 
     input:
     set(
@@ -4877,8 +4875,7 @@ process mixMHC2pred {
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
         mode: params.publishDirMode
 
-    // TODO: fix me, maybe us a separate conda, need py3
-    conda 'assets/gatkcondaenv.yml'
+    conda 'assets/py3_icbi.yml'
 
     input:
     set(
