@@ -3997,6 +3997,7 @@ process gatherSequenzaInput {
         fi
     done | \\
     bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_seqz.gz
+    sync
     """
 }
 
