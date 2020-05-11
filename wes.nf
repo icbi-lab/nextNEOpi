@@ -992,68 +992,23 @@ if (params.trim_adapters) {
             """
     }
 } else { // no adapter trimming
-    process mk_readChannelsFromRaw {
-        tag "$TumorReplicateId"
+    (
+        reads_tumor_ch,
+        reads_tumor_uBAM_ch,
+        reads_tumor_mixcr_DNA_ch,
+        ch_fastqc_trimmed
+    ) = raw_reads_tumor_ch.into(4)
 
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
-        ) from raw_reads_tumor_ch
+    (
+        reads_normal_ch,
+        reads_normal_uBAM_ch,
+        reads_normal_mixcr_DNA_ch
+    ) = raw_reads_normal_ch.into(3)
 
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
-        ) from raw_reads_normal_ch
+    ch_fastqc_trimmed = ch_fastqc_trimmed
+                            .map{ it -> tuple(it[0], it[1], "")}
 
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
-        ) into (
-            reads_tumor_ch,
-            reads_tumor_uBAM_ch,
-            reads_tumor_mixcr_DNA_ch
-        )
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
-        ) into (
-            reads_normal_ch,
-            reads_normal_uBAM_ch,
-            reads_normal_mixcr_DNA_ch
-        )
-
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into (
-            ch_fastqc_trimmed,
-            ch_fastp_tumor,
-            ch_fastp_normal
-        )
-
-        // do nothing
-        script:
-        if(single_end)
-        """
-            touch ${tumor_readsREV}
-            touch ${normal_readsREV}
-        """
-    }
+    (ch_fastp_normal, ch_fastp_tumor, ch_fastqc_trimmed) = ch_fastqc_trimmed.into(3)
 }
 
 // adapter trimming RNAseq
@@ -1175,47 +1130,19 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
     }
 
 } else { // no adapter trimming for RNAseq
-    process mk_readRNAseqChannelsFromRaw {
-        tag "$TumorReplicateId"
 
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(readsRNAseq_FWD),
-            file(readsRNAseq_REV),
-        ) from raw_reads_tumor_neofuse_ch
+    (
+        reads_tumor_neofuse_ch,
+        reads_tumor_optitype_ch,
+        reads_tumor_mixcr_RNA_ch,
+        ch_fastp_RNAseq
+    ) = raw_reads_tumor_neofuse_ch.into(4)
 
-        empty = []
+    ch_fastp_RNAseq = ch_fastp_RNAseq
+                            .map{ it -> tuple(it[0], it[1], "")}
 
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(readsRNAseq_FWD),
-            file(readsRNAseq_REV),
-        ) into (
-            reads_tumor_neofuse_ch,
-            reads_tumor_optitype_ch,
-            reads_tumor_mixcr_RNA_ch
-        )
+    (ch_fastqc_trimmed_RNAseq, ch_fastp_RNAseq) = ch_fastp_RNAseq.into(2)
 
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into (
-            ch_fastp_RNAseq,
-            ch_fastqc_trimmed_RNAseq
-        )
-
-        // do nothing
-        script:
-        if(single_end_RNA)
-        """
-            touch ${readsRNAseq_REV}
-        """
-    }
 }
 
 
