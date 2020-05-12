@@ -65,6 +65,7 @@ if(params.batchFile) summary['Batch file']                 = params.batchFile
 if(params.readsNormal != "NO_FILE") summary['Reads normal fastq files'] = params.readsNormal
 if(params.readsTumor != "NO_FILE") summary['Reads tumor fastq files']   = params.readsTumor
 if(params.customHLA != "NO_FILE") summary['Custom HLA file']   = params.customHLA
+summary['Gender']                        = params.gender
 summary['Read length']                   = params.readLength
 summary['Baits bed file']                = params.references.BaitsBed
 summary['Regions bed file']              = params.references.RegionsBed
@@ -211,6 +212,13 @@ if (! params.batchFile) {
                 ))
             .set { custom_hlas_ch }
 
+    genderMap = [:]
+
+    if (params.gender in ["XX", "XY", "Female", "Male"]) {
+        genderMap[row.tumorSampleName] = params.gender
+    } else {
+        exit 1, "Gender should be one of: XX, XY, Female, Male, got: " + params.gender
+    }
 } else {
     // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
     // create channel with all sampleId/reads file sets from the batch file
@@ -230,8 +238,13 @@ if (! params.batchFile) {
 
     for ( row in batchCSV ) {
         if(row.gender && row.gender != "None") {
-            genderMap[row.tumorSampleName] = (row.gender == "Female") ? "XX" : "XY"
+            if (params.gender in ["XX", "XY", "Female", "Male"]) {
+               genderMap[row.tumorSampleName] = (row.gender == "Female" || row.gender == "XX") ? "XX" : "XY"
+            } else {
+                exit 1, "Gender should be one of: XX, XY, Female, Male, got: " + params.gender
+            }
         } else {
+            println("WARNING: gender not specified assuming: XY")
             genderMap[row.tumorSampleName] = "XY"
         }
 

@@ -49,7 +49,7 @@ To run the pipeline local, the required software has to be installed:
 * SAMTOOLS 		(Version 1.9)
 * PICARD 		(Version 2.22.1)
 * GATK3 		(Version 3.8-0)
-* GATK4 		(Version 4.1.4.1)
+* GATK4 		(Version 4.1.7.0)
 * VARSCAN 		(Version 2.4.3)
 * MUTECT1 		(Version 1.1.7)
 * BAMREADCOUNT 	(Version 0.8.0)
@@ -59,6 +59,17 @@ To run the pipeline local, the required software has to be installed:
 * BCFTOOLS
 * MANTA
 * STRELKA
+* SAMBAMBA
+* OPTITYPE
+* PYTHON
+* CONDA
+* YARA
+* HLAHD
+* MIXCR
+* MiXMHC2PRED
+* ALLELECOUNT
+* controlFREEC
+* RSCRIPT
 
 
 ## 1.2 References
@@ -118,33 +129,35 @@ or
 **--batchFile:**
 * CSV-file, paired-end T/N reads, paired-end RNAseq reads:
 
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,group
- sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,group1
- sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,group1
+ tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
+ sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1
+ sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1
  ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,groupX
+ sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX,groupX
 
 * CSV-file, single-end T/N reads, single-end RNAseq reads:
 
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,group
- sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,group1
- sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,group1
+ tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
+ sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1
+ sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1
  ...
- sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,groupX
+ sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,groupX
 
 * CSV-file, single-end T/N reads, NO RNAseq reads:
 
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,group
- sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,group1
- sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,group1
+ tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
+ sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1
+ sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1
  ...
- sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,groupX
+ sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX,groupX
 
 
 Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
 DNA reads paired-end and all RNAseq reads single-end or vice-versa.
 
 Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below
+
+Note: gender can be XX or Female, XY or Male. If not specified or "None" Male is assumed
 
 #### Optional argument:
 **--tumorSampleName**       tumor sample name. If not specified samples will be named according to the fastq filenames.
@@ -183,6 +196,8 @@ Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for
 **--TCR**                   Run mixcr for TCR prediction
                             Default: true
 **--customHLA**             Provide a custom HLA types file. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
+
+**--gender**                Provide the gender of the sample (XX or Female, XY or Male)
 
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
                             (see params.conf)
