@@ -220,20 +220,32 @@ if (! params.batchFile) {
     // will be handled as such. You might want to process mixed sample data as
     // separate batches.
     batchCSV = file(params.batchFile).splitCsv(header:true)
+
     pe_dna_count = 0
     se_dna_count = 0
     pe_rna_count = 0
     se_rna_count = 0
+
+    genderMap = [:]
+
     for ( row in batchCSV ) {
+        if(row.gender && row.gender != "None") {
+            genderMap[row.tumorSampleName] = (row.gender == "Female") ? "XX" : "XY"
+        } else {
+            genderMap[row.tumorSampleName] = "XY"
+        }
+
         if (row.readsTumorREV == "None") {
             single_end = true
             se_dna_count++
         } else {
             pe_dna_count++
         }
+
         if (row.readsNormalFWD == "None") {
             exit 1, "No normal sample defined for " + row.readsTumorFWD
         }
+
         if (row.readsRNAseqFWD == "None") {
             have_RNAseq = false
         } else {
@@ -246,9 +258,11 @@ if (! params.batchFile) {
             }
         }
     }
+
     if (pe_dna_count != 0 && se_dna_count != 0) {
         exit 1, "Please do not mix pe and se DNA read samples in batch file. Create a separate batch file for se and pe DNA samples"
     }
+
     if (pe_rna_count != 0 && se_rna_count != 0) {
         exit 1, "Please do not mix pe and se RNA read samples in batch file. Create a separate batch file for se and pe RNA samples"
     }
@@ -336,6 +350,9 @@ OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
 MIXCR		  = file(params.MIXCR)
 MiXMHC2PRED   = file(params.MiXMHC2PRED)
+ALLELECOUNT   = file(params.ALLELECOUNT)
+FREEC         = file(params.FREEC)
+RSCRIPT       = file(params.RSCRIPT)
 
 /*
 ________________________________________________________________________________
@@ -584,7 +601,8 @@ process 'ScatteredIntervalListToBed' {
     file(
         "*.bed"
     ) into (
-        ScatteredIntervalListToBed_out_ch0
+        ScatteredIntervalListToBed_out_ch0,
+        ScatteredIntervalListToBed_out_ch1
     )
 
     script:
@@ -974,68 +992,23 @@ if (params.trim_adapters) {
             """
     }
 } else { // no adapter trimming
-    process mk_readChannelsFromRaw {
-        tag "$TumorReplicateId"
+    (
+        reads_tumor_ch,
+        reads_tumor_uBAM_ch,
+        reads_tumor_mixcr_DNA_ch,
+        ch_fastqc_trimmed
+    ) = raw_reads_tumor_ch.into(4)
 
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
-        ) from raw_reads_tumor_ch
+    (
+        reads_normal_ch,
+        reads_normal_uBAM_ch,
+        reads_normal_mixcr_DNA_ch
+    ) = raw_reads_normal_ch.into(3)
 
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
-        ) from raw_reads_normal_ch
+    ch_fastqc_trimmed = ch_fastqc_trimmed
+                            .map{ it -> tuple(it[0], it[1], "")}
 
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
-        ) into (
-            reads_tumor_ch,
-            reads_tumor_uBAM_ch,
-            reads_tumor_mixcr_DNA_ch
-        )
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
-        ) into (
-            reads_normal_ch,
-            reads_normal_uBAM_ch,
-            reads_normal_mixcr_DNA_ch
-        )
-
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into (
-            ch_fastqc_trimmed,
-            ch_fastp_tumor,
-            ch_fastp_normal
-        )
-
-        // do nothing
-        script:
-        if(single_end)
-        """
-            touch ${tumor_readsREV}
-            touch ${normal_readsREV}
-        """
-    }
+    (ch_fastp_normal, ch_fastp_tumor, ch_fastqc_trimmed) = ch_fastqc_trimmed.into(3)
 }
 
 // adapter trimming RNAseq
@@ -1157,53 +1130,35 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
     }
 
 } else { // no adapter trimming for RNAseq
-    process mk_readRNAseqChannelsFromRaw {
-        tag "$TumorReplicateId"
 
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(readsRNAseq_FWD),
-            file(readsRNAseq_REV),
-        ) from raw_reads_tumor_neofuse_ch
+    (
+        reads_tumor_neofuse_ch,
+        reads_tumor_optitype_ch,
+        reads_tumor_mixcr_RNA_ch,
+        ch_fastp_RNAseq
+    ) = raw_reads_tumor_neofuse_ch.into(4)
 
-        empty = []
+    ch_fastp_RNAseq = ch_fastp_RNAseq
+                            .map{ it -> tuple(it[0], it[1], "")}
 
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(readsRNAseq_FWD),
-            file(readsRNAseq_REV),
-        ) into (
-            reads_tumor_neofuse_ch,
-            reads_tumor_optitype_ch,
-            reads_tumor_mixcr_RNA_ch
-        )
+    (ch_fastqc_trimmed_RNAseq, ch_fastp_RNAseq) = ch_fastp_RNAseq.into(2)
 
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into (
-            ch_fastp_RNAseq,
-            ch_fastqc_trimmed_RNAseq
-        )
-
-        // do nothing
-        script:
-        if(single_end_RNA)
-        """
-            touch ${readsRNAseq_REV}
-        """
-    }
 }
 
 
+// mix tumor normal channels and add sampleType (T/N) so that we can split again
+reads_uBAM_ch = Channel.empty()
+                        .mix(
+                            reads_tumor_uBAM_ch
+                                .combine(Channel.of("T")),
+                            reads_normal_uBAM_ch
+                                .combine(Channel.of("N"))
+                        )
+
+
 /// start processing reads
-process 'make_uBAM_Tumor' {
-// make uBAM tumor
+process 'make_uBAM' {
+// make uBAM
 
     tag "$TumorReplicateId"
 
@@ -1217,28 +1172,32 @@ process 'make_uBAM_Tumor' {
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
-    ) from reads_tumor_uBAM_ch
+        sampleType
+    ) from reads_uBAM_ch
 
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_unaligned.bam")
-    ) into tumor_uBAM_out_ch0
+        sampleType,
+        file(outFileName)
+    ) into uBAM_out_ch0
 
     script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + "_unaligned.bam" : NormalReplicateId + "_unaligned.bam"
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     if (single_end)
         """
         mkdir -p ${params.tmpDir}
         $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
             TMP_DIR=${params.tmpDir} \\
             F1=${readsFWD} \\
-            READ_GROUP_NAME=${TumorReplicateId} \\
-            SAMPLE_NAME=${TumorReplicateId} \\
-            LIBRARY_NAME=${TumorReplicateId} \\
+            READ_GROUP_NAME=${procSampleName} \\
+            SAMPLE_NAME=${procSampleName} \\
+            LIBRARY_NAME=${procSampleName} \\
             PLATFORM=ILLUMINA \\
-            O=${TumorReplicateId}_unaligned.bam
+            O=${procSampleName}_unaligned.bam
         """
     else
         """
@@ -1247,16 +1206,24 @@ process 'make_uBAM_Tumor' {
             TMP_DIR=${params.tmpDir} \\
             F1=${readsFWD} \\
             F2=${readsREV} \\
-            READ_GROUP_NAME=${TumorReplicateId} \\
-            SAMPLE_NAME=${TumorReplicateId} \\
-            LIBRARY_NAME=${TumorReplicateId} \\
+            READ_GROUP_NAME=${procSampleName} \\
+            SAMPLE_NAME=${procSampleName} \\
+            LIBRARY_NAME=${procSampleName} \\
             PLATFORM=ILLUMINA \\
-            O=${TumorReplicateId}_unaligned.bam
+            O=${procSampleName}_unaligned.bam
         """
 }
 
+reads_ch = Channel.empty()
+                    .mix(
+                        reads_tumor_ch
+                            .combine(Channel.of("T")),
+                        reads_normal_ch
+                            .combine(Channel.of("N"))
+                    )
 
-process 'BwaTumor' {
+
+process 'Bwa' {
 // Aligning tumor reads to reference, sort and index; create BAMs
 
     tag "$TumorReplicateId"
@@ -1271,7 +1238,8 @@ process 'BwaTumor' {
         file(readsFWD),
         file(readsREV),
         sampleGroup,      // unused so far
-    ) from reads_tumor_ch
+        sampleType
+    ) from reads_ch
     set(
         file(RefFasta),
         file(RefIdx),
@@ -1288,15 +1256,19 @@ process 'BwaTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_aligned.bam")
-    ) into BwaTumor_out_ch0
+        sampleType,
+        file(outFileName)
+    ) into Bwa_out_ch0
 
     script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + "_aligned.bam" : NormalReplicateId + "_aligned.bam"
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+
     sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
     if (single_end)
         """
         $BWA mem \\
-            -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \\
+            -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
             -Y \\
@@ -1308,13 +1280,13 @@ process 'BwaTumor' {
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
-            -o ${TumorReplicateId}_aligned.bam \\
+            -o ${outFileName} \\
             /dev/stdin
         """
     else
         """
         $BWA mem \\
-            -R "@RG\\tID:${TumorReplicateId}\\tLB:${TumorReplicateId}\\tSM:${TumorReplicateId}\\tPL:ILLUMINA" \\
+            -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
             -M ${RefFasta} \\
             -t ${task.cpus} \\
             -Y \\
@@ -1327,14 +1299,14 @@ process 'BwaTumor' {
             -m ${params.SB_sort_mem} \\
             -l 6 \\
             -t ${sort_threads} \\
-            -o ${TumorReplicateId}_aligned.bam \\
+            -o ${outFileName} \\
             /dev/stdin
         """
 }
 
 
-process 'merge_uBAM_BAM_Tumor' {
-// merge alinged BAM and uBAM tumor
+process 'merge_uBAM_BAM' {
+// merge alinged BAM and uBAM
 
     tag "$TumorReplicateId"
 
@@ -1345,10 +1317,11 @@ process 'merge_uBAM_BAM_Tumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(BAM),
         file(uBAM)
-    ) from BwaTumor_out_ch0
-        .combine(tumor_uBAM_out_ch0, by: [0,1])
+    ) from Bwa_out_ch0
+        .combine(uBAM_out_ch0, by: [0,1,2])
 
     set(
         file(RefFasta),
@@ -1365,10 +1338,13 @@ process 'merge_uBAM_BAM_Tumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_merged.bam")
-    ) into tumor_uBAM_BAM_out_ch
+        sampleType,
+        file("${procSampleName}_merged.bam")
+    ) into uBAM_BAM_out_ch
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+
     paired_run = (single_end) ? 'false' : 'true'
     """
     mkdir -p ${params.tmpDir}
@@ -1393,12 +1369,12 @@ process 'merge_uBAM_BAM_Tumor' {
         UNMAP_CONTAMINANT_READS=true \\
         ALIGNED_BAM=${BAM} \\
         UNMAPPED_BAM=${uBAM} \\
-        OUTPUT=${TumorReplicateId}_merged.bam
+        OUTPUT=${procSampleName}_merged.bam
     """
 }
 
 
-process 'MarkDuplicatesTumor' {
+process 'MarkDuplicates' {
 // Mark duplicates with sambamba
 
     tag "$TumorReplicateId"
@@ -1410,8 +1386,9 @@ process 'MarkDuplicatesTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam)
-    ) from tumor_uBAM_BAM_out_ch // BwaTumor_out_ch0
+    ) from uBAM_BAM_out_ch // BwaTumor_out_ch0
 
     set(
         file(RefFasta),
@@ -1427,17 +1404,19 @@ process 'MarkDuplicatesTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_aligned_sort_mkdp.bam"),
-        file("${TumorReplicateId}_aligned_sort_mkdp.bai")
+        sampleType,
+        file("${procSampleName}_aligned_sort_mkdp.bam"),
+        file("${procSampleName}_aligned_sort_mkdp.bai")
     ) into (
-        MarkDuplicatesTumor_out_ch0,
-        MarkDuplicatesTumor_out_ch1,
-        MarkDuplicatesTumor_out_ch2,
-        MarkDuplicatesTumor_out_ch3,
-        MarkDuplicatesTumor_out_ch4 // mhc_extract -> hld-hd, optitype
+        MarkDuplicates_out_ch0,
+        MarkDuplicates_out_ch1,
+        MarkDuplicates_out_ch2,
+        MarkDuplicates_out_ch3
     )
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+
     """
     mkdir -p ${params.tmpDir}
     $SAMBAMBA markdup \\
@@ -1458,18 +1437,36 @@ process 'MarkDuplicatesTumor' {
         TMP_DIR=${params.tmpDir} \\
         R=${RefFasta} \\
         I=/dev/stdin \\
-        O=${TumorReplicateId}_aligned_sort_mkdp.bam \\
+        O=${procSampleName}_aligned_sort_mkdp.bam \\
         CREATE_INDEX=true \\
         MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
         VALIDATION_STRINGENCY=LENIENT
 
-    # samtools index -@${task.cpus} ${TumorReplicateId}_aligned_sort_mkdp.bam
+    # samtools index -@${task.cpus} ${procSampleName}_aligned_sort_mkdp.bam
     """
 }
 
+// prepare channel for mhc_extract -> hld-hd, optitype
+MarkDuplicatesTumor_out_ch0 = MarkDuplicates_out_ch3
+                                .filter {
+                                    it[2] == "T"
+                                }
+MarkDuplicatesTumor_out_ch0 = MarkDuplicatesTumor_out_ch0
+                                .map{
+                                        TumorReplicateId,
+                                        NormalReplicateId,
+                                        sampleType,
+                                        TumorBAM,
+                                        TumorBAI  -> tuple(
+                                            TumorReplicateId,
+                                            NormalReplicateId,
+                                            TumorBAM,
+                                            TumorBAI
+                                        )
+                                    }
 
 if(params.WES) {
-    process 'alignmentMetricsTumor' {
+    process 'alignmentMetrics' {
     // Generate HS metrics using picard
 
         tag "$TumorReplicateId"
@@ -1481,9 +1478,10 @@ if(params.WES) {
         set(
             TumorReplicateId,
             NormalReplicateId,
+            sampleType,
             file(bam),
             file(bai)
-        ) from MarkDuplicatesTumor_out_ch0
+        ) from MarkDuplicates_out_ch0
 
         set(
             file(RefFasta),
@@ -1500,402 +1498,65 @@ if(params.WES) {
         output:
         set(TumorReplicateId,
             NormalReplicateId,
-            file("${TumorReplicateId}.*.txt")
-        ) into alignmentMetricsTumor_ch // multiQC
+            sampleType,
+            file("${procSampleName}.*.txt")
+        ) into alignmentMetrics_ch // multiQC
 
         script:
+        procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+
         """
         mkdir -p ${params.tmpDir}
         $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
             TMP_DIR=${params.tmpDir} \\
             INPUT=${bam} \\
-            OUTPUT=${TumorReplicateId}.HS.metrics.txt \\
+            OUTPUT=${procSampleName}.HS.metrics.txt \\
             R=${RefFasta} \\
             BAIT_INTERVALS=${BaitIntervalsList} \\
             TARGET_INTERVALS=${IntervalsList} \\
-            PER_TARGET_COVERAGE=${TumorReplicateId}.perTarget.coverage.txt && \\
+            PER_TARGET_COVERAGE=${procSampleName}.perTarget.coverage.txt && \\
         $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
             TMP_DIR=${params.tmpDir} \\
             INPUT=${bam} \\
-            OUTPUT=${TumorReplicateId}.AS.metrics.txt \\
+            OUTPUT=${procSampleName}.AS.metrics.txt \\
             R=${RefFasta} &&
-        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${TumorReplicateId}.flagstat.txt
+        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${procSampleName}.flagstat.txt
         """
     }
+
+    alignmentMetricsTumor_ch = Channel.create()
+    alignmentMetricsNormal_ch = Channel.create()
+
+    alignmentMetrics_ch
+        .choice(
+            alignmentMetricsTumor_ch, alignmentMetricsNormal_ch
+        ) { it[2] == "T" ? 0 : 1 }
+
+    alignmentMetricsTumor_ch = alignmentMetricsTumor_ch
+            .map{
+                    TumorReplicateId, NormalReplicateId,
+                    sampleTypeN, metricFiles -> tuple(
+                        TumorReplicateId,
+                        NormalReplicateId,
+                        metricFiles
+                    )
+                }
+
+    alignmentMetricsNormal_ch = alignmentMetricsNormal_ch
+            .map{
+                    TumorReplicateId, NormalReplicateId,
+                    sampleTypeN, metricFiles -> tuple(
+                        TumorReplicateId,
+                        NormalReplicateId,
+                        metricFiles
+                    )
+                }
+
 } else {
     // bogus channel for multiqc
-    process mk_bogus_alignmentMetricsTumor_ch {
-        tag "$TumorReplicateId"
-
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            _,
-            _
-        ) from MarkDuplicatesTumor_out_ch0
-
-
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into alignmentMetricsTumor_ch
-
-        // do nothing
-        """
-        """
-    }
-}
-
-
-process 'make_uBAM_Normal' {
-// make uBAM normal
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(readsFWD),
-        file(readsREV),
-        sampleGroup,      // unused so far
-    ) from reads_normal_uBAM_ch
-
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_unaligned.bam")
-    ) into normal_uBAM_out_ch0
-
-    script:
-    if (single_end)
-        """
-        mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
-            TMP_DIR=${params.tmpDir} \\
-            F1=${readsFWD} \\
-            READ_GROUP_NAME=${NormalReplicateId} \\
-            SAMPLE_NAME=${NormalReplicateId} \\
-            LIBRARY_NAME=${NormalReplicateId} \\
-            PLATFORM=ILLUMINA \\
-            O=${NormalReplicateId}_unaligned.bam
-        """
-    else
-        """
-        mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
-            TMP_DIR=${params.tmpDir} \\
-            F1=${readsFWD} \\
-            F2=${readsREV} \\
-            READ_GROUP_NAME=${NormalReplicateId} \\
-            SAMPLE_NAME=${NormalReplicateId} \\
-            LIBRARY_NAME=${NormalReplicateId} \\
-            PLATFORM=ILLUMINA \\
-            O=${NormalReplicateId}_unaligned.bam
-        """
-}
-
-
-process 'BwaNormal' {
-// Aligning Normal reads to reference, sort and index; create BAMs
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(readsFWD),
-        file(readsREV),
-        sampleGroup      // unused so far
-    ) from reads_normal_ch
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-        file(BwaRef)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict,
-          reference.BwaRef ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_aligned.bam")
-    ) into BwaNormal_out_ch0
-
-    script:
-    sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
-    if(single_end)
-        """
-        $BWA mem \\
-            -R "@RG\\tID:${NormalReplicateId}\\tLB:${NormalReplicateId}\\tSM:${NormalReplicateId}\\tPL:ILLUMINA" \\
-            -M ${RefFasta} \\
-            -t ${task.cpus} \\
-            -Y \\
-            ${readsFWD} | \\
-        $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMBAMBA sort \\
-            --sort-picard \\
-            --tmpdir=${params.tmpDir} \\
-            -m ${params.SB_sort_mem} \\
-            -l 6 \\
-            -t ${sort_threads} \\
-            -o ${NormalReplicateId}_aligned.bam \\
-            /dev/stdin
-        """
-    else
-        """
-        $BWA mem \\
-            -R "@RG\\tID:${NormalReplicateId}\\tLB:${NormalReplicateId}\\tSM:${NormalReplicateId}\\tPL:ILLUMINA" \\
-            -M ${RefFasta} \\
-            -t ${task.cpus} \\
-            -Y \\
-            ${readsFWD} \\
-            ${readsREV} | \\
-        $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMBAMBA sort \\
-            --sort-picard \\
-            --tmpdir=${params.tmpDir} \\
-            -m ${params.SB_sort_mem} \\
-            -l 6 \\
-            -t ${sort_threads} \\
-            -o ${NormalReplicateId}_aligned.bam \\
-            /dev/stdin
-    """
-}
-
-process 'merge_uBAM_BAM_Normal' {
-// merge alinged BAM and uBAM normal
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(BAM),
-        file(uBAM)
-    ) from BwaNormal_out_ch0
-        .combine(normal_uBAM_out_ch0, by: [0,1])
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_merged.bam")
-    ) into normal_uBAM_BAM_out_ch
-
-    script:
-    paired_run = (single_end) ? 'false' : 'true'
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=${params.tmpDir} \\
-        VALIDATION_STRINGENCY=SILENT \\
-        EXPECTED_ORIENTATIONS=FR \\
-        ATTRIBUTES_TO_RETAIN=X0 \\
-        REFERENCE_SEQUENCE=${RefFasta} \\
-        PAIRED_RUN=${paired_run} \\
-        SORT_ORDER="queryname" \\
-        IS_BISULFITE_SEQUENCE=false \\
-        ALIGNED_READS_ONLY=false \\
-        CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRamMerge} \\
-        ADD_MATE_CIGAR=true \\
-        MAX_INSERTIONS_OR_DELETIONS=-1 \\
-        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
-        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \\
-        ALIGNER_PROPER_PAIR_FLAGS=true \\
-        UNMAP_CONTAMINANT_READS=true \\
-        ALIGNED_BAM=${BAM} \\
-        UNMAPPED_BAM=${uBAM} \\
-        OUTPUT=${NormalReplicateId}_merged.bam
-    """
-}
-
-
-process 'MarkDuplicatesNormal' {
-// Mark duplicates with sambamba
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam)
-    ) from normal_uBAM_BAM_out_ch  // BwaNormal_out_ch0
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_aligned_sort_mkdp.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp.bai")
-    ) into (
-        MarkDuplicatesNormal_out_ch0,
-        MarkDuplicatesNormal_out_ch1,
-        MarkDuplicatesNormal_out_ch2,
-        MarkDuplicatesNormal_out_ch3
-    )
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-    $SAMBAMBA markdup \\
-        -t ${task.cpus} \\
-        --tmpdir ${params.tmpDir} \\
-        --hash-table-size=${params.SB_hash_table_size } \\
-        --overflow-list-size=${params.SB_overflow_list_size} \\
-        --io-buffer-size=${params.SB_io_buffer_size} \\
-        ${bam} \\
-        /dev/stdout | \\
-    samtools sort \\
-        -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
-        -O BAM \\
-        -l 0 \\
-        /dev/stdin | \\
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-        TMP_DIR=${params.tmpDir} \\
-        R=${RefFasta} \\
-        I=/dev/stdin \\
-        O=${NormalReplicateId}_aligned_sort_mkdp.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-        VALIDATION_STRINGENCY=LENIENT
-
-    # samtools index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp.bam
-    """
-}
-
-
-if (params.WES) {
-    process 'alignmentMetricsNormal' {
-    // Generate HS metrics using picard
-
-        tag "$NormalReplicateId"
-
-        publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
-            mode: params.publishDirMode
-
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(bam),
-            file(bai)
-        ) from MarkDuplicatesNormal_out_ch0
-
-        set(
-            file(RefFasta),
-            file(RefIdx)
-        ) from Channel.value(
-            [ reference.RefFasta,
-            reference.RefIdx ]
-        )
-
-        file(BaitIntervalsList) from BaitsBedToIntervalList_out_ch1
-        file(IntervalsList) from RegionsBedToIntervalList_out_ch2
-
-
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file("${NormalReplicateId}.*.txt")
-        ) into alignmentMetricsNormal_ch // multiQC
-
-
-        script:
-        """
-        mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
-            TMP_DIR=${params.tmpDir} \\
-            INPUT=${bam} \\
-            OUTPUT=${NormalReplicateId}.HS.metrics.txt \\
-            R=${RefFasta} \\
-            BAIT_INTERVALS=${BaitIntervalsList} \\
-            TARGET_INTERVALS=${IntervalsList} \\
-            PER_TARGET_COVERAGE=${NormalReplicateId}.perTarget.coverage.txt && \\
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
-            TMP_DIR=${params.tmpDir} \\
-            INPUT=${bam} \\
-            OUTPUT=${NormalReplicateId}.AS.metrics.txt \\
-            R=${RefFasta} && \\
-        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${NormalReplicateId}.flagstat.txt
-        """
-    }
-} else {
-    // bogus channel for multiqc
-    process mk_bogus_alignmentMetricsNormal_ch {
-        tag "$TumorReplicateId"
-
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            _,
-            _
-        ) from MarkDuplicatesTumor_out_ch0
-
-
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            ""
-        ) into alignmentMetricsTumor_ch
-
-        // do nothing
-        """
-        """
-    }
+    alignmentMetricsTumor_ch = MarkDuplicates_out_ch0
+                            .map{ it -> tuple(it[0],it[1], "")}
+    (alignmentMetricsNormal_ch, alignmentMetricsTumor_ch) = alignmentMetricsTumor_ch.into(2)
 }
 
 
@@ -1905,7 +1566,7 @@ if (params.WES) {
 *********************************************
 */
 
-process 'scatterBaseRecalTumorGATK4' {
+process 'scatterBaseRecalGATK4' {
 /*
  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
  Recalibration (BQSR)
@@ -1918,12 +1579,13 @@ process 'scatterBaseRecalTumorGATK4' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(Tumorbam),
-        file(Tumorbai),
+        sampleType,
+        file(bam),
+        file(bai),
         file(intervals)
-    ) from MarkDuplicatesTumor_out_ch1
+    ) from MarkDuplicates_out_ch1
         .combine(
-            SplitIntervals_out_scatterBaseRecalTumorGATK4_ch.flatten()
+            SplitIntervals_out_scatterBaseRecalTumorGATK4_ch.flatten()  // TODO: change channel name here and above
         )
 
     set(
@@ -1957,27 +1619,29 @@ process 'scatterBaseRecalTumorGATK4' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${intervals}_bqsr.table")
-    ) into BaseRecalTumorGATK4_out_ch0
+        sampleType,
+        file("${procSampleName}_${intervals}_bqsr.table")
+    ) into scatterBaseRecalGATK4_out_ch0
 
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
     $GATK4 BaseRecalibrator \\
         --java-options '${params.JAVA_Xmx}' \\
         --tmp-dir ${params.tmpDir} \\
-        -I ${Tumorbam} \\
+        -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
-        -O ${TumorReplicateId}_${intervals}_bqsr.table \\
+        -O ${procSampleName}_${intervals}_bqsr.table \\
         --known-sites ${DBSNP} \\
         --known-sites ${KnownIndels} \\
         --known-sites ${MillsGold}
     """
 }
 
-process 'gatherTumorGATK4scsatteredBQSRtables' {
+process 'gatherGATK4scsatteredBQSRtables' {
 // gather scattered bqsr tables
 
     tag "$TumorReplicateId"
@@ -1989,30 +1653,33 @@ process 'gatherTumorGATK4scsatteredBQSRtables' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bqsr_table)
-    ) from BaseRecalTumorGATK4_out_ch0
-        .groupTuple(by: [0, 1])
+    ) from scatterBaseRecalGATK4_out_ch0
+        .groupTuple(by: [0, 1, 2])
 
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_bqsr.table")
-    ) into gatherBQSRtablesTumor_out_ch0
+        sampleType,
+        file("${procSampleName}_bqsr.table")
+    ) into gatherBQSRtables_out_ch0
 
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
 
     $GATK4 GatherBQSRReports \\
         -I ${bqsr_table.join(" -I ")} \\
-        -O ${TumorReplicateId}_bqsr.table
+        -O ${procSampleName}_bqsr.table
     """
 }
 
-process 'scatterTumorGATK4applyBQSRS' {
+process 'scatterGATK4applyBQSRS' {
 /*
  ApplyBQSR (GATK4): apply BQSR table to reads
 */
@@ -2023,14 +1690,15 @@ process 'scatterTumorGATK4applyBQSRS' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(Tumorbam),
-        file(Tumorbai),
+        sampleType,
+        file(bam),
+        file(bai),
         file(bqsr_table),
         file(intervals)
-    ) from MarkDuplicatesTumor_out_ch2
-        .combine(gatherBQSRtablesTumor_out_ch0, by: [0,1])
+    ) from MarkDuplicates_out_ch2
+        .combine(gatherBQSRtables_out_ch0, by: [0, 1, 2])
         .combine(
-            SplitIntervals_out_scatterTumorGATK4applyBQSRS_ch.flatten()
+            SplitIntervals_out_scatterTumorGATK4applyBQSRS_ch.flatten()  // TODO: change channel name here and above
         )
 
     set(
@@ -2064,26 +1732,28 @@ process 'scatterTumorGATK4applyBQSRS' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${intervals}_recal4.bam"),
-        file("${TumorReplicateId}_${intervals}_recal4.bai")
-    ) into scatterTumorGATK4applyBQSRS_out_GatherRecalBamFilesTumor_ch0
+        sampleType,
+        file("${procSampleName}_${intervals}_recal4.bam"),
+        file("${procSampleName}_${intervals}_recal4.bai")
+    ) into scatterGATK4applyBQSRS_out_GatherRecalBamFiles_ch0
 
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
     $GATK4 ApplyBQSR \\
         --java-options '${params.JAVA_Xmx}' \\
         --tmp-dir ${params.tmpDir} \\
-        -I ${Tumorbam} \\
+        -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
-        -O ${TumorReplicateId}_${intervals}_recal4.bam \\
+        -O ${procSampleName}_${intervals}_recal4.bam \\
         --bqsr-recal-file ${bqsr_table}
     """
 }
 
-process 'GatherRecalBamFilesTumor' {
+process 'GatherRecalBamFiles' {
 
     tag "$TumorReplicateId"
 
@@ -2094,30 +1764,31 @@ process 'GatherRecalBamFilesTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam),
         file(bai)
-    ) from scatterTumorGATK4applyBQSRS_out_GatherRecalBamFilesTumor_ch0
-        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+    ) from scatterGATK4applyBQSRS_out_GatherRecalBamFiles_ch0
+        .toSortedList({a, b -> a[3].baseName <=> b[3].baseName})
         .flatten()
-        .collate(4)
-        .groupTuple(by: [0,1])
+        .collate(5)
+        .groupTuple(by: [0, 1, 2])
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_recal4.bam"),
-        file("${TumorReplicateId}_recal4.bam.bai")
+        sampleType,
+        file("${procSampleName}_recal4.bam"),
+        file("${procSampleName}_recal4.bam.bai")
     ) into (
-        BaseRecalTumorGATK4_out_ch1,
-        BaseRecalTumorGATK4_out_ch2,
-        BaseRecalTumorGATK4_out_ch3,
-        BaseRecalTumorGATK4_out_ch4,
-        BaseRecalTumorGATK4_out_ch5,
-        GatherRecalBamFilesTumor_out_IndelRealignerTumorIntervals_ch0
+        BaseRecalGATK4_out_ch0,
+        BaseRecalGATK4_out_ch1,
+        BaseRecalGATK4_out_ch2, // into mutect2
+        GatherRecalBamFiles_out_IndelRealignerIntervals_ch0
     )
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
 
@@ -2130,12 +1801,19 @@ process 'GatherRecalBamFilesTumor' {
     $SAMTOOLS sort \\
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
-        -o ${TumorReplicateId}_recal4.bam -
-    $SAMTOOLS index -@${task.cpus} ${TumorReplicateId}_recal4.bam
+        -o ${procSampleName}_recal4.bam -
+    $SAMTOOLS index -@${task.cpus} ${procSampleName}_recal4.bam
     """
 }
 
-process 'GetPileupTumor' {
+// make tumor ch BaseRecalTumorGATK4_out_ch3 for CollectSequencingArtifactMetrics
+BaseRecalTumorGATK4_out_ch0 = BaseRecalGATK4_out_ch1
+                                .filter {
+                                    it[2] == "T"
+                                }
+
+
+process 'GetPileup' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
 
     tag "$TumorReplicateId"
@@ -2157,32 +1835,33 @@ process 'GetPileupTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam),
         file(bai)
-    ) from BaseRecalTumorGATK4_out_ch1
+    ) from BaseRecalGATK4_out_ch0
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_pileup.table")
-    ) into (
-        GetPileupTumor_out_ch0,
-        GetPileupTumor_out_ch1
-    )
+        sampleType,
+        file("${procSampleName}_pileup.table")
+    ) into GetPileup_out_ch0
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
 
     $GATK4 GetPileupSummaries \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
-        -O ${TumorReplicateId}_pileup.table \\
+        -O ${procSampleName}_pileup.table \\
         -L ${IntervalsList} \\
         --variant ${GnomAD}
     """
 }
+
 
 process 'CollectSequencingArtifactMetrics' {
 /*
@@ -2215,9 +1894,10 @@ If single-end reads are used, do nothing, just create an empty file!!!
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam),
         file(bai)
-    ) from BaseRecalTumorGATK4_out_ch3
+    ) from BaseRecalTumorGATK4_out_ch0
 
     output:
     file(
@@ -2243,278 +1923,33 @@ If single-end reads are used, do nothing, just create an empty file!!!
         """
 }
 
-process 'scatterBaseRecalNormalGATK4' {
-/*
- BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
- Recalibration (BQSR)
- ApplyBQSR (GATK4): apply BQSR table to reads
-*/
+BaseRecalTumor = Channel.create()
+BaseRecalNormal = Channel.create()
 
-    tag "$NormalReplicateId"
+BaseRecalGATK4_out_ch2
+    .choice(
+        BaseRecalTumor, BaseRecalNormal
+    ) { it[2] == "T" ? 0 : 1 }
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(Normalbam),
-        file(Normalbai),
-        file(intervals)
-    ) from MarkDuplicatesNormal_out_ch1
-        .combine(
-            SplitIntervals_out_scatterBaseRecalNormalGATK4_ch.flatten()
-        )
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    set(
-        file(MillsGold),
-        file(MillsGoldIdx),
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx)
-    ) from Channel.value(
-        [ database.MillsGold,
-          database.MillsGoldIdx,
-          database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx ]
-    )
+(BaseRecalNormal_out_ch0, BaseRecalNormal) = BaseRecalNormal.into(2)
+BaseRecalNormal_out_ch0 = BaseRecalNormal_out_ch0
+        .map{ TumorReplicateId, NormalReplicateId,
+            sampleTypeN, recalNormalBAM, recalNormalBAI -> tuple(
+            TumorReplicateId, NormalReplicateId,
+            recalNormalBAM, recalNormalBAI
+            )}
 
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_${intervals}_bqsr.table")
-    ) into BaseRecalNormalGATK4_out_ch0
+BaseRecalGATK4_out = BaseRecalTumor.combine(BaseRecalNormal, by: [0,1])
+BaseRecalGATK4_out = BaseRecalGATK4_out
+    .map{ TumorReplicateId, NormalReplicateId,
+          sampleTypeT, recalTumorBAM, recalTumorBAI,
+          sampleTypeN, recalNormalBAM, recalNormalBAI -> tuple(
+          TumorReplicateId, NormalReplicateId,
+          recalTumorBAM, recalTumorBAI,
+          recalNormalBAM, recalNormalBAI
+        )}
 
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${Normalbam} \\
-        -R ${RefFasta} \\
-        -L ${intervals} \\
-        -O ${NormalReplicateId}_${intervals}_bqsr.table \\
-        --known-sites ${DBSNP} \\
-        --known-sites ${KnownIndels} \\
-        --known-sites ${MillsGold}
-    """
-}
-
-process 'gatherNormalGATK4scsatteredBQSRtables' {
-// gather scattered bqsr tables
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bqsr_table)
-    ) from BaseRecalNormalGATK4_out_ch0
-        .groupTuple(by: [0, 1])
-
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_bqsr.table")
-    ) into gatherBQSRtablesNormal_out_ch0
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $GATK4 GatherBQSRReports \\
-        -I ${bqsr_table.join(" -I ")} \\
-        -O ${NormalReplicateId}_bqsr.table
-    """
-}
-
-process 'scatterNormalGATK4applyBQSRS' {
-/*
- ApplyBQSR (GATK4): apply BQSR table to reads
-*/
-
-    tag "$NormalReplicateId"
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(Normalbam),
-        file(Normalbai),
-        file(bqsr_table),
-        file(intervals)
-    ) from MarkDuplicatesNormal_out_ch2
-        .combine(gatherBQSRtablesNormal_out_ch0, by: [0,1])
-        .combine(
-            SplitIntervals_out_scatterNormalGATK4applyBQSRS_ch.flatten()
-        )
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    set(
-        file(MillsGold),
-        file(MillsGoldIdx),
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(KnownIndels),
-        file(KnownIndelsIdx)
-    ) from Channel.value(
-        [ database.MillsGold,
-          database.MillsGoldIdx,
-          database.DBSNP,
-          database.DBSNPIdx,
-          database.KnownIndels,
-          database.KnownIndelsIdx ]
-    )
-
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_${intervals}_recal4.bam"),
-        file("${NormalReplicateId}_${intervals}_recal4.bai")
-    ) into scatterNormalGATK4applyBQSRS_out_GatherRecalBamFilesNormal_ch0
-
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-    $GATK4 ApplyBQSR \\
-        --java-options '${params.JAVA_Xmx}' \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${Normalbam} \\
-        -R ${RefFasta} \\
-        -L ${intervals} \\
-        -O ${NormalReplicateId}_${intervals}_recal4.bam \\
-        --bqsr-recal-file ${bqsr_table}
-    """
-}
-
-process 'GatherRecalBamFilesNormal' {
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from scatterNormalGATK4applyBQSRS_out_GatherRecalBamFilesNormal_ch0
-        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
-        .flatten()
-        .collate(4)
-        .groupTuple(by: [0,1])
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_recal4.bam"),
-        file("${NormalReplicateId}_recal4.bam.bai")
-    ) into (
-        BaseRecalNormal_out_ch1,
-        BaseRecalNormal_out_ch2,
-        BaseRecalNormal_out_ch3,  // for HaploTypeCaller
-        GatherRecalBamFilesNormal_out_IndelRealignerNormalIntervals_ch0
-    )
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${bam.join(" I=")} \\
-        O=/dev/stdout \\
-        CREATE_INDEX=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
-    $SAMTOOLS sort \\
-        -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
-        -o ${NormalReplicateId}_recal4.bam -
-    $SAMTOOLS index -@${task.cpus} ${NormalReplicateId}_recal4.bam
-    """
-}
-
-process 'GetPileupNormal' {
-// GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        file(GnomAD),
-        file(GnomADIdx)
-    ) from Channel.value(
-        [ database.GnomAD,
-          database.GnomADIdx ]
-    )
-
-    file(intervals) from preprocessIntervalList_out_ch6
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from BaseRecalNormal_out_ch1
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_pileup.table")
-    ) into GetPileupNormal_out_ch0
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $GATK4 GetPileupSummaries \\
-        --tmp-dir ${params.tmpDir} \\
-        -I ${bam} \\
-        -O ${NormalReplicateId}_pileup.table \\
-        -L ${intervals} \\
-        --variant ${GnomAD}
-    """
-}
 
 process 'Mutect2' {
 /*
@@ -2547,12 +1982,10 @@ process 'Mutect2' {
         NormalReplicateId,
         file(Tumorbam),
         file(Tumorbai),
-        _,                    // unused TumorReplicateId from BaseRecalNormal_out_ch2
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from BaseRecalTumorGATK4_out_ch5
-        .combine(BaseRecalNormal_out_ch2, by: 0)
+    ) from BaseRecalGATK4_out
         .combine(
             SplitIntervals_out_ch2.flatten()
         )
@@ -2570,8 +2003,6 @@ process 'Mutect2' {
 
     script:
     if(params.mutect2ponFile != false) {
-        // val mutect2ponFile = Channel.fromPath(params.mutect2ponFile)
-        // panel_of_normals = "--panel-of-normals ${mutect2ponFile}"
         panel_of_normals = "--panel-of-normals ${params.mutect2ponFile}"
     } else {
         panel_of_normals = ""
@@ -2644,6 +2075,21 @@ process 'gatherMutect2VCFs' {
     """
 }
 
+
+PileupTumor = Channel.create()
+PileupNormal = Channel.create()
+
+GetPileup_out_ch0
+    .choice(
+        PileupTumor, PileupNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+GetPileup_out = PileupTumor.combine(PileupNormal, by: [0,1])
+GetPileup_out = GetPileup_out
+    .map{ TumorReplicateId, NormalReplicateId, sampleTypeT, pileupTumor, sampleTypeN, pileupNormal -> tuple(
+            TumorReplicateId, NormalReplicateId, pileupTumor, pileupNormal
+        )}
+
 process 'FilterMutect2' {
 /*
 CalculateContamination (GATK4): calculate fraction of reads coming from
@@ -2674,16 +2120,13 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
         TumorReplicateId,
         NormalReplicateId,
         file(pileupTumor),
-        _,
         file(pileupNormal),
-        _,
         file(vcf),
         file(vcfIdx),
         file(vcfStats),
         file(f1r2_tar_gz)
-    ) from GetPileupTumor_out_ch1
-        .combine(GetPileupNormal_out_ch0, by :0)
-        .combine(gatherMutect2VCFs_out_ch0, by :0)
+    ) from GetPileup_out
+        .combine(gatherMutect2VCFs_out_ch0, by :[0,1])
 
     file(preAdapterDetail) from CollectSequencingArtifactMetrics_out_ch0
 
@@ -2739,22 +2182,18 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -V ${vcf} \\
             --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
             --ob-priors ${f1r2_tar_gz} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz && \\
-        # -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
-        # $GATK4 FilterByOrientationBias \\
-        #    --tmp-dir ${params.tmpDir} \\
-        #    -V ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
-        #    -P ${preAdapterDetail} \\
-        #    -O ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz && \\
+            -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
         $GATK4 SelectVariants \\
             --tmp-dir ${params.tmpDir} \\
-            --variant ${TumorReplicateId}_${NormalReplicateId}_twicefiltered.vcf.gz \\
+            --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
             -R ${RefFasta} \\
             --exclude-filtered true \\
             --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
             --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz
         """
 }
+
+
 
 
 // HaploTypeCaller
@@ -2790,7 +2229,7 @@ process 'HaploTypeCaller' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from BaseRecalNormal_out_ch3
+    ) from BaseRecalNormal_out_ch0
         .combine(
             SplitIntervals_out_ch5.flatten()
         )
@@ -2833,13 +2272,8 @@ process 'CNNScoreVariants' {
 
     // TODO: deal with this smarter
     conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
-    // conda 'bioconda::gatk4-spark=4.1.4.1'
 
     tag "$TumorReplicateId"
-
-    // publishDir "$params.outputDir/$TumorReplicateId/03_haplotypeCaller/processing",
-    // mode: params.publishDirMode
 
     input:
     set(
@@ -2932,7 +2366,6 @@ process 'FilterGermlineVariantTranches' {
 
     // TODO: deal with this smarter
     conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
 
     tag "$TumorReplicateId"
 
@@ -3001,7 +2434,8 @@ process 'FilterGermlineVariantTranches' {
 *********************************************
 */
 
-process 'IndelRealignerTumorIntervals' {
+
+process 'IndelRealignerIntervals' {
 /*
  RealignerTargetCreator (GATK3): define intervals to target for local realignment
  IndelRealigner (GATK3): perform local realignment of reads around indels
@@ -3013,9 +2447,10 @@ process 'IndelRealignerTumorIntervals' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam),
         file(bai)
-    ) from GatherRecalBamFilesTumor_out_IndelRealignerTumorIntervals_ch0 // MarkDuplicatesTumor_out_ch3
+    ) from GatherRecalBamFiles_out_IndelRealignerIntervals_ch0
 
     set(
         file(RefFasta),
@@ -3045,11 +2480,13 @@ process 'IndelRealignerTumorIntervals' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_recal4_realign_${interval}.bam"),
-        file("${TumorReplicateId}_recal4_realign_${interval}.bai")
-    ) into IndelRealignerTumorIntervals_out_GatherRealignedBamFilesTumor_ch0
+        sampleType,
+        file("${procSampleName}_recal4_realign_${interval}.bam"),
+        file("${procSampleName}_recal4_realign_${interval}.bai")
+    ) into IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
 
@@ -3075,7 +2512,7 @@ process 'IndelRealignerTumorIntervals' {
     """
 }
 
-process 'GatherRealignedBamFilesTumor' {
+process 'GatherRealignedBamFiles' {
 
     tag "$TumorReplicateId"
 
@@ -3086,31 +2523,26 @@ process 'GatherRealignedBamFilesTumor' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        sampleType,
         file(bam),
         file(bai)
-    ) from IndelRealignerTumorIntervals_out_GatherRealignedBamFilesTumor_ch0
-        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+    ) from IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
+        .toSortedList({a, b -> a[3].baseName <=> b[3].baseName})
         .flatten()
-        .collate(4)
-        .groupTuple(by: [0,1])
+        .collate(5)
+        .groupTuple(by: [0,1,2])
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_recal_realign.bam"),
-        file("${TumorReplicateId}_recal_realign.bam.bai")
-    ) into (
-        // GatherRealignedBamFilesTumor_out_ch0
-        GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0,
-        GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
-        GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0,
-        GatherRealignedBamFilesTumor_out_Mutect1scattered_ch0,
-        GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0,
-        GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0
-    )
+        sampleType,
+        file("${procSampleName}_recal_realign.bam"),
+        file("${procSampleName}_recal_realign.bam.bai")
+    ) into GatherRealignedBamFiles_out_ch
 
     script:
+    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
 
@@ -3123,139 +2555,62 @@ process 'GatherRealignedBamFilesTumor' {
     $SAMTOOLS sort \\
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
-        -o ${TumorReplicateId}_recal_realign.bam -
-    $SAMTOOLS index -@${task.cpus} ${TumorReplicateId}_recal_realign.bam
+        -o ${procSampleName}_recal_realign.bam -
+    $SAMTOOLS index -@${task.cpus} ${procSampleName}_recal_realign.bam
     """
 }
 
+recalRealTumor = Channel.create()
+recalRealNormal = Channel.create()
 
-process 'IndelRealignerNormalIntervals' {
-/*
-RealignerTargetCreator (GATK3): define intervals to target for local realignment
-IndelRealigner (GATK3): perform local realignment of reads around indels
-*/
+(
+    GatherRealignedBamFiles_out_AlleleCounter_ch0,
+    GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0,
+    GatherRealignedBamFiles_out_ch
+) = GatherRealignedBamFiles_out_ch.into(3)
 
-    tag "$NormalReplicateId"
+GatherRealignedBamFiles_out_ch
+    .choice(
+        recalRealTumor, recalRealNormal
+    ) { it[2] == "T" ? 0 : 1 }
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from GatherRecalBamFilesNormal_out_IndelRealignerNormalIntervals_ch0 // MarkDuplicatesNormal_out_ch3
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+ (
+    recalRealTumor_tmp,
+    recalRealTumor
+) = recalRealTumor.into(3)
 
-    set(
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
+recalRealTumor_tmp = recalRealTumor_tmp
+                        .map{ TumorReplicateId, NormalReplicateId,
+                                sampleTypeT, realTumorBAM, realTumorBAI -> tuple(
+                                    TumorReplicateId, NormalReplicateId,
+                                    realTumorBAM, realTumorBAI
+                                )
+                            }
 
-    each file(interval) from SplitIntervals_out_ch4.flatten()
+(
+    GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
+    GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
+) = recalRealTumor_tmp.into(2)
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_recal4_realign_${interval}.bam"),
-        file("${NormalReplicateId}_recal4_realign_${interval}.bai")
-    ) into IndelRealignerNormalIntervals_out_ch0
 
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
-        -T RealignerTargetCreator \\
-        --known ${MillsGold} \\
-        --known ${KnownIndels} \\
-        -R ${RefFasta} \\
-        -L ${interval} \\
-        -I ${bam} \\
-        -o ${interval}_target.list \\
-        -nt ${task.cpus} && \\
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
-        -T IndelRealigner \\
-        -R ${RefFasta} \\
-        -L ${interval} \\
-        -I ${bam} \\
-        -targetIntervals ${interval}_target.list \\
-        -known ${KnownIndels} \\
-        -known ${MillsGold} \\
-        -nWayOut _realign_${interval}.bam && \\
-    rm ${interval}_target.list
-    """
-}
-
-process 'GatherRealignedBamFilesNormal' {
-
-    tag "$NormalReplicateId"
-
-    publishDir "$params.outputDir/${TumorReplicateId}/03_varscan/processing/",
-        mode: params.publishDirMode
-
-    // publishDir "$params.outputDir/${TumorReplicateId[0]}/05_varscan/processing/",
-    //     mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(bam),
-        file(bai)
-    ) from IndelRealignerNormalIntervals_out_ch0
-        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
-        .flatten()
-        .collate(4)
-        .groupTuple(by: [0,1])
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${NormalReplicateId}_aligned_sort_mkdp_realign.bam"),
-        file("${NormalReplicateId}_aligned_sort_mkdp_realign.bam.bai")
-    ) into (
-        // GatherRealignedBamFilesNormal_out_ch0
-        GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0,
-        GatherRealignedBamFilesNormal_out_Mutect1scattered_ch0,
-        GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0,
-        GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0
-    )
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${bam.join(" I=")} \\
-        O=/dev/stdout \\
-        CREATE_INDEX=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
-    $SAMTOOLS sort \\
-        -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
-        -o ${NormalReplicateId}_aligned_sort_mkdp_realign.bam -
-    $SAMTOOLS index -@${task.cpus} ${NormalReplicateId}_aligned_sort_mkdp_realign.bam
-    """
-}
+RealignedBamFiles = recalRealTumor.combine(recalRealNormal, by: [0,1])
+RealignedBamFiles = RealignedBamFiles
+                    .map{ TumorReplicateId, NormalReplicateId,
+                            sampleTypeT, realTumorBAM, realTumorBAI,
+                            sampleTypeN, realNormalBAM, realNormalBAI -> tuple(
+                                TumorReplicateId, NormalReplicateId,
+                                realTumorBAM, realTumorBAI,
+                                realNormalBAM, realNormalBAI
+                            )
+                        }
+(
+    GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
+    GatherRealignedBamFiles_out_Mutect1scattered_ch0,
+    GatherRealignedBamFiles_out_MantaSomaticIndels_ch0,
+    GatherRealignedBamFiles_out_StrelkaSomatic_ch0,
+    GatherRealignedBamFiles_out_Sequenza_ch0
+) = RealignedBamFiles.into(5)
 
 
 process 'VarscanSomaticScattered' {
@@ -3268,12 +2623,10 @@ process 'VarscanSomaticScattered' {
         NormalReplicateId,
         file(Tumorbam),
         file(Tumorbai),
-        _,                    // unused TumorReplicateId from BaseRecalNormal_out_ch2
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from GatherRealignedBamFilesTumor_out_VarscanSomaticScattered_ch0 //BaseRecalTumorGATK3_out_ch0
-        .combine(GatherRealignedBamFilesNormal_out_VarscanSomaticScattered_ch0, by: 0)
+    ) from GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0
         .combine(
             ScatteredIntervalListToBed_out_ch0.flatten()
         )
@@ -3463,14 +2816,12 @@ process 'FilterVarscan' {
         NormalReplicateId,
         file(bam),
         file(bai),
-        _,
         file(snpSomatic),
         file(snpSomaticHc),
         file(snpLOH),
         file(snpLOHhc),
         file(snpGerm),
         file(snpGemHc),
-        _,
         file(indelSomatic),
         file(indelSomaticHc),
         file(indelLOH),
@@ -3478,8 +2829,8 @@ process 'FilterVarscan' {
         file(indelGerm),
         file(indelGemHc)
     ) from GatherRealignedBamFilesTumor_out_FilterVarscan_ch0 // BaseRecalTumorGATK3_out_ch1
-        .combine(ProcessVarscanSNP_out_ch0, by :0)
-        .combine(ProcessVarscanIndel_out_ch0, by :0)
+        .combine(ProcessVarscanSNP_out_ch0, by :[0,1])
+        .combine(ProcessVarscanIndel_out_ch0, by :[0,1])
 
     set(
         file(RefFasta),
@@ -3622,12 +2973,10 @@ process 'Mutect1scattered' {
         NormalReplicateId,
         file(Tumorbam),
         file(Tumorbai),
-        _,                    // unused TumorReplicateId from BaseRecalNormal_out_ch2
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from GatherRealignedBamFilesTumor_out_Mutect1scattered_ch0
-        .combine(GatherRealignedBamFilesNormal_out_Mutect1scattered_ch0, by: 0)
+    ) from GatherRealignedBamFiles_out_Mutect1scattered_ch0
         .combine(
             SplitIntervals_out_ch6.flatten()
         )
@@ -3755,71 +3104,77 @@ process 'gatherMutect1VCFs' {
 
 
 // Strelka2 and Manta
-process 'MantaSomaticIndels' {
-    conda 'bioconda::manta=1.6.0'
+if (! single_end) {
+    process 'MantaSomaticIndels' {
+        conda 'bioconda::manta=1.6.0'
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_manta_somatic",
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/03_manta_somatic",
+            mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(Tumorbam),
-        file(Tumorbai),
-        _,                    // unused TumorReplicateId from manta_inputNormal
-        file(Normalbam),
-        file(Normalbai),
-        file(RegionsBedGz),
-        file(RegionsBedGzTbi)
-    ) from GatherRealignedBamFilesTumor_out_MantaSomaticIndels_ch0 // BaseRecalTumorGATK3_out_ch4
-        .combine(GatherRealignedBamFilesNormal_out_MantaSomaticIndels_ch0, by:0)
-        .combine(RegionsBedToTabix_out_ch1)
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(Tumorbam),
+            file(Tumorbai),
+            file(Normalbam),
+            file(Normalbai),
+            file(RegionsBedGz),
+            file(RegionsBedGzTbi)
+        ) from GatherRealignedBamFiles_out_MantaSomaticIndels_ch0
+            .combine(RegionsBedToTabix_out_ch1)
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz"),
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz"),
+            file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
+        ) into MantaSomaticIndels_out_ch0
+
+        file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz")
         file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
-    ) into MantaSomaticIndels_out_ch0
+        file("${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv")
 
-    file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv")
-
-    script:
-    """
-    configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
-        --referenceFasta ${RefFasta} \\
-        --runDir manta_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
-    manta_${TumorReplicateId}/runWorkflow.py -m local -j  ${task.cpus} &&
-    cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
-    cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
-    cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
-    """
+        script:
+        """
+        configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
+            --referenceFasta ${RefFasta} \\
+            --runDir manta_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
+        manta_${TumorReplicateId}/runWorkflow.py -m local -j  ${task.cpus} &&
+        cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
+        """
+    }
+} else {
+    GatherRealignedBamFiles_out_MantaSomaticIndels_ch0
+        .map {  item -> tuple(item[0],
+                              item[1],
+                              "NO_FILE",
+                              "NO_FILE_IDX") }
+        .set { MantaSomaticIndels_out_ch0 }
 }
-
 
 process StrelkaSomatic {
     conda 'bioconda::strelka=2.9.10'
@@ -3834,17 +3189,14 @@ process StrelkaSomatic {
         NormalReplicateId,
         file(Tumorbam),
         file(Tumorbai),
-        _,                    // unused NormalReplicateId from strelka_inputNormal
         file(Normalbam),
         file(Normalbai),
-        _,                    // unused NormalReplicateId from MantaSomaticIndels_out_ch0
         file(manta_indel),
         file(manta_indel_tbi),
         file(RegionsBedGz),
         file(RegionsBedGzTbi)
-    ) from GatherRealignedBamFilesTumor_out_StrelkaSomatic_ch0 // BaseRecalTumorGATK3_out_ch5
-        .combine(GatherRealignedBamFilesNormal_out_StrelkaSomatic_ch0, by:0)
-        .combine(MantaSomaticIndels_out_ch0, by:0)
+    ) from GatherRealignedBamFiles_out_StrelkaSomatic_ch0
+        .combine(MantaSomaticIndels_out_ch0, by:[0,1])
         .combine(RegionsBedToTabix_out_ch0)
 
     set(
@@ -3873,12 +3225,13 @@ process StrelkaSomatic {
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.xml")
 
     script:
+    manta_indel_candidates = single_end ? "" : "--indelCandidates ${manta_indel}"
     """
     configureStrelkaSomaticWorkflow.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
         --referenceFasta ${RefFasta} \\
-        --indelCandidates ${manta_indel} \\
-        --runDir strelka_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
-    strelka_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus} &&
+        ${manta_indel_candidates} \\
+        --runDir strelka_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome
+    strelka_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus}
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz.tbi
     cp strelka_${TumorReplicateId}/results/variants/somatic.snvs.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz
@@ -3932,8 +3285,7 @@ process 'mkHCsomaticVCF' {
 */
 
     // TODO: deal with this smarter
-    conda 'assets/gatkcondaenv.yml'
-    // conda '/data/projects/2019/ADSI/Exome_01/src/gatk-4.1.4.1_conda'
+    conda 'assets/py3_icbi.yml'
 
     tag "$TumorReplicateId"
 
@@ -4087,6 +3439,12 @@ process 'mkPhasedVCF' {
         mkPhasedVCF_out_ch0,
         mkPhasedVCF_out_pVACseq_ch0
     )
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
+    ) into mkPhasedVCF_out_Clonality_ch0
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
 
@@ -4172,6 +3530,553 @@ process 'mkPhasedVCF' {
 }
 // END CREATE phased VCF
 
+// CNVs: ASCAT + FREEC
+
+
+// adopted from sarek nfcore
+process AlleleCounter {
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(BAM),
+        file(BAI)
+    ) from GatherRealignedBamFiles_out_AlleleCounter_ch0
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(acLoci)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.acLoci ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(outFileName)
+    ) into AlleleCounter_out_ch0
+
+
+    script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + ".alleleCount" : NormalReplicateId + ".alleleCount"
+    """
+    $ALLELECOUNT \\
+        -l ${acLoci} \\
+        -r ${RefFasta} \\
+        -b ${BAM} \\
+        -o ${outFileName}
+    """
+}
+
+alleleCountOutNormal = Channel.create()
+alleleCountOutTumor = Channel.create()
+
+AlleleCounter_out_ch0
+    .choice(
+        alleleCountOutTumor, alleleCountOutNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+AlleleCounter_out_ch0 = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0,1])
+
+
+// R script from Malin Larssons bitbucket repo:
+// https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
+process ConvertAlleleCounts {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/14_ASCAT/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        _,
+        file(alleleCountTumor),
+        _,
+        file(alleleCountNormal),
+    ) from AlleleCounter_out_ch0
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.BAF"),
+        file("${TumorReplicateId}.LogR"),
+        file("${NormalReplicateId}.BAF"),
+        file("${NormalReplicateId}.LogR")
+    ) into ConvertAlleleCounts_out_ch
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    Rscript ${workflow.projectDir}/bin/convertAlleleCounts.r \\
+        ${TumorReplicateId} ${alleleCountTumor} ${NormalReplicateId} ${alleleCountNormal} ${gender}
+    """
+}
+
+// R scripts from Malin Larssons bitbucket repo:
+// https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
+process 'Ascat' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/14_ASCAT/",
+        mode: params.publishDirMode
+
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(bafTumor),
+        file(logrTumor),
+        file(bafNormal),
+        file(logrNormal)
+    ) from ConvertAlleleCounts_out_ch
+
+    file(acLociGC) from Channel.value(reference.acLociGC)
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.cnvs.txt"),
+        file("${TumorReplicateId}.purityploidy.txt"),
+    ) into Ascat_out_Clonality_ch0
+    file("${TumorReplicateId}.*.{png,txt}")
+
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    # get rid of "chr" string if there is any
+    for f in *BAF *LogR; do sed 's/chr//g' \$f > tmpFile; mv tmpFile \$f;done
+    Rscript ${workflow.projectDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${gender}
+    """
+}
+
+process 'Mpileup4ControFREEC' {
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(BAM),
+        file(BAI)
+    ) from GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0
+
+    each file(interval) from ScatteredIntervalListToBed_out_ch1.flatten()
+
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz")
+    ) into Mpileup4ControFREEC_out_ch0
+
+    script:
+    """
+    $SAMTOOLS mpileup \\
+        -q 1 \\
+        -f ${RefFasta} \\
+        -l ${interval} \\
+        ${BAM} | \\
+    $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz
+    """
+
+
+}
+
+ Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0, 1, 2])
+
+process 'gatherMpileups' {
+// Merge scattered Varscan vcfs
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(mpileup)
+    ) from Mpileup4ControFREEC_out_ch0
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        sampleType,
+        file(outFileName)
+    ) into gatherMpileups_out_ch0
+
+    script:
+    outFileName = (sampleType == "T") ? TumorReplicateId + ".pileup.gz" : NormalReplicateId + ".pileup.gz"
+    """
+    scatters=`ls -1v *.pileup.gz`
+    zcat \$scatters | \\
+    bgzip --threads ${task.cpus} -c > ${outFileName}
+    """
+}
+
+mpileupOutNormal = Channel.create()
+mpileupOutTumor = Channel.create()
+
+gatherMpileups_out_ch0
+    .choice(
+        mpileupOutTumor, mpileupOutNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
+
+// run ControlFREEC : adopted from nfcore sarek
+process 'ControlFREEC' {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        _,
+        file(mpileupTumor),
+        _,
+        file(mpileupNormal)
+    ) from gatherMpileups_out_ch0
+
+    set(
+        file(RefChrDir),
+        file(RefChrLen),
+        file(DBSNP),
+        file(DBSNPIdx)
+    ) from Channel.value(
+        [ reference.RefChrDir,
+          reference.RefChrLen,
+          database.DBSNP,
+          database.DBSNPIdx ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}.pileup.gz_CNVs"),
+        file("${TumorReplicateId}.pileup.gz_ratio.txt"),
+        file("${TumorReplicateId}.pileup.gz_BAF.txt")
+    ) into ControlFREEC_out_ch0
+
+    script:
+    config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
+    gender = genderMap[TumorReplicateId]
+
+    read_orientation = (single_end) ? "0" : "FR"
+    minimalSubclonePresence = (params.WES) ? 30 : 20
+    degree = (params.WES) ? 1 : 4
+    noisyData = (params.WES) ? "TRUE" : "FALSE"
+    window = (params.WES) ? 0 : 50000
+    breakPointType = (params.WES) ? 4 : 2
+    breakPointThreshold = (params.WES) ? "1.2" : "0.8"
+    printNA = (params.WES) ? "FALSE" :  "TRUE"
+    readCountThreshold = (params.WES) ? 50 : 10
+    minimalCoveragePerPosition = (params.WES) ? 5 : 0
+    captureRegions = (params.WES) ? reference.RegionsBed : ""
+    """
+    rm -f ${config}
+    touch ${config}
+    echo "[general]" >> ${config}
+    echo "BedGraphOutput = TRUE" >> ${config}
+    echo "chrFiles = \${PWD}/${RefChrDir.fileName}" >> ${config}
+    echo "chrLenFile = \${PWD}/${RefChrLen.fileName}" >> ${config}
+    echo "coefficientOfVariation = 0.05" >> ${config}
+    echo "contaminationAdjustment = TRUE" >> ${config}
+    echo "forceGCcontentNormalization = 0" >> ${config}
+    echo "maxThreads = ${task.cpus}" >> ${config}
+    echo "minimalSubclonePresence = ${minimalSubclonePresence}" >> ${config}
+    echo "ploidy = 2,3,4" >> ${config}
+    echo "degree = ${degree}" >> ${config}
+    echo "noisyData = ${noisyData}" >> ${config}
+    echo "sex = ${gender}" >> ${config}
+    echo "window = ${window}" >> ${config}
+    echo "breakPointType = ${breakPointType}" >> ${config}
+    echo "breakPointThreshold = ${breakPointThreshold}" >> ${config}
+    echo "printNA = ${printNA}" >> ${config}
+    echo "readCountThreshold = ${readCountThreshold}" >> ${config}
+    echo "" >> ${config}
+    echo "[control]" >> ${config}
+    echo "inputFormat = pileup" >> ${config}
+    echo "mateFile = \${PWD}/${mpileupNormal}" >> ${config}
+    echo "mateOrientation = ${read_orientation}" >> ${config}
+    echo "" >> ${config}
+    echo "[sample]" >> ${config}
+    echo "inputFormat = pileup" >> ${config}
+    echo "mateFile = \${PWD}/${mpileupTumor}" >> ${config}
+    echo "mateOrientation = ${read_orientation}" >> ${config}
+    echo "" >> ${config}
+    echo "[BAF]" >> ${config}
+    echo "SNPfile = ${DBSNP.fileName}" >> ${config}
+    echo "minimalCoveragePerPosition = ${minimalCoveragePerPosition}" >> ${config}
+    echo "" >> ${config}
+    echo "[target]" >> ${config}
+    echo "captureRegions = ${captureRegions}" >> ${config}
+    $FREEC -conf ${config}
+    """
+}
+
+
+process 'ControlFREECviz' {
+
+    tag "$TumorReplicateId"
+
+    // makeGraph.R and assess_significance.R seem to be instable
+    errorStrategy 'ignore'
+
+    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+        mode: params.publishDirMode
+
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(cnvTumor),
+        file(ratioTumor),
+        file(bafTumor),
+    ) from ControlFREEC_out_ch0
+
+    output:
+    set(
+        file("*.txt"),
+        file("*.png"),
+        file("*.bed"),
+        file("*.circos")
+     ) into ControlFREECviz_out_ch0
+
+
+    script:
+    """
+    cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
+    cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
+    $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
+    $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
+    """
+}
+
+
+Channel
+    .fromPath(reference.RefChrLen)
+    .splitCsv(sep: "\t")
+    .map { row -> row[1] }
+    .set { chromosomes_ch }
+
+process 'SequenzaUtils' {
+
+    tag "$TumorReplicateId"
+
+    conda "assets/py3_icbi.yml"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(tumorBAM),
+        file(tumorBAI),
+        file(normalBAM),
+        file(normalBAI)
+    ) from GatherRealignedBamFiles_out_Sequenza_ch0
+    each chromosome from chromosomes_ch
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict),
+        file(SequnzaGC)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict,
+          reference.SequenzaGC ]
+    )
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${chromosome}_${TumorReplicateId}_seqz.gz")
+    )  into SequenzaUtils_out_ch0
+
+    script:
+    """
+    sequenza-utils \\
+        bam2seqz \\
+        --fasta ${RefFasta} \\
+        --tumor ${tumorBAM} \\
+        --normal ${normalBAM} \\
+        -gc ${SequnzaGC} \\
+        --chromosome ${chromosome} \\
+        | \\
+    sequenza-utils \\
+        seqz_binning \\
+        -w 50 \\
+        -s - \\
+        | \\
+    $BGZIP \\
+        --threads ${task.cpus} -c > ${chromosome}_${TumorReplicateId}_seqz.gz
+
+    """
+}
+
+process gatherSequenzaInput {
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(chromosome_seqz_binned)
+    ) from SequenzaUtils_out_ch0
+        .groupTuple(by: [0,1])
+
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_seqz.gz")
+    ) into gatherSequenzaInput_out_ch0
+
+    script:
+    """
+    first=1
+    scatters=`ls -1v *_${TumorReplicateId}_seqz.gz`
+    for f in \$scatters
+    do
+        if [ "\$first" ]
+        then
+            zcat "\$f"
+            first=
+        else
+            zcat "\$f" | tail -n +2
+        fi
+    done | \\
+    bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_seqz.gz
+    sync
+    """
+}
+
+process Sequenza {
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/16_Sequenza/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(seqz_file)
+    ) from gatherSequenzaInput_out_ch0
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_confints_CP.txt"),
+        file("${TumorReplicateId}_segments.txt")
+    ) into Sequenza_out_ch0
+    file("${TumorReplicateId}_*.{png,pdf,txt}")
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    """
+    $RSCRIPT \\
+        ${workflow.projectDir}/bin/SequenzaScript.R \\
+        ${seqz_file} \\
+        ${TumorReplicateId} \\
+        ${gender}
+    """
+}
+
+
+process 'Clonality' {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
+        mode: params.publishDirMode
+
+
+    conda "assets/py3_icbi.yml"
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(hc_vep_vcf),
+        file(hc_vep_idx),
+        file(CNVs),
+        file(purity)
+    ) from mkPhasedVCF_out_Clonality_ch0
+        .combine(Ascat_out_Clonality_ch0, by: [0,1])
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_CCFest.tsv"),
+    ) into Clonality_out_ch0
+
+    script:
+    """
+    mkCCF_input.py \\
+        --PatientID ${TumorReplicateId} \\
+        --vcf ${hc_vep_vcf} \\
+        --seg ${CNVs} \\
+        --purity ${purity} \\
+        --min_vaf 0.01 \\
+        --result_table ${TumorReplicateId}_segments.txt
+    ${RSCRIPT} \\
+        ${workflow.projectDir}/bin/CCF.R \\
+        ${TumorReplicateId}_segments.txt \\
+        ${TumorReplicateId}_CCFest.tsv \\
+    """
+}
+
+
+// END CNVs
+
+
 // HLA TYPING
 
 process 'mhc_extract' {
@@ -4183,7 +4088,7 @@ process 'mhc_extract' {
         NormalReplicateId,
         file(tumor_BAM_aligned_sort_mkdp),
         file(tumor_BAI_aligned_sort_mkdp)
-    ) from MarkDuplicatesTumor_out_ch4
+    ) from MarkDuplicatesTumor_out_ch0
 
 
     output:
@@ -4205,7 +4110,7 @@ process 'mhc_extract' {
     }
 
     mhcReads_1 = (single_end) ? TumorReplicateId + "_reads_mhc.fastq.gz" : TumorReplicateId + "_reads_mhc_R1.fastq.gz"
-    mhcReads_2 = (single_end) ? val("NO_FILE") : TumorReplicateId + "_reads_mhc_R2.fastq.gz"
+    mhcReads_2 = (single_end) ? "NO_FILE" : TumorReplicateId + "_reads_mhc_R2.fastq.gz"
 
     if(single_end)
         """
@@ -4223,6 +4128,7 @@ process 'mhc_extract' {
         $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
 
         wait
+        touch NO_FILE
 
         rm -f unmapped_bam mhc_mapped_bam R.fastq
         """
@@ -4248,7 +4154,6 @@ process 'mhc_extract' {
         rm -f unmapped_bam mhc_mapped_bam R1.fastq R2.fastq
         """
 }
-
 
 /*
 *********************************************
@@ -4815,12 +4720,19 @@ process concat_mhcI_files {
     output:
     set(
         TumorReplicateId,
-        file("*_MHCI_filtered.tsv")
-    ) into (MHCI_final_ranked, MHCI_final_immunogenicity)
+        file("${TumorReplicateId}_MHCI_filtered.tsv")
+    ) into (
+        MHCI_final_ranked,
+        MHCI_final_immunogenicity,
+        concat_mhcI_filtered_files_out_addCCF_ch0
+    )
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
-    ) into MHCI_all_epitopes
+    ) into (
+        MHCI_all_epitopes,
+        concat_mhcI_all_files_out_addCCF_ch0
+    )
 
     script:
     """
@@ -4845,12 +4757,18 @@ process concat_mhcII_files {
     output:
     set(
         TumorReplicateId,
-        file("*_MHCII_filtered.tsv")
-    ) into MHCII_final_ranked
+        file("${TumorReplicateId}_MHCII_filtered.tsv")
+    ) into (
+        MHCII_final_ranked,
+        concat_mhcII_filtered_files_out_addCCF_ch0
+    )
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
-    ) into MHCII_all_epitopes
+    ) into (
+        MHCII_all_epitopes,
+        concat_mhcII_all_files_out_addCCF_ch0
+    )
 
     script:
     """
@@ -4930,8 +4848,7 @@ process 'pepare_mixMHC2_seq' {
     // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
     //     mode: params.publishDirMode
 
-    // TODO: fix me, maybe us a separate conda, need py3
-    conda 'assets/gatkcondaenv.yml'
+    conda 'assets/py3_icbi.yml'
 
     input:
     set(
@@ -4970,8 +4887,7 @@ process mixMHC2pred {
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
         mode: params.publishDirMode
 
-    // TODO: fix me, maybe us a separate conda, need py3
-    conda 'assets/gatkcondaenv.yml'
+    conda 'assets/py3_icbi.yml'
 
     input:
     set(
@@ -5009,6 +4925,41 @@ process mixMHC2pred {
             if (\$0 ~ /\\#/) { print }
             else { if (\$18 <= 2) { print } }
         }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
+    """
+}
+
+// add CCF clonality to neoepitopes result files
+process addCCF {
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
+        mode: params.publishDirMode
+
+    conda 'assets/py3_icbi.yml'
+
+    input:
+    set(
+        TumorReplicateId,
+        file(epitopes),
+        file(CCF)
+    ) from concat_mhcI_filtered_files_out_addCCF_ch0
+        .concat(
+                concat_mhcI_all_files_out_addCCF_ch0,
+                concat_mhcII_filtered_files_out_addCCF_ch0,
+                concat_mhcII_all_files_out_addCCF_ch0
+        )
+        .combine(Clonality_out_ch0, by: 0)
+
+    output:
+    file(outfile)
+
+    script:
+    outfile = epitopes.baseName + "_ccf.tsv"
+    """
+    add_CCF.py \\
+        --neoepitopes ${epitopes} \\
+        --ccf ${CCF} \\
+        --outfile ${outfile}
     """
 }
 
@@ -5257,7 +5208,7 @@ def checkParamReturnFileDatabases(item) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 13) exit 1, """
+        if (params.references.size() != 18) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5265,19 +5216,24 @@ def defineReference() {
             'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
             'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
             'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
+            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
             'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
             'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
+            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'acLoci'            : checkParamReturnFileReferences("acLoci"),
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() != 13) exit 1, """
+        if (params.references.size() != 17) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5285,14 +5241,19 @@ def defineReference() {
             'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
             'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
             'RefDict'           : checkParamReturnFileReferences("RefDict"),
+            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
+            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-            'YaraIndex'            : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'           : checkParamReturnFileReferences("HLAHDDict"),
+            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'            : checkParamReturnFileReferences("AnnoFile")
+            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'acLoci'            : checkParamReturnFileReferences("acLoci"),
+            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     }
 }
