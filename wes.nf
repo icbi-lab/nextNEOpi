@@ -4027,9 +4027,9 @@ process Sequenza {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_confints_CP.txt"),
-        file("${TumorReplicateId}_segments.txt")
-    ) into Sequenza_out_ch0
+        file("${TumorReplicateId}_segments.txt"),
+        file("${TumorReplicateId}_confints_CP.txt")
+    ) into Sequenza_out_Clonality_ch0
     file("${TumorReplicateId}_*.{png,pdf,txt}")
 
     script:
@@ -4059,10 +4059,13 @@ process 'Clonality' {
         NormalReplicateId,
         file(hc_vep_vcf),
         file(hc_vep_idx),
-        file(CNVs),
-        file(purity)
+        file(ascat_CNVs),
+        file(ascat_purity),
+        file(seqz_CNVs),
+        file(seqz_purity),
     ) from mkPhasedVCF_out_Clonality_ch0
         .combine(Ascat_out_Clonality_ch0, by: [0,1])
+        .combine(Sequenza_out_Clonality_ch0, by: [0,1])
 
     output:
     set(
@@ -4071,12 +4074,40 @@ process 'Clonality' {
     ) into Clonality_out_ch0
 
     script:
+    ascatOK = true
+
+    fileReader = ascat_purity.newReader()
+
+    line = fileReader.readLine()
+    line = fileReader.readLine()
+    fileReader.close()
+    (purity, ploidy) = line.split("\t")
+    if(purity == "0" || ploidy == "0" ) {
+        ascatOK = false
+    }
+
+    fileReader = ascat_CNVs.newReader()
+
+    line = fileReader.readLine()
+    fileReader.close()
+    fields = line.split("\t")
+    if(fields.size() < 5) {
+        ascatOK = false
+    }
+
+    if (ascatOK && ! params.use_sequenza_cnvs) {
+        seg_opt = "--seq " + ascat_CNVs
+        purity_opt = "--purity " + ascat_purity
+    } else {
+        seg_opt = "--seq_sequenza " + seqz_CNVs
+        purity_opt = "--purity_sequenza " + seqz_purity
+    }
     """
     mkCCF_input.py \\
         --PatientID ${TumorReplicateId} \\
         --vcf ${hc_vep_vcf} \\
-        --seg ${CNVs} \\
-        --purity ${purity} \\
+        ${seq_opt} \\
+        ${purity_opt} \\
         --min_vaf 0.01 \\
         --result_table ${TumorReplicateId}_segments.txt
     ${RSCRIPT} \\
