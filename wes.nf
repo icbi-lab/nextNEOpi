@@ -4116,6 +4116,9 @@ process 'Clonality' {
         seg_opt = "--seg ${ascat_CNVs}"
         purity_opt = "--purity ${ascat_purity}"
     } else {
+        if(! params.use_sequenza_cnvs) {
+             log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
+        }
         seg_opt = "--seg_sequenza ${seqz_CNVs}"
         purity_opt = "--purity_sequenza ${seqz_purity}"
     }
