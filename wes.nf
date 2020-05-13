@@ -4044,6 +4044,42 @@ process Sequenza {
 }
 
 
+clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by: [0,1])
+    .map {
+
+        it ->
+        def TumorReplicateId = it[0]
+        def NormalReplicateId = it[1]
+        def ascat_CNVs = it[2]
+        def ascat_purity  = it[3]
+        def seqz_CNVs  = it[4]
+        def seqz_purity  = it[5]
+
+        def ascatOK = true
+
+        def fileReader = ascat_purity.newReader()
+
+        def line = fileReader.readLine()
+        line = fileReader.readLine()
+        fileReader.close()
+        def (purity, ploidy) = line.split("\t")
+        if(purity == "0" || ploidy == "0" ) {
+            ascatOK = false
+        }
+
+        fileReader = ascat_CNVs.newReader()
+
+        line = fileReader.readLine()
+        fileReader.close()
+        def fields = line.split("\t")
+        if(fields.size() < 5) {
+            ascatOK = false
+        }
+        return [ TumorReplicateId, NormalReplicateId, file(ascat_CNVs), file(ascat_purity), file(seqz_CNVs), file(seqz_purity), ascatOK ]
+    }
+
+
+
 process 'Clonality' {
     tag "$TumorReplicateId"
 
@@ -4063,9 +4099,10 @@ process 'Clonality' {
         file(ascat_purity),
         file(seqz_CNVs),
         file(seqz_purity),
+        ascatOK
     ) from mkPhasedVCF_out_Clonality_ch0
-        .combine(Ascat_out_Clonality_ch0, by: [0,1])
-        .combine(Sequenza_out_Clonality_ch0, by: [0,1])
+        .combine(clonality_input, by: [0,1])
+
 
     output:
     set(
@@ -4074,39 +4111,19 @@ process 'Clonality' {
     ) into Clonality_out_ch0
 
     script:
-    ascatOK = true
-
-    fileReader = ascat_purity.newReader()
-
-    line = fileReader.readLine()
-    line = fileReader.readLine()
-    fileReader.close()
-    (purity, ploidy) = line.split("\t")
-    if(purity == "0" || ploidy == "0" ) {
-        ascatOK = false
-    }
-
-    fileReader = ascat_CNVs.newReader()
-
-    line = fileReader.readLine()
-    fileReader.close()
-    fields = line.split("\t")
-    if(fields.size() < 5) {
-        ascatOK = false
-    }
-
+    def seg_opt = ""
     if (ascatOK && ! params.use_sequenza_cnvs) {
-        seg_opt = "--seq " + ascat_CNVs
-        purity_opt = "--purity " + ascat_purity
+        seg_opt = "--seg ${ascat_CNVs}"
+        purity_opt = "--purity ${ascat_purity}"
     } else {
-        seg_opt = "--seq_sequenza " + seqz_CNVs
-        purity_opt = "--purity_sequenza " + seqz_purity
+        seg_opt = "--seg_sequenza ${seqz_CNVs}"
+        purity_opt = "--purity_sequenza ${seqz_purity}"
     }
     """
     mkCCF_input.py \\
         --PatientID ${TumorReplicateId} \\
         --vcf ${hc_vep_vcf} \\
-        ${seq_opt} \\
+        ${seg_opt} \\
         ${purity_opt} \\
         --min_vaf 0.01 \\
         --result_table ${TumorReplicateId}_segments.txt
