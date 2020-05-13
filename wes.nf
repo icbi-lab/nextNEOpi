@@ -831,7 +831,7 @@ if (params.trim_adapters) {
 
 
         script:
-        trimmedReads_2 = (single_end) ? "NO_FILE" : TumorReplicateId + "_trimmed_R2.fastq.gz"
+        trimmedReads_2 = (single_end) ? "NO_FILE_T" : TumorReplicateId + "_trimmed_R2.fastq.gz"
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
@@ -909,7 +909,7 @@ if (params.trim_adapters) {
 
 
         script:
-        trimmedReads_2 = (single_end) ? "NO_FILE" : NormalReplicateId + "_trimmed_R2.fastq.gz"
+        trimmedReads_2 = (single_end) ? "NO_FILE_N" : NormalReplicateId + "_trimmed_R2.fastq.gz"
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
