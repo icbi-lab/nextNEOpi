@@ -857,7 +857,7 @@ if (params.trim_adapters) {
                 --json ${TumorReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
-            touch NO_FILE
+            touch NO_FILE_T
             """
         else
             """
@@ -935,7 +935,7 @@ if (params.trim_adapters) {
                 --json ${NormalReplicateId}_fastp.json \\
                 ${fastpAdapter} \\
                 ${params.fastpOpts}
-            touch NO_FILE
+            touch NO_FILE_N
             """
         else
             """
