@@ -2178,7 +2178,7 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
             -R ${RefFasta} \\
             --exclude-filtered true \\
             --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
-            --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf
+            --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz
         """
     else
         """
