@@ -3583,13 +3583,25 @@ process AlleleCounter {
 
     script:
     outFileName = (sampleType == "T") ? TumorReplicateId + ".alleleCount" : NormalReplicateId + ".alleleCount"
+    if(single_end)
+        """
+        $ALLELECOUNT \\
+            -l ${acLoci} \\
+            -d \\
+            -r ${RefFasta} \\
+            -b ${BAM} \\
+            -f 0 \\
+            -o ${outFileName}
     """
-    $ALLELECOUNT \\
-        -l ${acLoci} \\
-        -r ${RefFasta} \\
-        -b ${BAM} \\
-        -o ${outFileName}
-    """
+    else
+        """
+        $ALLELECOUNT \\
+            -l ${acLoci} \\
+            -d \\
+            -r ${RefFasta} \\
+            -b ${BAM} \\
+            -o ${outFileName}
+        """
 }
 
 alleleCountOutNormal = Channel.create()
