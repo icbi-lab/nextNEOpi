@@ -4798,7 +4798,6 @@ process concat_mhcI_files {
         TumorReplicateId,
         file("${TumorReplicateId}_MHCI_filtered.tsv")
     ) into (
-        concat_mhcI_filtered_files_out_aggregated_reports_ch0,
         MHCI_final_immunogenicity,
         concat_mhcI_filtered_files_out_addCCF_ch0
     )
@@ -4836,7 +4835,6 @@ process concat_mhcII_files {
         TumorReplicateId,
         file("${TumorReplicateId}_MHCII_filtered.tsv")
     ) into (
-        concat_mhcII_filtered_files_out_aggregated_reports_ch0,
         concat_mhcII_filtered_files_out_addCCF_ch0
     )
     set(
@@ -4869,31 +4867,21 @@ process aggregated_reports {
         pvacseq_mhcI_all_file,
         pvacseq_mhcII_filtered_file,
         pvacseq_mhcII_all_file
-    ) from concat_mhcI_filtered_files_out_aggregated_reports_ch0
-        .combine(concat_mhcI_all_files_out_aggregated_reports_ch0, by: 0)
-        .combine(concat_mhcII_filtered_files_out_aggregated_reports_ch0, by: 0)
+    ) from concat_mhcI_all_files_out_aggregated_reports_ch0
         .combine(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
 
 
     output:
-    file("**/*_MHCI_filtered_aggregated.tsv")
     file("**/*_MHCI_all_aggregated.tsv")
-    file("**/*_MHCII_filtered_aggregated.tsv")
     file("**/*_MHCII_all_aggregated.tsv")
 
     script:
     """
     mkdir ./MHC_Class_I/
     pvacseq generate_aggregated_report \\
-        $pvacseq_mhcI_filtered_file \\
-        ./MHC_Class_I/${TumorReplicateId}_MHCI_filteted_aggregated.tsv
-    pvacseq generate_aggregated_report \\
         $pvacseq_mhcI_all_file \\
         ./MHC_Class_I/${TumorReplicateId}_MHCI_all_aggregated.tsv
     mkdir ./MHC_Class_II/
-    pvacseq generate_aggregated_report \\
-        $pvacseq_mhcII_filtered_file \\
-        ./MHC_Class_II/${TumorReplicateId}_MHCII_filteted_aggregated.tsv
     pvacseq generate_aggregated_report \\
         $pvacseq_mhcII_all_file \\
         ./MHC_Class_II/${TumorReplicateId}_MHCII_all_aggregated.tsv
