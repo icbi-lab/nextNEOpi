@@ -4885,14 +4885,14 @@ process aggregated_reports {
     """
     mkdir ./MHC_Class_I/
     pvacseq generate_aggregated_report \\
-        $pvacseq_mhcI_filteted_file \\
+        $pvacseq_mhcI_filtered_file \\
         ./MHC_Class_I/${TumorReplicateId}_MHCI_filteted_aggregated.tsv
     pvacseq generate_aggregated_report \\
         $pvacseq_mhcI_all_file \\
         ./MHC_Class_I/${TumorReplicateId}_MHCI_all_aggregated.tsv
     mkdir ./MHC_Class_II/
     pvacseq generate_aggregated_report \\
-        $pvacseq_mhcII_filteted_file \\
+        $pvacseq_mhcII_filtered_file \\
         ./MHC_Class_II/${TumorReplicateId}_MHCII_filteted_aggregated.tsv
     pvacseq generate_aggregated_report \\
         $pvacseq_mhcII_all_file \\
