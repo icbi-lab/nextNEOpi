@@ -4798,7 +4798,7 @@ process concat_mhcI_files {
         TumorReplicateId,
         file("${TumorReplicateId}_MHCI_filtered.tsv")
     ) into (
-        MHCI_final_ranked,
+        concat_mhcI_filtered_files_out_aggregated_reports_ch0,
         MHCI_final_immunogenicity,
         concat_mhcI_filtered_files_out_addCCF_ch0
     )
@@ -4807,6 +4807,7 @@ process concat_mhcI_files {
         file("${TumorReplicateId}_MHCI_all_epitopes.tsv")
     ) into (
         MHCI_all_epitopes,
+        concat_mhcI_all_files_out_aggregated_reports_ch0,
         concat_mhcI_all_files_out_addCCF_ch0
     )
 
@@ -4835,7 +4836,7 @@ process concat_mhcII_files {
         TumorReplicateId,
         file("${TumorReplicateId}_MHCII_filtered.tsv")
     ) into (
-        MHCII_final_ranked,
+        concat_mhcII_filtered_files_out_aggregated_reports_ch0,
         concat_mhcII_filtered_files_out_addCCF_ch0
     )
     set(
@@ -4843,6 +4844,7 @@ process concat_mhcII_files {
         file("${TumorReplicateId}_MHCII_all_epitopes.tsv")
     ) into (
         MHCII_all_epitopes,
+        concat_mhcII_all_files_out_aggregated_reports_ch0,
         concat_mhcII_all_files_out_addCCF_ch0
     )
 
@@ -4854,7 +4856,7 @@ process concat_mhcII_files {
 }
 
 
-process ranked_reports {
+process aggregated_reports {
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
@@ -4863,27 +4865,38 @@ process ranked_reports {
     input:
     set (
         TumorReplicateId,
-        pvacseq_mhcI_file,
-        pvacseq_mhcII_file
-    ) from MHCI_final_ranked
-        .combine(MHCII_final_ranked, by: 0)
+        pvacseq_mhcI_filtered_file,
+        pvacseq_mhcI_all_file,
+        pvacseq_mhcII_filtered_file,
+        pvacseq_mhcII_all_file
+    ) from concat_mhcI_filtered_files_out_aggregated_reports_ch0
+        .combine(concat_mhcI_all_files_out_aggregated_reports_ch0, by: 0)
+        .combine(concat_mhcII_filtered_files_out_aggregated_reports_ch0, by: 0)
+        .combine(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
 
 
     output:
-    file("**/*_MHCI_filtered.condensed.ranked.tsv")
-    file("**/*_MHCII_filtered.condensed.ranked.tsv")
+    file("**/*_MHCI_filtered_aggregated.tsv")
+    file("**/*_MHCI_all_aggregated.tsv")
+    file("**/*_MHCII_filtered_aggregated.tsv")
+    file("**/*_MHCII_all_aggregated.tsv")
 
     script:
     """
     mkdir ./MHC_Class_I/
-    pvacseq generate_condensed_ranked_report \\
-        -m lowest \\
-        $pvacseq_mhcI_file \\
-        ./MHC_Class_I/${TumorReplicateId}_MHCI_filtered.condensed.ranked.tsv
+    pvacseq generate_aggregated_report \\
+        $pvacseq_mhcI_filteted_file \\
+        ./MHC_Class_I/${TumorReplicateId}_MHCI_filteted_aggregated.tsv
+    pvacseq generate_aggregated_report \\
+        $pvacseq_mhcI_all_file \\
+        ./MHC_Class_I/${TumorReplicateId}_MHCI_all_aggregated.tsv
     mkdir ./MHC_Class_II/
-    pvacseq generate_condensed_ranked_report \\
-        -m lowest $pvacseq_mhcII_file \\
-        ./MHC_Class_II/${TumorReplicateId}_MHCII_filtered.condensed.ranked.tsv
+    pvacseq generate_aggregated_report \\
+        $pvacseq_mhcII_filteted_file \\
+        ./MHC_Class_II/${TumorReplicateId}_MHCII_filteted_aggregated.tsv
+    pvacseq generate_aggregated_report \\
+        $pvacseq_mhcII_all_file \\
+        ./MHC_Class_II/${TumorReplicateId}_MHCII_all_aggregated.tsv
     """
 }
 
