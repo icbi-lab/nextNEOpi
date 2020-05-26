@@ -4863,9 +4863,7 @@ process aggregated_reports {
     input:
     set (
         TumorReplicateId,
-        pvacseq_mhcI_filtered_file,
         pvacseq_mhcI_all_file,
-        pvacseq_mhcII_filtered_file,
         pvacseq_mhcII_all_file
     ) from concat_mhcI_all_files_out_aggregated_reports_ch0
         .combine(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
