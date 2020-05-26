@@ -4940,7 +4940,8 @@ process 'pepare_mixMHC2_seq' {
         NormalReplicateId,
         file("${TumorReplicateId}_peptides.fasta")
     ) optional true into pepare_mixMHC2_seq_out_ch0
-    file("${TumorReplicateId}_alleles_translated.txt") optional true into pepare_mixMHC2_seq_out_ch1
+    file("${TumorReplicateId}_mixMHC2pred.txt") optional true into pepare_mixMHC2_seq_out_ch1
+    file("${TumorReplicateId}_unsupported.txt") optional true
 
     script:
     """
@@ -4948,10 +4949,12 @@ process 'pepare_mixMHC2_seq' {
         --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
         --fasta_in ${protSeq_fasta} \\
         --fasta_out ${TumorReplicateId}_peptides.fasta
-    translate_HLAHD2mixMHC2pred.py \\
-        --HLAHD_file ${hlahd_allel_file} \\
-        --Allele_file ${baseDir}/assets/Alleles_list.txt \\
-        --translated_file ${TumorReplicateId}_alleles_translated.txt
+    HLAHD2mixMHC2pred.py \\
+        --hlahd_list ${hlahd_allel_file} \\
+        --supported_list ${baseDir}/assets/hlaii_supported.txt \\
+        --secondary_list ${baseDir}/assets/hlaii_secondary.txt \\
+        --output_dir ./ \\
+        --sample_name ${TumorReplicateId}
     """
 }
 
