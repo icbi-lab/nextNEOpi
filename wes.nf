@@ -3180,9 +3180,9 @@ if (! single_end) {
         cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz.tbi
         cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
         cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
+        cp manta_${TumorReplicateId}/results/variants/somaticSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/variants/somaticSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz.tbi
         cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
-        cp manta_${TumorReplicateId}/results/stats/somaticSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz
-        cp manta_${TumorReplicateId}/results/stats/somaticSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz.tbi
         """
     }
 } else {
