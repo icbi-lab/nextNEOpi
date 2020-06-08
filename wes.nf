@@ -400,8 +400,7 @@ if (params.WES) {
             "${RegionsBed.baseName}.interval_list"
         ) into (
             RegionsBedToIntervalList_out_ch0,
-            RegionsBedToIntervalList_out_ch1,
-            RegionsBedToIntervalList_out_ch2
+            RegionsBedToIntervalList_out_ch1
         )
 
         script:
@@ -431,10 +430,7 @@ if (params.WES) {
         output:
         file(
             "${BaitsBed.baseName}.interval_list"
-        ) into (
-            BaitsBedToIntervalList_out_ch0,
-            BaitsBedToIntervalList_out_ch1
-        )
+        ) into BaitsBedToIntervalList_out_ch0
 
         script:
         """
@@ -445,11 +441,9 @@ if (params.WES) {
         """
     }
 } else {
-    RegionsBedToIntervalList_out_ch0 = Channel.empty()
+    RegionsBedToIntervalList_out_ch0 = Channel.of('NO_FILE')
     RegionsBedToIntervalList_out_ch1 = Channel.empty()
-    RegionsBedToIntervalList_out_ch2 = Channel.empty()
     BaitsBedToIntervalList_out_ch0 = Channel.empty()
-    BaitsBedToIntervalList_out_ch1 = Channel.empty()
 }
 
 process 'preprocessIntervalList' {
@@ -5318,7 +5312,7 @@ def defineReference() {
             'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() != 16) exit 1, """
+        if (params.references.size() < 16) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
