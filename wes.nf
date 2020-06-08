@@ -5318,7 +5318,7 @@ def defineReference() {
             'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() != 17) exit 1, """
+        if (params.references.size() != 16) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
