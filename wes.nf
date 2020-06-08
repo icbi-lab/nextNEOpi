@@ -1963,6 +1963,7 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
           recalNormalBAM, recalNormalBAI
         )}
 
+ (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(3)
 
 process 'Mutect2' {
 /*
@@ -1998,7 +1999,7 @@ process 'Mutect2' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from BaseRecalGATK4_out
+    ) from BaseRecalGATK4_out_Mutect2_ch0
         .combine(
             SplitIntervals_out_ch2.flatten()
         )
@@ -2620,10 +2621,8 @@ RealignedBamFiles = RealignedBamFiles
 (
     GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
     GatherRealignedBamFiles_out_Mutect1scattered_ch0,
-    GatherRealignedBamFiles_out_MantaSomaticIndels_ch0,
-    GatherRealignedBamFiles_out_StrelkaSomatic_ch0,
     GatherRealignedBamFiles_out_Sequenza_ch0
-) = RealignedBamFiles.into(5)
+) = RealignedBamFiles.into(3)
 
 
 process 'VarscanSomaticScattered' {
@@ -3136,7 +3135,7 @@ if (! single_end) {
             file(Normalbai),
             file(RegionsBedGz),
             file(RegionsBedGzTbi)
-        ) from GatherRealignedBamFiles_out_MantaSomaticIndels_ch0
+        ) from BaseRecalGATK4_out_MantaSomaticIndels_ch0
             .combine(RegionsBedToTabix_out_ch1)
 
         set(
@@ -3164,13 +3163,17 @@ if (! single_end) {
         file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz")
         file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
         file("${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv")
+        file("${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz.tbi")
 
         script:
+        exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
+
         """
         configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
             --referenceFasta ${RefFasta} \\
-            --runDir manta_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome &&
-        manta_${TumorReplicateId}/runWorkflow.py -m local -j  ${task.cpus} &&
+            --runDir manta_${TumorReplicateId} ${exome_options}
+        manta_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus}
         cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz
         cp manta_${TumorReplicateId}/results/variants/diploidSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi
         cp manta_${TumorReplicateId}/results/variants/candidateSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSV.vcf.gz
@@ -3178,10 +3181,12 @@ if (! single_end) {
         cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz
         cp manta_${TumorReplicateId}/results/variants/candidateSmallIndels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi
         cp manta_${TumorReplicateId}/results/stats/svCandidateGenerationStats.tsv ${TumorReplicateId}_${NormalReplicateId}_svCandidateGenerationStats.tsv
+        cp manta_${TumorReplicateId}/results/stats/somaticSV.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz
+        cp manta_${TumorReplicateId}/results/stats/somaticSV.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz.tbi
         """
     }
 } else {
-    GatherRealignedBamFiles_out_MantaSomaticIndels_ch0
+    BaseRecalGATK4_out_MantaSomaticIndels_ch0
         .map {  item -> tuple(item[0],
                               item[1],
                               "NO_FILE",
@@ -3208,7 +3213,7 @@ process StrelkaSomatic {
         file(manta_indel_tbi),
         file(RegionsBedGz),
         file(RegionsBedGzTbi)
-    ) from GatherRealignedBamFiles_out_StrelkaSomatic_ch0
+    ) from BaseRecalGATK4_out_StrelkaSomatic_ch0
         .combine(MantaSomaticIndels_out_ch0, by:[0,1])
         .combine(RegionsBedToTabix_out_ch0)
 
@@ -3239,11 +3244,13 @@ process StrelkaSomatic {
 
     script:
     manta_indel_candidates = single_end ? "" : "--indelCandidates ${manta_indel}"
+    exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
+
     """
     configureStrelkaSomaticWorkflow.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
         --referenceFasta ${RefFasta} \\
         ${manta_indel_candidates} \\
-        --runDir strelka_${TumorReplicateId} --callRegions ${RegionsBedGz} --exome
+        --runDir strelka_${TumorReplicateId} ${exome_options}
     strelka_${TumorReplicateId}/runWorkflow.py -m local -j ${task.cpus}
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz
     cp strelka_${TumorReplicateId}/results/variants/somatic.indels.vcf.gz.tbi ${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz.tbi
