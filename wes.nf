@@ -1831,8 +1831,6 @@ process 'GetPileup' {
           database.GnomADIdx ]
     )
 
-    file(IntervalsList) from preprocessIntervalList_out_ch3
-
     set(
         TumorReplicateId,
         NormalReplicateId,
@@ -1840,6 +1838,9 @@ process 'GetPileup' {
         file(bam),
         file(bai)
     ) from BaseRecalGATK4_out_ch0
+        .combine(
+            preprocessIntervalList_out_ch3
+        )
 
     output:
     set(
