@@ -1813,12 +1813,6 @@ process 'GatherRecalBamFiles' {
     """
 }
 
-// make tumor ch BaseRecalTumorGATK4_out_ch3 for CollectSequencingArtifactMetrics
-BaseRecalTumorGATK4_out_ch0 = BaseRecalGATK4_out_ch1
-                                .filter {
-                                    it[2] == "T"
-                                }
-
 
 process 'GetPileup' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
@@ -1869,66 +1863,6 @@ process 'GetPileup' {
     """
 }
 
-
-process 'CollectSequencingArtifactMetrics' {
-/*
-CollectSequencingArtifactMetrics (Picard): collect metrics to quantify single-base
-sequencing artifacts.
-It has to be done only for paired end
-CollectSequencingArtifactMetrics and FilterByOrientationBias has been deprecated
-in favor of our new orientation bias workflow that uses LearnReadOrientationModel
-see "https://github.com/broadinstitute/gatk/issues/5553"
-
-If single-end reads are used, do nothing, just create an empty file!!!
-*/
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/02_QC/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(bam),
-        file(bai)
-    ) from BaseRecalTumorGATK4_out_ch0
-
-    output:
-    file(
-        "${TumorReplicateId}.pre_adapter_detail_metrics"
-    ) into (
-        CollectSequencingArtifactMetrics_out_ch0
-    )
-
-    script:
-    if(single_end)
-        """
-        touch ${TumorReplicateId}.pre_adapter_detail_metrics
-        """
-    else
-        """
-        mkdir -p ${params.tmpDir}
-
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD CollectSequencingArtifactMetrics \\
-            TMP_DIR=${params.tmpDir} \\
-            I=${bam} \\
-            R=${RefFasta} \\
-            O=${TumorReplicateId}
-        """
-}
 
 BaseRecalTumor = Channel.create()
 BaseRecalNormal = Channel.create()
