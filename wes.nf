@@ -2136,8 +2136,6 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
     ) from GetPileup_out
         .combine(gatherMutect2VCFs_out_ch0, by :[0,1])
 
-    file(preAdapterDetail) from CollectSequencingArtifactMetrics_out_ch0
-
     output:
     set(
         TumorReplicateId,
@@ -3837,7 +3835,7 @@ process 'ControlFREEC' {
     printNA = (params.WES) ? "FALSE" :  "TRUE"
     readCountThreshold = (params.WES) ? 50 : 10
     minimalCoveragePerPosition = (params.WES) ? 5 : 0
-    captureRegions = (params.WES) ? reference.RegionsBed : ""
+    captureRegions = (params.WES) ? "captureRegions = ${reference.RegionsBed}" : ""
     """
     rm -f ${config}
     touch ${config}
@@ -3875,7 +3873,7 @@ process 'ControlFREEC' {
     echo "minimalCoveragePerPosition = ${minimalCoveragePerPosition}" >> ${config}
     echo "" >> ${config}
     echo "[target]" >> ${config}
-    echo "captureRegions = ${captureRegions}" >> ${config}
+    echo "${captureRegions}" >> ${config}
     $FREEC -conf ${config}
     """
 }
