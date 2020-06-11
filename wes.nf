@@ -1836,7 +1836,8 @@ process 'GetPileup' {
         NormalReplicateId,
         sampleType,
         file(bam),
-        file(bai)
+        file(bai),
+        file(IntervalsList)
     ) from BaseRecalGATK4_out_ch0
         .combine(
             preprocessIntervalList_out_ch3
