@@ -166,6 +166,10 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
             rec.CHROM.lstrip("chr") if (rec.CHROM.startswith("chr")) and not segments["chr_prefix"] else rec.CHROM
         )
 
+        # TODO: deal with chrM
+        if chrom_key == "M" or chrom_key == "chrM":
+            continue
+
         for seg in segments[chrom_key]:
             if rec.POS >= seg["start_pos"] and rec.POS <= seg["end_pos"]:
                 ploidy = seg["n_minor"] + seg["n_major"]
