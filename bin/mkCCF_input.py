@@ -167,7 +167,7 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
         )
 
         # TODO: deal with chrM
-        if chrom_key == "M" or chrom_key == "chrM":
+        if chrom_key not in segments:
             continue
 
         for seg in segments[chrom_key]:
