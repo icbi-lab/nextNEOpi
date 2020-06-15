@@ -3083,6 +3083,13 @@ if (! single_end) {
             file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz"),
             file("${TumorReplicateId}_${NormalReplicateId}_candidateSmallIndels.vcf.gz.tbi")
         ) into MantaSomaticIndels_out_ch0
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz"),
+            file("${TumorReplicateId}_${NormalReplicateId}_somaticSV.vcf.gz.tbi")
+        ) into MantaSomaticIndels_out_NeoFuse_in_ch0
+
 
         file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz")
         file("${TumorReplicateId}_${NormalReplicateId}_diploidSV.vcf.gz.tbi")
@@ -3119,7 +3126,7 @@ if (! single_end) {
                               item[1],
                               "NO_FILE",
                               "NO_FILE_IDX") }
-        .set { MantaSomaticIndels_out_ch0 }
+        .into(MantaSomaticIndels_out_ch0,  MantaSomaticIndels_out_NeoFuse_in_ch0)
 }
 
 process StrelkaSomatic {
@@ -4440,9 +4447,13 @@ if (have_RNAseq) {
             NormalReplicateId,
             readRNAFWD,
             readRNAREV,
-            hla_types
+            hla_types,
+            _,
+            file(SVvcf),
+            file(SVvcfIdx)
         ) from reads_tumor_neofuse_ch
             .combine(hlas_neoFuse, by: 0)
+            .combine(MantaSomaticIndels_out_NeoFuse_in_ch0, by: 0)
 
         file STARidx from file(reference.STARidx)
         file RefFasta from file(reference.RefFasta)
@@ -4462,6 +4473,7 @@ if (have_RNAseq) {
 
 
         script:
+        sv_options = (single_end) ? "" : "-v ${SVvcf}"
         if(single_end_RNA)
             """
             NeoFuse_single -1 ${readRNAFWD} \\
@@ -4478,6 +4490,7 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
+                ${sv_options} \\
                 -k true
             """
         else
@@ -4496,6 +4509,7 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
+                ${sv_options} \\
                 -k true
             """
     }
