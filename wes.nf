@@ -177,7 +177,16 @@ if (! params.batchFile) {
         } else {
             Channel
                 .empty()
-                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+                .set { raw_reads_tumor_neofuse_ch }
+
+            Channel
+                    .of(tuple(row.tumorSampleName,
+                                        row.normalSampleName,
+                                        file("NO_FILE_RNA_FWD"),
+                                        file("NO_FILE_RNA_REV"),
+                                        "None"))
+                    .set { fastqc_readsRNAseq_ch }
+
             Channel
                 .of(tuple(
                     tumorSampleName,
@@ -313,7 +322,16 @@ if (! params.batchFile) {
     } else {
         Channel
             .empty()
-            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+            .set { raw_reads_tumor_neofuse_ch }
+
+        Channel
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    row.normalSampleName,
+                                    file("NO_FILE_RNA_FWD"),
+                                    file("NO_FILE_RNA_REV")) }
+                .set { fastqc_readsRNAseq_ch }
 
         Channel
                 .fromPath(params.batchFile)
