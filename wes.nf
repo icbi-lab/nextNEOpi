@@ -3144,7 +3144,7 @@ if (! single_end) {
                               item[1],
                               "NO_FILE",
                               "NO_FILE_IDX") }
-        .into(MantaSomaticIndels_out_ch0,  MantaSomaticIndels_out_NeoFuse_in_ch0)
+        .into { MantaSomaticIndels_out_ch0;  MantaSomaticIndels_out_NeoFuse_in_ch0 }
 }
 
 process StrelkaSomatic {
