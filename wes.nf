@@ -4216,7 +4216,7 @@ process 'pre_map_hla' {
         file(readsFWD),
         file(readsREV),
     ) from reads_tumor_hla_ch
-    val yaraIdx from Channel.value(reference.YaraIndex)
+    val yaraIdx from Channel.value(reference.YaraIndexDNA)
 
     output:
     set (
@@ -4287,7 +4287,7 @@ if (have_RNAseq) {
             readRNAFWD,
             readRNAREV
         ) from reads_tumor_optitype_ch
-        val yaraIdx from Channel.value(reference.YaraIndex)
+        val yaraIdx from Channel.value(reference.YaraIndexRNA)
 
         output:
         set (
@@ -4331,7 +4331,7 @@ if (have_RNAseq) {
 
         script:
         """
-        $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+        $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
         mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
         mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
         rm -rf ./tmp/
@@ -5253,7 +5253,7 @@ def checkParamReturnFileDatabases(item) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 18) exit 1, """
+        if (params.references.size() != 19) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5267,7 +5267,8 @@ def defineReference() {
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
             'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
             'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
+            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
             'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
@@ -5278,7 +5279,7 @@ def defineReference() {
             'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() < 16) exit 1, """
+        if (params.references.size() < 17) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -5290,7 +5291,8 @@ def defineReference() {
             'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
-            'YaraIndex'         : checkParamReturnFileReferences("YaraIndex"),
+            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
+            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
             'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
             'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
