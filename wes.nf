@@ -5036,6 +5036,7 @@ process 'pepare_mixMHC2_seq' {
     ) optional true into pepare_mixMHC2_seq_out_ch0
     file("${TumorReplicateId}_mixMHC2pred.txt") optional true into pepare_mixMHC2_seq_out_ch1
     file("${TumorReplicateId}_unsupported.txt") optional true
+    file("${TumorReplicateId}_mixMHC2pred_conf.txt") optional true
 
     script:
     """
@@ -5046,7 +5047,7 @@ process 'pepare_mixMHC2_seq' {
     HLAHD2mixMHC2pred.py \\
         --hlahd_list ${hlahd_allel_file} \\
         --supported_list ${baseDir}/assets/hlaii_supported.txt \\
-        --secondary_list ${baseDir}/assets/hlaii_secondary.txt \\
+        --model_list ${baseDir}/assets/hlaii_models.txt \\
         --output_dir ./ \\
         --sample_name ${TumorReplicateId}
     """
