@@ -1436,7 +1436,8 @@ process 'MarkDuplicates' {
         MarkDuplicates_out_ch0,
         MarkDuplicates_out_ch1,
         MarkDuplicates_out_ch2,
-        MarkDuplicates_out_ch3
+        MarkDuplicates_out_ch3,
+        MarkDuplicates_out_ch4
     )
 
     script:
@@ -1489,6 +1490,25 @@ MarkDuplicatesTumor_out_ch0 = MarkDuplicatesTumor_out_ch0
                                             TumorBAI
                                         )
                                     }
+
+
+MarkDuplicatesTumor = Channel.create()
+MarkDuplicatesNormal = Channel.create()
+
+MarkDuplicates_out_ch4
+    .choice(
+        MarkDuplicatesTumor, MarkDuplicatesNormal
+    ) { it[2] == "T" ? 0 : 1 }
+
+MarkDuplicates_out_CNVkit_ch0 = MarkDuplicatesTumor.combine(MarkDuplicatesNormal, by: [0,1])
+MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_CNVkit_ch0
+    .map{ TumorReplicateId, NormalReplicateId,
+          sampleTypeT, recalTumorBAM, recalTumorBAI,
+          sampleTypeN, recalNormalBAM, recalNormalBAI -> tuple(
+          TumorReplicateId, NormalReplicateId,
+          recalTumorBAM, recalTumorBAI,
+          recalNormalBAM, recalNormalBAI
+        )}
 
 if(params.WES) {
     process 'alignmentMetrics' {
@@ -2568,7 +2588,7 @@ RealignedBamFiles = RealignedBamFiles
     GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
     GatherRealignedBamFiles_out_Mutect1scattered_ch0,
     GatherRealignedBamFiles_out_Sequenza_ch0
-) = RealignedBamFiles.into(3)
+) = RealignedBamFiles.into(4)
 
 
 process 'VarscanSomaticScattered' {
@@ -4012,6 +4032,113 @@ process Sequenza {
         ${seqz_file} \\
         ${TumorReplicateId} \\
         ${gender}
+    """
+}
+
+// CNVkit
+
+process make_CNVkit_access_file {
+
+    tag 'mkCNVkitaccess'
+
+    conda 'bioconda::cnvkit=0.9.7'
+
+    publishDir "$params.outputDir/00_prepare_CNVkit/", mode: params.publishDirMode
+
+    input:
+    set(
+        file(RefFasta),
+        file(RefIdx),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx ]
+    )
+
+    output:
+    file(
+        "access-5kb.${RefFasta.simpleName}.bed"
+    ) into make_CNVkit_access_file_out_ch0
+
+    script:
+    """
+    cnvkit.py \\
+        access \\
+        ${RefFasta} \\
+        -s 5000 \\
+        -o access-5kb.${RefFasta.simpleName}.bed
+    """
+}
+
+process CNVkit {
+
+    tag "$TumorReplicateId"
+
+    conda 'bioconda::cnvkit=0.9.7'
+
+    publishDir "$params.outputDir/$TumorReplicateId/16_CNVkit/",
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(tumorBAM),
+        file(tumorBAI),
+        file(normalBAM),
+        file(normalBAI),
+    ) from MarkDuplicates_out_CNVkit_ch0
+
+    file(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx ]
+    )
+
+    file(BaitsBed) from Channel.value(reference.BaitsBed)
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}*"),
+        file("${NormalReplicateId}*")
+    ) into CNVkit_out_ch0
+
+    script:
+    gender = genderMap[TumorReplicateId]
+    maleRef = (gender in ["XY", "Male"]) ? "-y" : ""
+    method = (params.WES) ? "--method hybrid" : "--method wgs"
+    targets = (params.WES) ? "--targets ${BaitsBed}" : ""
+    """
+    # set Agg as backend for matplotlib
+    export MATPLOTLIBRC="./matplotlibrc"
+    echo "backend : Agg" > \$MATPLOTLIBRC
+
+    cnvkit.py \\
+        batch \\
+        ${tumorBAM} \\
+        --normal ${normalBAM} \\
+        ${targets} \\
+        --fasta ${RefFasta} \\
+        --access ${CNVkit_accessFile} \\
+        ${maleRef} \\
+        -p ${task.cpus} \\
+        --output-reference output_reference.cnn \\
+        --output-dir ./ \\
+        --diagram \\
+        --scatter
+
+    # run PDF to PNG conversion if mogrify and gs is installed
+    mogrify -version > /dev/null 2>&1 && \\
+    gs -v > /dev/null 2>&1 && \\
+        mogrify -density 600 -resize 2000 -format png *.pdf
+
+    # clean up
+    rm -f \$MATPLOTLIBRC
     """
 }
 
