@@ -2588,7 +2588,7 @@ RealignedBamFiles = RealignedBamFiles
     GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
     GatherRealignedBamFiles_out_Mutect1scattered_ch0,
     GatherRealignedBamFiles_out_Sequenza_ch0
-) = RealignedBamFiles.into(4)
+) = RealignedBamFiles.into(3)
 
 
 process 'VarscanSomaticScattered' {
