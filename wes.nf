@@ -4123,6 +4123,7 @@ process CNVkit {
         ${tumorBAM} \\
         --normal ${normalBAM} \\
         ${targets} \\
+        ${method} \\
         --fasta ${RefFasta} \\
         --access ${CNVkit_accessFile} \\
         ${maleRef} \\
@@ -5419,6 +5420,7 @@ def defineReference() {
             'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+            'BaitsBed'          : "",
             'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
             'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
