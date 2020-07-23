@@ -3674,230 +3674,231 @@ process 'Ascat' {
     """
 }
 
-process 'Mpileup4ControFREEC' {
+if (params.controlFREEC) {
+    process 'Mpileup4ControFREEC' {
 
-    tag "$TumorReplicateId - $NormalReplicateId"
+        tag "$TumorReplicateId - $NormalReplicateId"
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(BAM),
-        file(BAI)
-    ) from GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file(BAM),
+            file(BAI)
+        ) from GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0
 
-    each file(interval) from ScatteredIntervalListToBed_out_ch1.flatten()
-
-
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz")
-    ) into Mpileup4ControFREEC_out_ch0
-
-    script:
-    """
-    $SAMTOOLS mpileup \\
-        -q 1 \\
-        -f ${RefFasta} \\
-        -l ${interval} \\
-        ${BAM} | \\
-    $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz
-    """
+        each file(interval) from ScatteredIntervalListToBed_out_ch1.flatten()
 
 
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file("${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz")
+        ) into Mpileup4ControFREEC_out_ch0
+
+        script:
+        """
+        $SAMTOOLS mpileup \\
+            -q 1 \\
+            -f ${RefFasta} \\
+            -l ${interval} \\
+            ${BAM} | \\
+        $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz
+        """
+
+
+    }
+
+    Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0, 1, 2])
+
+    process 'gatherMpileups' {
+    // Merge scattered Varscan vcfs
+
+        tag "$TumorReplicateId - $NormalReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file(mpileup)
+        ) from Mpileup4ControFREEC_out_ch0
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file(outFileName)
+        ) into gatherMpileups_out_ch0
+
+        script:
+        outFileName = (sampleType == "T") ? TumorReplicateId + ".pileup.gz" : NormalReplicateId + ".pileup.gz"
+        """
+        scatters=`ls -1v *.pileup.gz`
+        zcat \$scatters | \\
+        bgzip --threads ${task.cpus} -c > ${outFileName}
+        """
+    }
+
+    mpileupOutNormal = Channel.create()
+    mpileupOutTumor = Channel.create()
+
+    gatherMpileups_out_ch0
+        .choice(
+            mpileupOutTumor, mpileupOutNormal
+        ) { it[2] == "T" ? 0 : 1 }
+
+    gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
+
+    // run ControlFREEC : adopted from nfcore sarek
+    process 'ControlFREEC' {
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            _,
+            file(mpileupTumor),
+            _,
+            file(mpileupNormal)
+        ) from gatherMpileups_out_ch0
+
+        set(
+            file(RefChrDir),
+            file(RefChrLen),
+            file(DBSNP),
+            file(DBSNPIdx)
+        ) from Channel.value(
+            [ reference.RefChrDir,
+            reference.RefChrLen,
+            database.DBSNP,
+            database.DBSNPIdx ]
+        )
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}.pileup.gz_CNVs"),
+            file("${TumorReplicateId}.pileup.gz_ratio.txt"),
+            file("${TumorReplicateId}.pileup.gz_BAF.txt")
+        ) into ControlFREEC_out_ch0
+
+        script:
+        config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
+        gender = genderMap[TumorReplicateId]
+
+        read_orientation = (single_end) ? "0" : "FR"
+        minimalSubclonePresence = (params.WES) ? 30 : 20
+        degree = (params.WES) ? 1 : 4
+        noisyData = (params.WES) ? "TRUE" : "FALSE"
+        window = (params.WES) ? 0 : 50000
+        breakPointType = (params.WES) ? 4 : 2
+        breakPointThreshold = (params.WES) ? "1.2" : "0.8"
+        printNA = (params.WES) ? "FALSE" :  "TRUE"
+        readCountThreshold = (params.WES) ? 50 : 10
+        minimalCoveragePerPosition = (params.WES) ? 5 : 0
+        captureRegions = (params.WES) ? "captureRegions = ${reference.RegionsBed}" : ""
+        """
+        rm -f ${config}
+        touch ${config}
+        echo "[general]" >> ${config}
+        echo "BedGraphOutput = TRUE" >> ${config}
+        echo "chrFiles = \${PWD}/${RefChrDir.fileName}" >> ${config}
+        echo "chrLenFile = \${PWD}/${RefChrLen.fileName}" >> ${config}
+        echo "coefficientOfVariation = 0.05" >> ${config}
+        echo "contaminationAdjustment = TRUE" >> ${config}
+        echo "forceGCcontentNormalization = 0" >> ${config}
+        echo "maxThreads = ${task.cpus}" >> ${config}
+        echo "minimalSubclonePresence = ${minimalSubclonePresence}" >> ${config}
+        echo "ploidy = 2,3,4" >> ${config}
+        echo "degree = ${degree}" >> ${config}
+        echo "noisyData = ${noisyData}" >> ${config}
+        echo "sex = ${gender}" >> ${config}
+        echo "window = ${window}" >> ${config}
+        echo "breakPointType = ${breakPointType}" >> ${config}
+        echo "breakPointThreshold = ${breakPointThreshold}" >> ${config}
+        echo "printNA = ${printNA}" >> ${config}
+        echo "readCountThreshold = ${readCountThreshold}" >> ${config}
+        echo "" >> ${config}
+        echo "[control]" >> ${config}
+        echo "inputFormat = pileup" >> ${config}
+        echo "mateFile = \${PWD}/${mpileupNormal}" >> ${config}
+        echo "mateOrientation = ${read_orientation}" >> ${config}
+        echo "" >> ${config}
+        echo "[sample]" >> ${config}
+        echo "inputFormat = pileup" >> ${config}
+        echo "mateFile = \${PWD}/${mpileupTumor}" >> ${config}
+        echo "mateOrientation = ${read_orientation}" >> ${config}
+        echo "" >> ${config}
+        echo "[BAF]" >> ${config}
+        echo "SNPfile = ${DBSNP.fileName}" >> ${config}
+        echo "minimalCoveragePerPosition = ${minimalCoveragePerPosition}" >> ${config}
+        echo "" >> ${config}
+        echo "[target]" >> ${config}
+        echo "${captureRegions}" >> ${config}
+        $FREEC -conf ${config}
+        """
+    }
+
+
+    process 'ControlFREECviz' {
+
+        tag "$TumorReplicateId"
+
+        // makeGraph.R and assess_significance.R seem to be instable
+        errorStrategy 'ignore'
+
+        publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
+            mode: params.publishDirMode
+
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(cnvTumor),
+            file(ratioTumor),
+            file(bafTumor),
+        ) from ControlFREEC_out_ch0
+
+        output:
+        set(
+            file("*.txt"),
+            file("*.png"),
+            file("*.bed"),
+            file("*.circos")
+        ) into ControlFREECviz_out_ch0
+
+
+        script:
+        """
+        cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
+        cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
+        $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
+        $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
+        """
+    }
 }
-
- Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0, 1, 2])
-
-process 'gatherMpileups' {
-// Merge scattered Varscan vcfs
-
-    tag "$TumorReplicateId - $NormalReplicateId"
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(mpileup)
-    ) from Mpileup4ControFREEC_out_ch0
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(outFileName)
-    ) into gatherMpileups_out_ch0
-
-    script:
-    outFileName = (sampleType == "T") ? TumorReplicateId + ".pileup.gz" : NormalReplicateId + ".pileup.gz"
-    """
-    scatters=`ls -1v *.pileup.gz`
-    zcat \$scatters | \\
-    bgzip --threads ${task.cpus} -c > ${outFileName}
-    """
-}
-
-mpileupOutNormal = Channel.create()
-mpileupOutTumor = Channel.create()
-
-gatherMpileups_out_ch0
-    .choice(
-        mpileupOutTumor, mpileupOutNormal
-    ) { it[2] == "T" ? 0 : 1 }
-
-gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
-
-// run ControlFREEC : adopted from nfcore sarek
-process 'ControlFREEC' {
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        _,
-        file(mpileupTumor),
-        _,
-        file(mpileupNormal)
-    ) from gatherMpileups_out_ch0
-
-    set(
-        file(RefChrDir),
-        file(RefChrLen),
-        file(DBSNP),
-        file(DBSNPIdx)
-    ) from Channel.value(
-        [ reference.RefChrDir,
-          reference.RefChrLen,
-          database.DBSNP,
-          database.DBSNPIdx ]
-    )
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}.pileup.gz_CNVs"),
-        file("${TumorReplicateId}.pileup.gz_ratio.txt"),
-        file("${TumorReplicateId}.pileup.gz_BAF.txt")
-    ) into ControlFREEC_out_ch0
-
-    script:
-    config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
-    gender = genderMap[TumorReplicateId]
-
-    read_orientation = (single_end) ? "0" : "FR"
-    minimalSubclonePresence = (params.WES) ? 30 : 20
-    degree = (params.WES) ? 1 : 4
-    noisyData = (params.WES) ? "TRUE" : "FALSE"
-    window = (params.WES) ? 0 : 50000
-    breakPointType = (params.WES) ? 4 : 2
-    breakPointThreshold = (params.WES) ? "1.2" : "0.8"
-    printNA = (params.WES) ? "FALSE" :  "TRUE"
-    readCountThreshold = (params.WES) ? 50 : 10
-    minimalCoveragePerPosition = (params.WES) ? 5 : 0
-    captureRegions = (params.WES) ? "captureRegions = ${reference.RegionsBed}" : ""
-    """
-    rm -f ${config}
-    touch ${config}
-    echo "[general]" >> ${config}
-    echo "BedGraphOutput = TRUE" >> ${config}
-    echo "chrFiles = \${PWD}/${RefChrDir.fileName}" >> ${config}
-    echo "chrLenFile = \${PWD}/${RefChrLen.fileName}" >> ${config}
-    echo "coefficientOfVariation = 0.05" >> ${config}
-    echo "contaminationAdjustment = TRUE" >> ${config}
-    echo "forceGCcontentNormalization = 0" >> ${config}
-    echo "maxThreads = ${task.cpus}" >> ${config}
-    echo "minimalSubclonePresence = ${minimalSubclonePresence}" >> ${config}
-    echo "ploidy = 2,3,4" >> ${config}
-    echo "degree = ${degree}" >> ${config}
-    echo "noisyData = ${noisyData}" >> ${config}
-    echo "sex = ${gender}" >> ${config}
-    echo "window = ${window}" >> ${config}
-    echo "breakPointType = ${breakPointType}" >> ${config}
-    echo "breakPointThreshold = ${breakPointThreshold}" >> ${config}
-    echo "printNA = ${printNA}" >> ${config}
-    echo "readCountThreshold = ${readCountThreshold}" >> ${config}
-    echo "" >> ${config}
-    echo "[control]" >> ${config}
-    echo "inputFormat = pileup" >> ${config}
-    echo "mateFile = \${PWD}/${mpileupNormal}" >> ${config}
-    echo "mateOrientation = ${read_orientation}" >> ${config}
-    echo "" >> ${config}
-    echo "[sample]" >> ${config}
-    echo "inputFormat = pileup" >> ${config}
-    echo "mateFile = \${PWD}/${mpileupTumor}" >> ${config}
-    echo "mateOrientation = ${read_orientation}" >> ${config}
-    echo "" >> ${config}
-    echo "[BAF]" >> ${config}
-    echo "SNPfile = ${DBSNP.fileName}" >> ${config}
-    echo "minimalCoveragePerPosition = ${minimalCoveragePerPosition}" >> ${config}
-    echo "" >> ${config}
-    echo "[target]" >> ${config}
-    echo "${captureRegions}" >> ${config}
-    $FREEC -conf ${config}
-    """
-}
-
-
-process 'ControlFREECviz' {
-
-    tag "$TumorReplicateId"
-
-    // makeGraph.R and assess_significance.R seem to be instable
-    errorStrategy 'ignore'
-
-    publishDir "$params.outputDir/$TumorReplicateId/15_controlFREEC/",
-        mode: params.publishDirMode
-
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(cnvTumor),
-        file(ratioTumor),
-        file(bafTumor),
-    ) from ControlFREEC_out_ch0
-
-    output:
-    set(
-        file("*.txt"),
-        file("*.png"),
-        file("*.bed"),
-        file("*.circos")
-     ) into ControlFREECviz_out_ch0
-
-
-    script:
-    """
-    cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
-    cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
-    $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
-    $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
-    """
-}
-
 
 Channel
     .fromPath(reference.RefChrLen)
