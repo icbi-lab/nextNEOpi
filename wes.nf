@@ -4093,9 +4093,11 @@ process CNVkit {
     set(
         file(RefFasta),
         file(RefIdx),
+        file(AnnoFile),
     ) from Channel.value(
         [ reference.RefFasta,
-          reference.RefIdx ]
+          reference.RefIdx,
+          reference.AnnoFile ]
     )
 
     file(BaitsBed) from Channel.value(reference.BaitsBed)
@@ -4113,34 +4115,82 @@ process CNVkit {
     maleRef = (gender in ["XY", "Male"]) ? "-y" : ""
     method = (params.WES) ? "--method hybrid" : "--method wgs"
     targets = (params.WES) ? "--targets ${BaitsBed}" : ""
-    """
-    # set Agg as backend for matplotlib
-    export MATPLOTLIBRC="./matplotlibrc"
-    echo "backend : Agg" > \$MATPLOTLIBRC
 
-    cnvkit.py \\
-        batch \\
-        ${tumorBAM} \\
-        --normal ${normalBAM} \\
-        ${targets} \\
-        ${method} \\
-        --fasta ${RefFasta} \\
-        --access ${CNVkit_accessFile} \\
-        ${maleRef} \\
-        -p ${task.cpus} \\
-        --output-reference output_reference.cnn \\
-        --output-dir ./ \\
-        --diagram \\
-        --scatter
+    if (params.WES)
+        """
+        # set Agg as backend for matplotlib
+        export MATPLOTLIBRC="./matplotlibrc"
+        echo "backend : Agg" > \$MATPLOTLIBRC
 
-    # run PDF to PNG conversion if mogrify and gs is installed
-    mogrify -version > /dev/null 2>&1 && \\
-    gs -v > /dev/null 2>&1 && \\
-        mogrify -density 600 -resize 2000 -format png *.pdf
+        cnvkit.py \\
+            batch \\
+            ${tumorBAM} \\
+            --normal ${normalBAM} \\
+            --targets ${BaitsBed} \\
+            --method hybrid \\
+            --fasta ${RefFasta} \\
+            --annotate ${AnnoFile} \\
+            --access ${CNVkit_accessFile} \\
+            ${maleRef} \\
+            -p ${task.cpus} \\
+            --output-reference output_reference.cnn \\
+            --output-dir ./ \\
+            --diagram \\
+            --scatter
 
-    # clean up
-    rm -f \$MATPLOTLIBRC
-    """
+        # run PDF to PNG conversion if mogrify and gs is installed
+        mogrify -version > /dev/null 2>&1 && \\
+        gs -v > /dev/null 2>&1 && \\
+            mogrify -density 600 -resize 2000 -format png *.pdf
+
+        # clean up
+        rm -f \$MATPLOTLIBRC
+        """
+    else
+        """
+        # set Agg as backend for matplotlib
+        export MATPLOTLIBRC="./matplotlibrc"
+        echo "backend : Agg" > \$MATPLOTLIBRC
+
+        cnvkit.py \\
+            batch \\
+            ${tumorBAM} \\
+            --normal ${normalBAM} \\
+            --method wgs \\
+            --fasta ${RefFasta} \\
+            --annotate ${AnnoFile} \\
+            --access ${CNVkit_accessFile} \\
+            ${maleRef} \\
+            -p ${task.cpus} \\
+            --output-reference output_reference.cnn \\
+            --output-dir ./
+
+        cnvkit.py \\
+            segment \\
+            ${tumorBAM.baseName}.cnr \\
+            -p ${task.cpus} \\
+            -o ${tumorBAM.baseName}.cns \\
+
+        cnvkit.py \\
+            scatter \\
+            ${tumorBAM.baseName}.cnr \\
+            -s ${tumorBAM.baseName}.cns \\
+            -o ${tumorBAM.baseName}_scatter.png
+
+        cnvkit.py \\
+            diagram \\
+            ${tumorBAM.baseName}.cnr \\
+            -s ${tumorBAM.baseName}.cns \\
+            -o ${tumorBAM.baseName}_diagram.pdf
+
+        # run PDF to PNG conversion if mogrify and gs is installed
+        mogrify -version > /dev/null 2>&1 && \\
+        gs -v > /dev/null 2>&1 && \\
+            mogrify -density 600 -resize 2000 -format png *.pdf
+
+        # clean up
+        rm -f \$MATPLOTLIBRC
+        """
 }
 
 
