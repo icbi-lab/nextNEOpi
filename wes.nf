@@ -4404,8 +4404,14 @@ process 'pre_map_hla' {
     ) into fished_reads
 
     script:
-    yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
-    samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+    if(single_end) {
+        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+    } else {
+        yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
+        samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
+    }
+
     if (single_end)
         """
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
@@ -4413,8 +4419,14 @@ process 'pre_map_hla' {
         """
     else
         """
+        mkfifo R1 R2
         $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
-            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
+            tee R1 R2 > /dev/null &
+            $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
+            $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
+        wait
+        rm -f R1 R2
         """
 }
 
@@ -4475,8 +4487,14 @@ if (have_RNAseq) {
         ) into fished_reads_RNA
 
         script:
-        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
-        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+        if(single_end) {
+            yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+            samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+        } else {
+            yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
+            samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
+        }
+
         if (single_end_RNA)
             """
             $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
@@ -4484,8 +4502,14 @@ if (have_RNAseq) {
             """
         else
             """
+            mkfifo R1 R2
             $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
-                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
+                tee R1 R2 > /dev/null &
+                $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
+                $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
+            wait
+            rm -f R1 R2
             """
     }
 
