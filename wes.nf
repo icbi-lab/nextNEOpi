@@ -4006,6 +4006,8 @@ process Sequenza {
 
     tag "$TumorReplicateId"
 
+    errorStrategy "ignore"
+
     publishDir "$params.outputDir/$TumorReplicateId/16_Sequenza/",
         mode: params.publishDirMode
 
@@ -4032,7 +4034,9 @@ process Sequenza {
         ${workflow.projectDir}/bin/SequenzaScript.R \\
         ${seqz_file} \\
         ${TumorReplicateId} \\
-        ${gender}
+        ${gender} || \\
+        touch ${TumorReplicateId}_segments.txt && \\
+        touch ${TumorReplicateId}_confints_CP.txt
     """
 }
 
@@ -4207,6 +4211,7 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         def seqz_purity  = it[5]
 
         def ascatOK = true
+        def sequenzaOK = true
 
         def fileReader = ascat_purity.newReader()
 
@@ -4226,68 +4231,89 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         if(fields.size() < 5) {
             ascatOK = false
         }
-        return [ TumorReplicateId, NormalReplicateId, file(ascat_CNVs), file(ascat_purity), file(seqz_CNVs), file(seqz_purity), ascatOK ]
-    }
 
 
+        fileReader = seqz_CNVs.newReader()
 
-process 'Clonality' {
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
-        mode: params.publishDirMode
-
-
-    conda "assets/py3_icbi.yml"
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(hc_vep_vcf),
-        file(hc_vep_idx),
-        file(ascat_CNVs),
-        file(ascat_purity),
-        file(seqz_CNVs),
-        file(seqz_purity),
-        ascatOK
-    ) from mkPhasedVCF_out_Clonality_ch0
-        .combine(clonality_input, by: [0,1])
-
-
-    output:
-    set(
-        TumorReplicateId,
-        file("${TumorReplicateId}_CCFest.tsv"),
-    ) into Clonality_out_ch0
-
-    script:
-    def seg_opt = ""
-    if (ascatOK && ! params.use_sequenza_cnvs) {
-        seg_opt = "--seg ${ascat_CNVs}"
-        purity_opt = "--purity ${ascat_purity}"
-    } else {
-        if(! params.use_sequenza_cnvs) {
-             log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
+        line = fileReader.readLine()
+        fileReader.close()
+        fields = line.split("\t")
+        if(fields.size() < 13) {
+            sequenzaOK = false
         }
-        seg_opt = "--seg_sequenza ${seqz_CNVs}"
-        purity_opt = "--purity_sequenza ${seqz_purity}"
-    }
-    """
-    mkCCF_input.py \\
-        --PatientID ${TumorReplicateId} \\
-        --vcf ${hc_vep_vcf} \\
-        ${seg_opt} \\
-        ${purity_opt} \\
-        --min_vaf 0.01 \\
-        --result_table ${TumorReplicateId}_segments_CCF_input.txt
-    ${RSCRIPT} \\
-        ${workflow.projectDir}/bin/CCF.R \\
-        ${TumorReplicateId}_segments_CCF_input.txt \\
-        ${TumorReplicateId}_CCFest.tsv \\
-    """
-}
 
+        fileReader = seqz_purity.newReader()
+
+        line = fileReader.readLine()
+        fileReader.close()
+        fields = line.split("\t")
+        if(fields.size() < 3) {
+            sequenzaOK = false
+        }
+
+        return [ TumorReplicateId, NormalReplicateId, file(ascat_CNVs), file(ascat_purity), file(seqz_CNVs), file(seqz_purity), ascatOK, sequenzaOK ]
+    }
+
+
+
+if (ascatOK || sequenzaOK) {
+    process 'Clonality' {
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
+            mode: params.publishDirMode
+
+
+        conda "assets/py3_icbi.yml"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(hc_vep_vcf),
+            file(hc_vep_idx),
+            file(ascat_CNVs),
+            file(ascat_purity),
+            file(seqz_CNVs),
+            file(seqz_purity),
+            ascatOK
+        ) from mkPhasedVCF_out_Clonality_ch0
+            .combine(clonality_input, by: [0,1])
+
+
+        output:
+        set(
+            TumorReplicateId,
+            file("${TumorReplicateId}_CCFest.tsv"),
+        ) into Clonality_out_ch0
+
+        script:
+        def seg_opt = ""
+        if (ascatOK && ! params.use_sequenza_cnvs) {
+            seg_opt = "--seg ${ascat_CNVs}"
+            purity_opt = "--purity ${ascat_purity}"
+        } else {
+            if(! params.use_sequenza_cnvs) {
+                log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
+            }
+            seg_opt = "--seg_sequenza ${seqz_CNVs}"
+            purity_opt = "--purity_sequenza ${seqz_purity}"
+        }
+        """
+        mkCCF_input.py \\
+            --PatientID ${TumorReplicateId} \\
+            --vcf ${hc_vep_vcf} \\
+            ${seg_opt} \\
+            ${purity_opt} \\
+            --min_vaf 0.01 \\
+            --result_table ${TumorReplicateId}_segments_CCF_input.txt
+        ${RSCRIPT} \\
+            ${workflow.projectDir}/bin/CCF.R \\
+            ${TumorReplicateId}_segments_CCF_input.txt \\
+            ${TumorReplicateId}_CCFest.tsv \\
+        """
+    }
+}
 
 // END CNVs
 
@@ -5178,40 +5204,41 @@ process mixMHC2pred {
 }
 
 // add CCF clonality to neoepitopes result files
-process addCCF {
-    tag "$TumorReplicateId"
+if (ascatOK || sequenzaOK) {
+    process addCCF {
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
+            mode: params.publishDirMode
 
-    conda 'assets/py3_icbi.yml'
+        conda 'assets/py3_icbi.yml'
 
-    input:
-    set(
-        TumorReplicateId,
-        file(epitopes),
-        file(CCF)
-    ) from concat_mhcI_filtered_files_out_addCCF_ch0
-        .concat(
-                concat_mhcI_all_files_out_addCCF_ch0,
-                concat_mhcII_filtered_files_out_addCCF_ch0,
-                concat_mhcII_all_files_out_addCCF_ch0
-        )
-        .combine(Clonality_out_ch0, by: 0)
+        input:
+        set(
+            TumorReplicateId,
+            file(epitopes),
+            file(CCF)
+        ) from concat_mhcI_filtered_files_out_addCCF_ch0
+            .concat(
+                    concat_mhcI_all_files_out_addCCF_ch0,
+                    concat_mhcII_filtered_files_out_addCCF_ch0,
+                    concat_mhcII_all_files_out_addCCF_ch0
+            )
+            .combine(Clonality_out_ch0, by: 0)
 
-    output:
-    file(outfile)
+        output:
+        file(outfile)
 
-    script:
-    outfile = epitopes.baseName + "_ccf.tsv"
-    """
-    add_CCF.py \\
-        --neoepitopes ${epitopes} \\
-        --ccf ${CCF} \\
-        --outfile ${outfile}
-    """
+        script:
+        outfile = epitopes.baseName + "_ccf.tsv"
+        """
+        add_CCF.py \\
+            --neoepitopes ${epitopes} \\
+            --ccf ${CCF} \\
+            --outfile ${outfile}
+        """
+    }
 }
-
 
 /*
   Immunogenicity scoring
