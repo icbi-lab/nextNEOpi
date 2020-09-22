@@ -5216,42 +5216,45 @@ process mixMHC2pred {
 }
 
 // add CCF clonality to neoepitopes result files
-if (ascatOK || sequenzaOK) {
-    process addCCF {
-        tag "$TumorReplicateId"
+process addCCF {
+    tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
-            mode: params.publishDirMode
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
+        mode: params.publishDirMode
 
-        conda 'assets/py3_icbi.yml'
+    conda 'assets/py3_icbi.yml'
 
-        input:
-        set(
-            TumorReplicateId,
-            file(epitopes),
-            file(CCF)
-        ) from concat_mhcI_filtered_files_out_addCCF_ch0
-            .concat(
-                    concat_mhcI_all_files_out_addCCF_ch0,
-                    concat_mhcII_filtered_files_out_addCCF_ch0,
-                    concat_mhcII_all_files_out_addCCF_ch0
-            )
-            .combine(Clonality_out_ch0, by: 0)
+    input:
+    set(
+        TumorReplicateId,
+        file(epitopes),
+        file(CCF),
+        ascatOK,
+        sequenzaOK
+    ) from concat_mhcI_filtered_files_out_addCCF_ch0
+        .concat(
+                concat_mhcI_all_files_out_addCCF_ch0,
+                concat_mhcII_filtered_files_out_addCCF_ch0,
+                concat_mhcII_all_files_out_addCCF_ch0
+        )
+        .combine(Clonality_out_ch0, by: 0)
 
-        output:
-        file(outfile)
+    output:
+    file(outfile)
 
-        script:
-        outfile = epitopes.baseName + "_ccf.tsv"
+    script:
+    outfile = epitopes.baseName + "_ccf.tsv"
+    if (ascatOK || sequenzaOK)
         """
         add_CCF.py \\
             --neoepitopes ${epitopes} \\
             --ccf ${CCF} \\
             --outfile ${outfile}
         """
-    }
-} else {
-    log.warn "WARNING: neither ASCAT nor Sequenza produced results: not adding clonality information"
+    else
+        """
+        echo "WARNING: neither ASCAT nor Sequenza produced results: not adding clonality information" > ${outfile}
+        """
 }
 
 /*
