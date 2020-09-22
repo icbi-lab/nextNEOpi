@@ -47,6 +47,12 @@ single_end_RNA = params.single_end_RNA
 // initialize RNAseq presence
 have_RNAseq = false
 
+
+// initialize ascat and sequenza run result
+ascatOK = true
+sequenzaOK = true
+
+
 /*--------------------------------------------------
   For workflow summary
 ---------------------------------------------------*/
@@ -4209,9 +4215,6 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         def ascat_purity  = it[3]
         def seqz_CNVs  = it[4]
         def seqz_purity  = it[5]
-
-        def ascatOK = true
-        def sequenzaOK = true
 
         def fileReader = ascat_purity.newReader()
 
