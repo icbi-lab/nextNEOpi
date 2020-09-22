@@ -4288,36 +4288,43 @@ process 'Clonality' {
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_CCFest.tsv"),
+        ascatOK,
+        sequenzaOK
     ) into Clonality_out_ch0
-
-    when:
-    ascatOK == true && sequenzaOK == true
 
     script:
     def seg_opt = ""
     if (ascatOK && ! params.use_sequenza_cnvs) {
         seg_opt = "--seg ${ascat_CNVs}"
         purity_opt = "--purity ${ascat_purity}"
-    } else {
+    } else if (sequenzaOK) {
         if(! params.use_sequenza_cnvs) {
             log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
         }
         seg_opt = "--seg_sequenza ${seqz_CNVs}"
         purity_opt = "--purity_sequenza ${seqz_purity}"
+    } else {
+        log.warn "WARNING: neither ASCAT nor Sequenza did produce results"
     }
-    """
-    mkCCF_input.py \\
-        --PatientID ${TumorReplicateId} \\
-        --vcf ${hc_vep_vcf} \\
-        ${seg_opt} \\
-        ${purity_opt} \\
-        --min_vaf 0.01 \\
-        --result_table ${TumorReplicateId}_segments_CCF_input.txt
-    ${RSCRIPT} \\
-        ${workflow.projectDir}/bin/CCF.R \\
-        ${TumorReplicateId}_segments_CCF_input.txt \\
-        ${TumorReplicateId}_CCFest.tsv \\
-    """
+
+    if (ascatOK || sequenzaOK)
+        """
+        mkCCF_input.py \\
+            --PatientID ${TumorReplicateId} \\
+            --vcf ${hc_vep_vcf} \\
+            ${seg_opt} \\
+            ${purity_opt} \\
+            --min_vaf 0.01 \\
+            --result_table ${TumorReplicateId}_segments_CCF_input.txt
+        ${RSCRIPT} \\
+            ${workflow.projectDir}/bin/CCF.R \\
+            ${TumorReplicateId}_segments_CCF_input.txt \\
+            ${TumorReplicateId}_CCFest.tsv \\
+        """
+    else
+        """
+        echo "Not avaliable" > ${TumorReplicateId}_CCFest.tsv"
+        """
 }
 
 // END CNVs
