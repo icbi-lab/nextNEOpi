@@ -48,11 +48,6 @@ single_end_RNA = params.single_end_RNA
 have_RNAseq = false
 
 
-// initialize ascat and sequenza run result
-ascatOK = true
-sequenzaOK = true
-
-
 /*--------------------------------------------------
   For workflow summary
 ---------------------------------------------------*/
@@ -4021,7 +4016,8 @@ process Sequenza {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(seqz_file)
+        file(seqz_file),
+
     ) from gatherSequenzaInput_out_ch0
 
     output:
@@ -4216,6 +4212,9 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         def seqz_CNVs  = it[4]
         def seqz_purity  = it[5]
 
+        def ascatOK = true
+        def sequenzaOK = true
+
         def fileReader = ascat_purity.newReader()
 
         def line = fileReader.readLine()
@@ -4259,65 +4258,66 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
 
 
-if (ascatOK || sequenzaOK) {
-    process 'Clonality' {
-        tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
-            mode: params.publishDirMode
+process 'Clonality' {
+    tag "$TumorReplicateId"
 
-
-        conda "assets/py3_icbi.yml"
-
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(hc_vep_vcf),
-            file(hc_vep_idx),
-            file(ascat_CNVs),
-            file(ascat_purity),
-            file(seqz_CNVs),
-            file(seqz_purity),
-            ascatOK
-        ) from mkPhasedVCF_out_Clonality_ch0
-            .combine(clonality_input, by: [0,1])
+    publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
+        mode: params.publishDirMode
 
 
-        output:
-        set(
-            TumorReplicateId,
-            file("${TumorReplicateId}_CCFest.tsv"),
-        ) into Clonality_out_ch0
+    conda "assets/py3_icbi.yml"
 
-        script:
-        def seg_opt = ""
-        if (ascatOK && ! params.use_sequenza_cnvs) {
-            seg_opt = "--seg ${ascat_CNVs}"
-            purity_opt = "--purity ${ascat_purity}"
-        } else {
-            if(! params.use_sequenza_cnvs) {
-                log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
-            }
-            seg_opt = "--seg_sequenza ${seqz_CNVs}"
-            purity_opt = "--purity_sequenza ${seqz_purity}"
+    input:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(hc_vep_vcf),
+        file(hc_vep_idx),
+        file(ascat_CNVs),
+        file(ascat_purity),
+        file(seqz_CNVs),
+        file(seqz_purity),
+        ascatOK,
+        sequenzaOK
+    ) from mkPhasedVCF_out_Clonality_ch0
+        .combine(clonality_input, by: [0,1])
+
+
+    output:
+    set(
+        TumorReplicateId,
+        file("${TumorReplicateId}_CCFest.tsv"),
+    ) into Clonality_out_ch0
+
+    when:
+    ascatOK == true && sequenzaOK == true
+
+    script:
+    def seg_opt = ""
+    if (ascatOK && ! params.use_sequenza_cnvs) {
+        seg_opt = "--seg ${ascat_CNVs}"
+        purity_opt = "--purity ${ascat_purity}"
+    } else {
+        if(! params.use_sequenza_cnvs) {
+            log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
         }
-        """
-        mkCCF_input.py \\
-            --PatientID ${TumorReplicateId} \\
-            --vcf ${hc_vep_vcf} \\
-            ${seg_opt} \\
-            ${purity_opt} \\
-            --min_vaf 0.01 \\
-            --result_table ${TumorReplicateId}_segments_CCF_input.txt
-        ${RSCRIPT} \\
-            ${workflow.projectDir}/bin/CCF.R \\
-            ${TumorReplicateId}_segments_CCF_input.txt \\
-            ${TumorReplicateId}_CCFest.tsv \\
-        """
+        seg_opt = "--seg_sequenza ${seqz_CNVs}"
+        purity_opt = "--purity_sequenza ${seqz_purity}"
     }
-} else {
-    log.warn "WARNING: neither ASCAT nor Sequenza produced results: skipping clonality calculation"
+    """
+    mkCCF_input.py \\
+        --PatientID ${TumorReplicateId} \\
+        --vcf ${hc_vep_vcf} \\
+        ${seg_opt} \\
+        ${purity_opt} \\
+        --min_vaf 0.01 \\
+        --result_table ${TumorReplicateId}_segments_CCF_input.txt
+    ${RSCRIPT} \\
+        ${workflow.projectDir}/bin/CCF.R \\
+        ${TumorReplicateId}_segments_CCF_input.txt \\
+        ${TumorReplicateId}_CCFest.tsv \\
+    """
 }
 
 // END CNVs
