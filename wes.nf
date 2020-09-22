@@ -4313,6 +4313,8 @@ if (ascatOK || sequenzaOK) {
             ${TumorReplicateId}_CCFest.tsv \\
         """
     }
+} else {
+    log.warn "WARNING: neither ASCAT nor Sequenza produced results: skipping clonality calculation"
 }
 
 // END CNVs
@@ -5238,6 +5240,8 @@ if (ascatOK || sequenzaOK) {
             --outfile ${outfile}
         """
     }
+} else {
+    log.warn "WARNING: neither ASCAT nor Sequenza produced results: not adding clonality information"
 }
 
 /*
