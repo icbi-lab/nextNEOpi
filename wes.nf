@@ -4580,7 +4580,8 @@ if (have_RNAseq) {
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
             else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv"
+                touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                echo "No result" >  ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
             fi
             """
         else
@@ -4593,7 +4594,8 @@ if (have_RNAseq) {
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
             else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv"
+                touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                echo "No result" > ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
             fi
             """
     }
