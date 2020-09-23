@@ -4571,12 +4571,31 @@ if (have_RNAseq) {
         file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
 
         script:
-        """
-        $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-        mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
-        mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
-        rm -rf ./tmp/
-        """
+        if (single_end_RNA)
+            """
+            MHC_MAPPED=`$SAMTOOLS view -c ${reads}`
+            if [ "\$MHC_MAPPED" != "0" ]; then
+                $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                rm -rf ./tmp/
+            else
+                touch ${TumorReplicateId}_optitype_RNA_result.tsv"
+            fi
+            """
+        else
+            """
+            MHC_MAPPED_FWD=`$SAMTOOLS view -c ${reads[0]}`
+            MHC_MAPPED_REV=`$SAMTOOLS view -c ${reads[1]}`
+            if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
+                $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                rm -rf ./tmp/
+            else
+                touch ${TumorReplicateId}_optitype_RNA_result.tsv"
+            fi
+            """
     }
 
 }
