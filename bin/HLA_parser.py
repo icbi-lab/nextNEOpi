@@ -94,7 +94,7 @@ def merge_hlas(hlas_DNA=[], hlas_RNA=[]):
     for hla_gene in hla_sets_DNA.keys():
         if set(hla_sets_DNA[hla_gene]) == set(hla_sets_RNA[hla_gene]):
             hlas.append(hla_sets_DNA[hla_gene])
-        elif set(hla_sets_DNA[hla_gene][0]) == set(hla_sets_DNA[hla_gene][1]):
+        elif hla_sets_DNA[hla_gene][0] == hla_sets_DNA[hla_gene][1]:
             if hla_sets_DNA[hla_gene][0] in hla_sets_RNA[hla_gene]:
                 hlas.append(hla_sets_RNA[hla_gene])
             else:
