@@ -79,6 +79,14 @@ def parse_opti(inFile, hlas=[]):
 
 
 def merge_hlas(hlas_DNA=[], hlas_RNA=[]):
+    """
+    From slack discussion on 20200425 (FF, GF, DR)
+    We run Optitype RNA and WES in the main pipeline (only on tumor)
+    We consider the WES class I HLA
+    IFF the WES-based HLA are homo and are a subset of RNA-based HLA, then we consider also the second HLA alleles predicted from RNA
+    These class I HLA are used for the somatic pipeline and also for the embedded NeoFuse
+    """
+
     hlas = []
     hla_sets_RNA = {"HLA-A": [], "HLA-B": [], "HLA-C": []}
     hla_sets_DNA = {"HLA-A": [], "HLA-B": [], "HLA-C": []}
@@ -97,8 +105,8 @@ def merge_hlas(hlas_DNA=[], hlas_RNA=[]):
         elif hla_sets_DNA[hla_gene][0] == hla_sets_DNA[hla_gene][1]:
             if hla_sets_DNA[hla_gene][0] in hla_sets_RNA[hla_gene]:
                 hlas.append(hla_sets_RNA[hla_gene])
-            else:
-                hlas.append(hla_sets_DNA[hla_gene])
+        else:
+            hlas.append(hla_sets_DNA[hla_gene])
 
     return flatten(hlas)
 
