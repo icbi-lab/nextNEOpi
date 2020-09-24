@@ -166,7 +166,8 @@ if __name__ == "__main__":
     if args.opti_out_RNA is not False:
         hla_array_RNA = []
         parse_opti(optitype_rna_result, hla_array_RNA)
-        hla_array = merge_hlas(hla_array, hla_array_RNA)
+        if hla_array_RNA != []:
+            hla_array = merge_hlas(hla_array, hla_array_RNA)
 
     parse_hlahd(hlahd_dna_result, hla_array)
 
