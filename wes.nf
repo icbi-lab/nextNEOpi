@@ -4662,6 +4662,13 @@ process 'run_hla_hd' {
 /*
 Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
 To be used as input for pVACseq
+
+From slack discussion on 20200425 (FF, GF, DR):
+
+    * We run Optitype RNA and WES in the main pipeline (only on tumor)
+    * We consider the WES class I HLA
+    * IFF the WES-based HLA are homo and are a subset of RNA-based HLA, then we consider also the second HLA alleles predicted from RNA
+    * These class I HLA are used for the somatic pipeline and also for the embedded NeoFuse
 */
 
 process get_vhla {
@@ -4689,6 +4696,7 @@ process get_vhla {
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
     def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna" : ''
     """
+    # mergeing script
     HLA_parser.py \\
         --opti_out ${opti_out} \\
         --hlahd_out ${hlahd_out} \\
