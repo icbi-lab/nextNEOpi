@@ -2252,7 +2252,7 @@ process 'CNNScoreVariants' {
 */
 
     // TODO: deal with this smarter
-    conda '${baseDir}/assets/gatkcondaenv.yml'
+    conda "${baseDir}/assets/gatkcondaenv.yml"
 
     tag "$TumorReplicateId"
 
@@ -5152,7 +5152,7 @@ process 'pepare_mixMHC2_seq' {
     // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
     //     mode: params.publishDirMode
 
-    conda '${baseDir}/assets/py3_icbi.yml'
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -5195,7 +5195,7 @@ process mixMHC2pred {
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
         mode: params.publishDirMode
 
-    conda '${baseDir}/assets/py3_icbi.yml'
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -5243,7 +5243,7 @@ process addCCF {
     publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
         mode: params.publishDirMode
 
-    conda '${baseDir}/assets/py3_icbi.yml'
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
