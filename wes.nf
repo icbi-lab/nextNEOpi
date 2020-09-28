@@ -47,6 +47,15 @@ single_end_RNA = params.single_end_RNA
 // initialize RNAseq presence
 have_RNAseq = false
 
+// set and initialize the Exome capture kit
+setExomeCaptureKit(params.exomeCaptureKit)
+
+// set and check references and databases
+reference = defineReference()
+database = defineDatabases()
+
+// create tmp dir
+mkTmpDir()
 
 /*--------------------------------------------------
   For workflow summary
@@ -350,10 +359,6 @@ if (! params.batchFile) {
                                 file((row.HLAfile == "None") ? "NO_FILE" : row.HLAfile)) }
             .set { custom_hlas_ch }
 }
-
-reference = defineReference()
-database = defineDatabases()
-mkTmpDir()
 
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
@@ -5526,6 +5531,11 @@ def checkParamReturnFileReferences(item) {
 def checkParamReturnFileDatabases(item) {
     params."${item}" = params.databases."${item}"
     return file(params."${item}")
+}
+
+def setExomeCaptureKit(captureKit) {
+    params.references.BaitsBed = params.exomeCaptureKits[ captureKit ].BaitsBed
+    params.references.RegionsBed = params.exomeCaptureKits[ captureKit ].RegionsBed
 }
 
 def defineReference() {
