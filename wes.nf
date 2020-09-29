@@ -2351,7 +2351,7 @@ process 'FilterGermlineVariantTranches' {
 */
 
     // TODO: deal with this smarter
-    conda '${baseDir}/assets/gatkcondaenv.yml'
+    conda "${baseDir}/assets/gatkcondaenv.yml"
 
     tag "$TumorReplicateId"
 
@@ -3284,7 +3284,7 @@ process 'mkHCsomaticVCF' {
 */
 
     // TODO: deal with this smarter
-    conda '${baseDir}/assets/py3_icbi.yml'
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     tag "$TumorReplicateId"
 
