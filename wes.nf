@@ -4618,7 +4618,7 @@ process 'run_hla_hd' {
 
     tag "$TumorReplicateId"
 
-    conda '${baseDir}/assets/hlahdenv.yml'
+    conda "${baseDir}/assets/hlahdenv.yml"
 
     publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
         mode: params.publishDirMode
