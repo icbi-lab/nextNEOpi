@@ -2351,7 +2351,7 @@ process 'FilterGermlineVariantTranches' {
 */
 
     // TODO: deal with this smarter
-    conda 'assets/gatkcondaenv.yml'
+    conda '${baseDir}/assets/gatkcondaenv.yml'
 
     tag "$TumorReplicateId"
 
@@ -3284,7 +3284,7 @@ process 'mkHCsomaticVCF' {
 */
 
     // TODO: deal with this smarter
-    conda 'assets/py3_icbi.yml'
+    conda '${baseDir}/assets/py3_icbi.yml'
 
     tag "$TumorReplicateId"
 
@@ -3916,7 +3916,7 @@ process 'SequenzaUtils' {
 
     tag "$TumorReplicateId"
 
-    conda "assets/py3_icbi.yml"
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -4271,7 +4271,7 @@ process 'Clonality' {
         mode: params.publishDirMode
 
 
-    conda "assets/py3_icbi.yml"
+    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -4618,7 +4618,7 @@ process 'run_hla_hd' {
 
     tag "$TumorReplicateId"
 
-    conda 'assets/hlahdenv.yml'
+    conda '${baseDir}/assets/hlahdenv.yml'
 
     publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
         mode: params.publishDirMode
