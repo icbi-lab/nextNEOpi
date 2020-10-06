@@ -4225,17 +4225,26 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         def line = fileReader.readLine()
         line = fileReader.readLine()
         fileReader.close()
-        def (purity, ploidy) = line.split("\t")
-        if(purity == "0" || ploidy == "0" ) {
+        if(line) {
+            def (purity, ploidy) = line.split("\t")
+            if(purity == "0" || ploidy == "0" ) {
+                ascatOK = false
+            }
+        } else {
             ascatOK = false
         }
 
         fileReader = ascat_CNVs.newReader()
 
+        def fields = ""
         line = fileReader.readLine()
         fileReader.close()
-        def fields = line.split("\t")
-        if(fields.size() < 5) {
+        if(line) {
+            fields = line.split("\t")
+            if(fields.size() < 5) {
+                ascatOK = false
+            }
+        } else {
             ascatOK = false
         }
 
@@ -4244,8 +4253,12 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
         line = fileReader.readLine()
         fileReader.close()
-        fields = line.split("\t")
-        if(fields.size() < 13) {
+        if(line) {
+            fields = line.split("\t")
+            if(fields.size() < 13) {
+                sequenzaOK = false
+            }
+        } else {
             sequenzaOK = false
         }
 
@@ -4253,8 +4266,12 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
         line = fileReader.readLine()
         fileReader.close()
-        fields = line.split("\t")
-        if(fields.size() < 3) {
+        if(line) {
+            fields = line.split("\t")
+            if(fields.size() < 3) {
+                sequenzaOK = false
+            }
+        } else {
             sequenzaOK = false
         }
 
