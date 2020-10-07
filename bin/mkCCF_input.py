@@ -68,7 +68,12 @@ def get_segments(seg_file):
             segments[chrom] = []
 
         segments[chrom].append(
-            {"start_pos": int(start_pos), "end_pos": int(end_pos), "n_major": int(n_major), "n_minor": int(n_minor)}
+            {
+                "start_pos": int(float(start_pos)),
+                "end_pos": int(float(end_pos)),
+                "n_major": int(n_major),
+                "n_minor": int(n_minor),
+            }
         )
 
     seg_file.close()
@@ -96,7 +101,12 @@ def get_segments_seqz(seg_file):
             segments[chrom] = []
 
         segments[chrom].append(
-            {"start_pos": int(start_pos), "end_pos": int(end_pos), "n_major": int(n_major), "n_minor": int(n_minor)}
+            {
+                "start_pos": int(float(start_pos)),
+                "end_pos": int(float(end_pos)),
+                "n_major": int(n_major),
+                "n_minor": int(n_minor),
+            }
         )
 
     seg_file.close()
