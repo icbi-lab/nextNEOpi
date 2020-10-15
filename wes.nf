@@ -5790,5 +5790,5 @@ workflow.onComplete {
     def output_tf = new File( output_d, "pipeline_report.txt" )
     output_tf.withWriter { w -> w << email_txt }
 
-    log.info "[icbi/wes] Pipeline Complete! You can find your results in $baseDir/${params.outputDir}"
+    log.info "[icbi/wes] Pipeline Complete! You can find your results in ${params.outputDir}"
 }
