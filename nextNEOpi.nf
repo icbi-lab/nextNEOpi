@@ -6,7 +6,7 @@ log.info "----------------------------------------------------------------------
 log.info "          Nextfow NeoAntigen Prediction Pipeline - nextNEOpi    "
 log.info "-------------------------------------------------------------------------"
 log.info ""
-log.info "" Features:
+log.info " Features: "
 log.info " - somatic variants from tumor + matched normal samples"
 log.info " - CNV analysis"
 log.info " - class I and class II HLA typing"
