@@ -3,11 +3,17 @@
 log.info ""
 log.info " NEXTFLOW ~  version ${workflow.nextflow.version} ${workflow.nextflow.build}"
 log.info "-------------------------------------------------------------------------"
-log.info "         W H O L E - E X O M E   P I P E L I N E             "
+log.info "          Nextfow NeoAntigen Prediction Pipeline - nextNEOpi    "
 log.info "-------------------------------------------------------------------------"
 log.info ""
-log.info " Finding SNPs and Indels in tumor only or tumor + matched normal samples"
-log.info " using 5 different caller: \n \t * MuTect1 \n \t * MuTect2 \n \t * VarScan2 \n \t * Manta \n \t * Strelka"
+log.info "" Features:
+log.info " - somatic variants from tumor + matched normal samples"
+log.info " - CNV analysis"
+log.info " - class I and class II HLA typing"
+log.info " - gene fusion peptide prediction using RNAseq data"
+log.info " - peptide MHC binding perdiction"
+log.info " - clonality of neoantigens"
+log.info " - expression of neoantigens"
 log.info ""
 log.info "-------------------------------------------------------------------------"
 log.info "C O N F I G U R A T I O N"
@@ -46,6 +52,19 @@ single_end_RNA = params.single_end_RNA
 
 // initialize RNAseq presence
 have_RNAseq = false
+
+// check if we have mutect1 installed
+if (file(params.MUTECT1) && file(params.JAVA7)) {
+    have_Mutect1 = true
+} else {
+    have_Mutect1 = false
+}
+// check if we have GATK3 installed
+if (file(params.MUTECT1) && file(params.JAVA7)) {
+    have_GATK3 = true
+} else {
+    have_GATK3 = false
+}
 
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
@@ -406,6 +425,8 @@ ________________________________________________________________________________
 if (params.WES) {
     process 'RegionsBedToIntervalList' {
 
+        label 'nextNEOpiENV'
+
         tag 'RegionsBedToIntervalList'
 
         publishDir "$params.outputDir/00_prepare_Intervals/", mode: params.publishDirMode
@@ -429,14 +450,16 @@ if (params.WES) {
 
         script:
         """
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
-            I=${RegionsBed} \\
-            O=${RegionsBed.baseName}.interval_list \\
-            SD=$RefDict
+        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+            -I ${RegionsBed} \\
+            -O ${RegionsBed.baseName}.interval_list \\
+            -SD $RefDict
         """
     }
 
     process 'BaitsBedToIntervalList' {
+
+        label 'nextNEOpiENV'
 
         tag 'BaitsBedToIntervalList'
 
@@ -458,10 +481,10 @@ if (params.WES) {
 
         script:
         """
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD BedToIntervalList \\
-            I=${BaitsBed} \\
-            O=${BaitsBed.baseName}.interval_list \\
-            SD=$RefDict
+        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+            -I ${BaitsBed} \\
+            -O ${BaitsBed.baseName}.interval_list \\
+            -SD $RefDict
         """
     }
 } else {
@@ -471,6 +494,8 @@ if (params.WES) {
 }
 
 process 'preprocessIntervalList' {
+
+    label 'nextNEOpiENV'
 
     tag 'preprocessIntervalList'
 
@@ -506,7 +531,7 @@ process 'preprocessIntervalList' {
     script:
     if(params.WES)
         """
-        $GATK4 PreprocessIntervals \\
+        gatk PreprocessIntervals \\
             -R $RefFasta \\
             -L ${interval_list} \\
             --bin-length 0 \\
@@ -516,15 +541,17 @@ process 'preprocessIntervalList' {
         """
     else
         """
-        $JAVA8 ${params.JAVA_Xmx} -jar $PICARD ScatterIntervalsByNs \\
-            REFERENCE=$RefFasta \\
-            OUTPUT_TYPE=ACGT \\
-            OUTPUT=${interval_list.baseName}_merged_padded.interval_list
+        gatk --java-options ${params.JAVA_Xmx} ScatterIntervalsByNs \\
+            --REFERENCE $RefFasta \\
+            --OUTPUT_TYPE ACGT \\
+            --OUTPUT ${interval_list.baseName}_merged_padded.interval_list
         """
 }
 
-process 'SplitIntervals' {
 // Splitting interval file in 20(default) files for scattering Mutect2
+process 'SplitIntervals' {
+
+    label 'nextNEOpiENV'
 
     tag "SplitIntervals"
 
@@ -568,7 +595,7 @@ process 'SplitIntervals' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 SplitIntervals \\
+    gatk SplitIntervals \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta}  \\
         -scatter ${x} \\
@@ -580,9 +607,12 @@ process 'SplitIntervals' {
     """
 }
 
+
+// convert padded interval list to Bed file (used by varscan)
+// generate a padded tabix indexed region BED file for strelka
 process 'IntervalListToBed' {
-    // convert padded interval list to Bed file (used by varscan)
-    // generate a padded tabix indexed region BED file for strelka
+
+    label 'nextNEOpiENV'
 
     tag 'BedFromIntervalList'
 
@@ -602,17 +632,19 @@ process 'IntervalListToBed' {
 
     script:
     """
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \\
-        I=${paddedIntervalList} \\
-        O=${paddedIntervalList.baseName}.bed
+    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
+        -I ${paddedIntervalList} \\
+        -O ${paddedIntervalList.baseName}.bed
 
-    ${BGZIP} -c ${paddedIntervalList.baseName}.bed > ${paddedIntervalList.baseName}.bed.gz &&
-    ${TABIX} -p bed ${paddedIntervalList.baseName}.bed.gz
+    bgzip -c ${paddedIntervalList.baseName}.bed > ${paddedIntervalList.baseName}.bed.gz &&
+    tabix -p bed ${paddedIntervalList.baseName}.bed.gz
     """
 }
 
+// convert scattered padded interval list to Bed file (used by varscan)
 process 'ScatteredIntervalListToBed' {
-    // convert scattered padded interval list to Bed file (used by varscan)
+
+    label 'nextNEOpiENV'
 
     tag 'ScatteredIntervalListToBed'
 
@@ -638,7 +670,7 @@ process 'ScatteredIntervalListToBed' {
 
     script:
     """
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD IntervalListToBed \\
+    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
         I=${IntervalsList} \\
         O=${IntervalsList.baseName}.bed
     """
@@ -646,6 +678,9 @@ process 'ScatteredIntervalListToBed' {
 
 // FastQC
 process FastQC {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "${params.outputDir}/$TumorReplicateId/02_QC/",
@@ -755,7 +790,7 @@ process FastQC {
         ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
         ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
 
-        $FASTQC --quiet --threads ${task.cpus} \\
+        fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
             ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
             ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
@@ -769,7 +804,7 @@ process FastQC {
 
         ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
 
-        $FASTQC --quiet --threads ${task.cpus} \\
+        fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
             ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext} \\
             ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
@@ -782,7 +817,7 @@ process FastQC {
         ln -s $readsRNAseq_FWD ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext}
         ln -s $readsRNAseq_REV ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
 
-        $FASTQC --quiet --threads ${task.cpus} \\
+        fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} \\
             ${NormalReplicateId}_R1.${normal_readsFWD_ext} \\
             ${TumorReplicateId}_RNA_R1.${readsRNAseq_FWD_ext} ${TumorReplicateId}_RNA_R2.${readsRNAseq_REV_ext}
@@ -803,7 +838,7 @@ process FastQC {
         ln -s $tumor_readsREV ${TumorReplicateId}_R2.${tumor_readsREV_ext}
         ln -s $normal_readsREV ${NormalReplicateId}_R2.${normal_readsREV_ext}
 
-        $FASTQC --quiet --threads ${task.cpus} \\
+        fastqc --quiet --threads ${task.cpus} \\
             ${TumorReplicateId}_R1.${tumor_readsFWD_ext} ${TumorReplicateId}_R2.${tumor_readsREV_ext} \\
             ${NormalReplicateId}_R1.${normal_readsFWD_ext} ${NormalReplicateId}_R2.${normal_readsREV_ext}
         """
@@ -813,6 +848,8 @@ process FastQC {
 // adapter trimming Tumor
 if (params.trim_adapters) {
     process fastp_tumor {
+
+        label 'nextNEOpiENV'
 
         tag "$TumorReplicateId"
 
@@ -869,7 +906,7 @@ if (params.trim_adapters) {
 
         if(single_end)
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${tumor_readsFWD} \\
                 --out1 ${TumorReplicateId}_trimmed_R1.fastq.gz \\
                 --json ${TumorReplicateId}_fastp.json \\
@@ -879,7 +916,7 @@ if (params.trim_adapters) {
             """
         else
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${tumor_readsFWD} \\
                 --in2 ${tumor_readsREV} \\
                 --out1 ${TumorReplicateId}_trimmed_R1.fastq.gz \\
@@ -891,6 +928,8 @@ if (params.trim_adapters) {
     }
 
     process fastp_normal {
+
+        label 'nextNEOpiENV'
 
         tag "$NormalReplicateId"
 
@@ -947,7 +986,7 @@ if (params.trim_adapters) {
 
         if(single_end)
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${normal_readsFWD} \\
                 --out1 ${NormalReplicateId}_trimmed_R1.fastq.gz \\
                 --json ${NormalReplicateId}_fastp.json \\
@@ -957,7 +996,7 @@ if (params.trim_adapters) {
             """
         else
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${normal_readsFWD} \\
                 --in2 ${normal_readsREV} \\
                 --out1 ${NormalReplicateId}_trimmed_R1.fastq.gz \\
@@ -971,6 +1010,9 @@ if (params.trim_adapters) {
 
     // FastQC after adapter trimming
     process FastQC_trimmed {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "${params.outputDir}/$TumorReplicateId/02_QC/",
@@ -1017,7 +1059,7 @@ if (params.trim_adapters) {
             """
         else
             """
-            $FASTQC --quiet --threads ${task.cpus} \\
+            fastqc --quiet --threads ${task.cpus} \\
                 ${tumor_readsFWD} ${tumor_readsREV} \\
                 ${normal_readsFWD} ${normal_readsREV}
             """
@@ -1045,6 +1087,9 @@ if (params.trim_adapters) {
 // adapter trimming RNAseq
 if (params.trim_adapters_RNAseq && have_RNAseq) {
     process fastp_RNAseq {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/01_preprocessing/",
@@ -1098,7 +1143,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
 
         if(single_end_RNA)
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${readsRNAseq_FWD} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
                 --json ${TumorReplicateId}_RNA_fastp.json \\
@@ -1108,7 +1153,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
             """
         else
             """
-            $FASTP --thread ${task.cpus} \\
+            fastp --thread ${task.cpus} \\
                 --in1 ${readsRNAseq_FWD} \\
                 --in2 ${readsRNAseq_REV} \\
                 --out1 ${TumorReplicateId}_RNA_trimmed_R1.fastq.gz \\
@@ -1121,6 +1166,9 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
 
     // FastQC after RNAseq adapter trimming
     process FastQC_trimmed_RNAseq {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "${params.outputDir}/$TumorReplicateId/02_QC/",
@@ -1155,7 +1203,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
             """
         else
             """
-            $FASTQC --quiet --threads ${task.cpus} \\
+            fastqc --quiet --threads ${task.cpus} \\
                 ${readsRNAseq_FWD} ${readsRNAseq_REV}
             """
     }
@@ -1187,9 +1235,12 @@ reads_uBAM_ch = Channel.empty()
                         )
 
 
-/// start processing reads
-process 'make_uBAM' {
+/////// start processing reads ///////
+
 // make uBAM
+process 'make_uBAM' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1218,30 +1269,32 @@ process 'make_uBAM' {
     script:
     outFileName = (sampleType == "T") ? TumorReplicateId + "_unaligned.bam" : NormalReplicateId + "_unaligned.bam"
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+
     if (single_end)
         """
         mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
-            TMP_DIR=${params.tmpDir} \\
-            F1=${readsFWD} \\
-            READ_GROUP_NAME=${procSampleName} \\
-            SAMPLE_NAME=${procSampleName} \\
-            LIBRARY_NAME=${procSampleName} \\
-            PLATFORM=ILLUMINA \\
-            O=${procSampleName}_unaligned.bam
+        gatk --java-options ${java_opts} FastqToSam \\
+            --TMP_DIR ${params.tmpDir} \\
+            -F1 ${readsFWD} \\
+            --READ_GROUP_NAME ${procSampleName} \\
+            --SAMPLE_NAME ${procSampleName} \\
+            --LIBRARY_NAME ${procSampleName} \\
+            --PLATFORM ILLUMINA \\
+            -O ${procSampleName}_unaligned.bam
         """
     else
         """
         mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} FastqToSam \\
-            TMP_DIR=${params.tmpDir} \\
-            F1=${readsFWD} \\
-            F2=${readsREV} \\
-            READ_GROUP_NAME=${procSampleName} \\
-            SAMPLE_NAME=${procSampleName} \\
-            LIBRARY_NAME=${procSampleName} \\
-            PLATFORM=ILLUMINA \\
-            O=${procSampleName}_unaligned.bam
+        gatk --java-options ${java_opts} FastqToSam \\
+            --TMP_DIR ${params.tmpDir} \\
+            -F1 ${readsFWD} \\
+            -F2 ${readsREV} \\
+            --READ_GROUP_NAME ${procSampleName} \\
+            --SAMPLE_NAME ${procSampleName} \\
+            --LIBRARY_NAME ${procSampleName} \\
+            --PLATFORM ILLUMINA \\
+            -O ${procSampleName}_unaligned.bam
         """
 }
 
@@ -1254,8 +1307,10 @@ reads_ch = Channel.empty()
                     )
 
 
+// Aligning reads to reference, sort and index; create BAMs
 process 'Bwa' {
-// Aligning tumor reads to reference, sort and index; create BAMs
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1296,48 +1351,31 @@ process 'Bwa' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
-    if (single_end)
-        """
-        $BWA mem \\
-            -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
-            -M ${RefFasta} \\
-            -t ${task.cpus} \\
-            -Y \\
-            ${readsFWD} | \\
-        $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMBAMBA sort \\
-            --sort-picard \\
-            --tmpdir=${params.tmpDir} \\
-            -m ${params.SB_sort_mem} \\
-            -l 6 \\
-            -t ${sort_threads} \\
-            -o ${outFileName} \\
-            /dev/stdin
-        """
-    else
-        """
-        $BWA mem \\
-            -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
-            -M ${RefFasta} \\
-            -t ${task.cpus} \\
-            -Y \\
-            ${readsFWD} \\
-            ${readsREV}  | \\
-        $SAMTOOLS view -@2 -Shbu - | \\
-        $SAMBAMBA sort \\
-            --sort-picard \\
-            --tmpdir=${params.tmpDir} \\
-            -m ${params.SB_sort_mem} \\
-            -l 6 \\
-            -t ${sort_threads} \\
-            -o ${outFileName} \\
-            /dev/stdin
-        """
+    read_files = (single_end) ? readsFWD : readsFWD + " " + readsREV
+    """
+    bwa mem \\
+        -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
+        -M ${RefFasta} \\
+        -t ${task.cpus} \\
+        -Y \\
+        ${read_files} | \\
+    samtools view -@2 -Shbu - | \\
+    sambamba sort \\
+        --sort-picard \\
+        --tmpdir=${params.tmpDir} \\
+        -m ${params.SB_sort_mem} \\
+        -l 6 \\
+        -t ${sort_threads} \\
+        -o ${outFileName} \\
+        /dev/stdin
+    """
 }
 
 
-process 'merge_uBAM_BAM' {
 // merge alinged BAM and uBAM
+process 'merge_uBAM_BAM' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1377,36 +1415,39 @@ process 'merge_uBAM_BAM' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     paired_run = (single_end) ? 'false' : 'true'
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} MergeBamAlignment \\
-        TMP_DIR=${params.tmpDir} \\
-        VALIDATION_STRINGENCY=SILENT \\
-        EXPECTED_ORIENTATIONS=FR \\
-        ATTRIBUTES_TO_RETAIN=X0 \\
-        REFERENCE_SEQUENCE=${RefFasta} \\
-        PAIRED_RUN=${paired_run} \\
-        SORT_ORDER="queryname" \\
-        IS_BISULFITE_SEQUENCE=false \\
-        ALIGNED_READS_ONLY=false \\
-        CLIP_ADAPTERS=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRamMerge} \\
-        ADD_MATE_CIGAR=true \\
-        MAX_INSERTIONS_OR_DELETIONS=-1 \\
-        PRIMARY_ALIGNMENT_STRATEGY=MostDistant \\
-        UNMAPPED_READ_STRATEGY=COPY_TO_TAG \\
-        ALIGNER_PROPER_PAIR_FLAGS=true \\
-        UNMAP_CONTAMINANT_READS=true \\
-        ALIGNED_BAM=${BAM} \\
-        UNMAPPED_BAM=${uBAM} \\
-        OUTPUT=${procSampleName}_merged.bam
+    gatk --java-options ${java_opts} MergeBamAlignment \\
+        --TMP_DIR ${params.tmpDir} \\
+        --VALIDATION_STRINGENCY SILENT \\
+        --EXPECTED_ORIENTATIONS FR \\
+        --ATTRIBUTES_TO_RETAIN X0 \\
+        --REFERENCE_SEQUENCE ${RefFasta} \\
+        --PAIRED_RUN ${paired_run} \\
+        --SORT_ORDER "queryname" \\
+        --IS_BISULFITE_SEQUENCE false \\
+        --ALIGNED_READS_ONLY false \\
+        --CLIP_ADAPTERS false \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRamMerge} \\
+        --ADD_MATE_CIGAR true \\
+        --MAX_INSERTIONS_OR_DELETIONS -1 \\
+        --PRIMARY_ALIGNMENT_STRATEGY MostDistant \\
+        --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
+        --ALIGNER_PROPER_PAIR_FLAGS true \\
+        --UNMAP_CONTAMINANT_READS true \\
+        --ALIGNED_BAM ${BAM} \\
+        --UNMAPPED_BAM ${uBAM} \\
+        --OUTPUT ${procSampleName}_merged.bam
     """
 }
 
 
-process 'MarkDuplicates' {
 // Mark duplicates with sambamba
+process 'MarkDuplicates' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1451,7 +1492,7 @@ process 'MarkDuplicates' {
 
     """
     mkdir -p ${params.tmpDir}
-    $SAMBAMBA markdup \\
+    sambamba markdup \\
         -t ${task.cpus} \\
         --tmpdir ${params.tmpDir} \\
         --hash-table-size=${params.SB_hash_table_size } \\
@@ -1465,16 +1506,15 @@ process 'MarkDuplicates' {
         -O BAM \\
         -l 0 \\
         /dev/stdin | \\
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SetNmMdAndUqTags \\
-        TMP_DIR=${params.tmpDir} \\
-        R=${RefFasta} \\
-        I=/dev/stdin \\
-        O=${procSampleName}_aligned_sort_mkdp.bam \\
-        CREATE_INDEX=true \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} \\
-        VALIDATION_STRINGENCY=LENIENT
+    gatk --java-options ${params.JAVA_Xmx} SetNmMdAndUqTags \\
+        --TMP_DIR ${params.tmpDir} \\
+        -R ${RefFasta} \\
+        -I /dev/stdin \\
+        -O ${procSampleName}_aligned_sort_mkdp.bam \\
+        --CREATE_INDEX true \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
+        --VALIDATION_STRINGENCY LENIENT
 
-    # samtools index -@${task.cpus} ${procSampleName}_aligned_sort_mkdp.bam
     """
 }
 
@@ -1517,8 +1557,10 @@ MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_CNVkit_ch0
         )}
 
 if(params.WES) {
-    process 'alignmentMetrics' {
     // Generate HS metrics using picard
+    process 'alignmentMetrics' {
+
+        label 'nextNEOpiENV'
 
         tag "$TumorReplicateId"
 
@@ -1555,23 +1597,24 @@ if(params.WES) {
 
         script:
         procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
         """
         mkdir -p ${params.tmpDir}
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectHsMetrics \\
-            TMP_DIR=${params.tmpDir} \\
-            INPUT=${bam} \\
-            OUTPUT=${procSampleName}.HS.metrics.txt \\
-            R=${RefFasta} \\
-            BAIT_INTERVALS=${BaitIntervalsList} \\
-            TARGET_INTERVALS=${IntervalsList} \\
-            PER_TARGET_COVERAGE=${procSampleName}.perTarget.coverage.txt && \\
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -jar ${PICARD} CollectAlignmentSummaryMetrics \\
-            TMP_DIR=${params.tmpDir} \\
-            INPUT=${bam} \\
-            OUTPUT=${procSampleName}.AS.metrics.txt \\
-            R=${RefFasta} &&
-        $SAMTOOLS flagstat -@${task.cpus} ${bam} > ${procSampleName}.flagstat.txt
+        gatk --java-options ${java_opts} CollectHsMetrics \\
+            --TMP_DIR ${params.tmpDir} \\
+            --INPUT ${bam} \\
+            --OUTPUT ${procSampleName}.HS.metrics.txt \\
+            -R ${RefFasta} \\
+            --BAIT_INTERVALS ${BaitIntervalsList} \\
+            --TARGET_INTERVALS ${IntervalsList} \\
+            --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
+        gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
+            --TMP_DIR ${params.tmpDir} \\
+            --INPUT ${bam} \\
+            --OUTPUT ${procSampleName}.AS.metrics.txt \\
+            -R ${RefFasta} &&
+        samtools flagstat -@${task.cpus} ${bam} > ${procSampleName}.flagstat.txt
         """
     }
 
@@ -1612,17 +1655,13 @@ if(params.WES) {
 
 
 /*
-*********************************************
-**             M U T E C T 2               **
-*********************************************
-*/
-
-process 'scatterBaseRecalGATK4' {
-/*
  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
  Recalibration (BQSR)
  ApplyBQSR (GATK4): apply BQSR table to reads
 */
+process 'scatterBaseRecalGATK4' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1636,7 +1675,7 @@ process 'scatterBaseRecalGATK4' {
         file(intervals)
     ) from MarkDuplicates_out_ch1
         .combine(
-            SplitIntervals_out_scatterBaseRecalTumorGATK4_ch.flatten()  // TODO: change channel name here and above
+            SplitIntervals_out_scatterBaseRecalTumorGATK4_ch.flatten()
         )
 
     set(
@@ -1679,8 +1718,7 @@ process 'scatterBaseRecalGATK4' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
-    $GATK4 BaseRecalibrator \\
-        --java-options '${params.JAVA_Xmx}' \\
+    gatk  --java-options '${params.JAVA_Xmx}' BaseRecalibrator \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1692,12 +1730,14 @@ process 'scatterBaseRecalGATK4' {
     """
 }
 
-process 'gatherGATK4scsatteredBQSRtables' {
 // gather scattered bqsr tables
+process 'gatherGATK4scsatteredBQSRtables' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/",
+    publishDir "$params.outputDir/$TumorReplicateId/03_baserecalibration/",
         mode: params.publishDirMode
 
     input:
@@ -1724,16 +1764,17 @@ process 'gatherGATK4scsatteredBQSRtables' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 GatherBQSRReports \\
+    gatk GatherBQSRReports \\
         -I ${bqsr_table.join(" -I ")} \\
         -O ${procSampleName}_bqsr.table
     """
 }
 
+
+// ApplyBQSR (GATK4): apply BQSR table to reads
 process 'scatterGATK4applyBQSRS' {
-/*
- ApplyBQSR (GATK4): apply BQSR table to reads
-*/
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1793,7 +1834,7 @@ process 'scatterGATK4applyBQSRS' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
     mkdir -p ${params.tmpDir}
-    $GATK4 ApplyBQSR \\
+    gatk ApplyBQSR \\
         --java-options '${params.JAVA_Xmx}' \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
@@ -1806,9 +1847,11 @@ process 'scatterGATK4applyBQSRS' {
 
 process 'GatherRecalBamFiles' {
 
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect2/processing/",
+    publishDir "$params.outputDir/$TumorReplicateId/03_baserecalibration/",
         mode: params.publishDirMode
 
     input:
@@ -1840,26 +1883,31 @@ process 'GatherRecalBamFiles' {
 
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${bam.join(" I=")} \\
-        O=/dev/stdout \\
-        CREATE_INDEX=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
-    $SAMTOOLS sort \\
+    mkfifo ${procSampleName}_gather.fifo
+    gatk --java-options ${java_opts} GatherBamFiles \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${bam.join(" I=")} \\
+        -O /dev/stdout \\
+        --CREATE_INDEX false \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} | \\
+    samtools sort \\
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
-        -o ${procSampleName}_recal4.bam -
-    $SAMTOOLS index -@${task.cpus} ${procSampleName}_recal4.bam
+        -o ${procSampleName}_recal4.bam ${procSampleName}_gather.fifo
+    samtools index -@${task.cpus} ${procSampleName}_recal4.bam
+    rm -f ${procSampleName}_gather.fifo
     """
 }
 
 
-process 'GetPileup' {
 // GetPileupSummaries (GATK4): tabulates pileup metrics for inferring contamination
+process 'GetPileup' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1900,7 +1948,7 @@ process 'GetPileup' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 GetPileupSummaries \\
+    gatk GetPileupSummaries \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -O ${procSampleName}_pileup.table \\
@@ -1937,13 +1985,20 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
           recalNormalBAM, recalNormalBAI
         )}
 
- (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(3)
+if (haveGATK3) {
+    (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(3)
+} else {
+    (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_Varscan_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(4)
+}
 
-process 'Mutect2' {
 /*
+    MUTECT2
     Call somatic SNPs and indels via local re-assembly of haplotypes; tumor sample
     and matched normal sample
 */
+process 'Mutect2' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -1998,7 +2053,7 @@ process 'Mutect2' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 Mutect2 \\
+    gatk Mutect2 \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta} \\
         -I ${Tumorbam} -tumor ${TumorReplicateId} \\
@@ -2012,8 +2067,10 @@ process 'Mutect2' {
     """
 }
 
-process 'gatherMutect2VCFs' {
 // Merge scattered Mutect2 vcfs
+process 'gatherMutect2VCFs' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2046,17 +2103,17 @@ process 'gatherMutect2VCFs' {
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${vcf.join(" I=")} \\
-        O=${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${vcf.join(" I=")} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz
 
-    $GATK4 MergeMutectStats \\
+    gatk MergeMutectStats \\
         --tmp-dir ${params.tmpDir} \\
         --stats ${stats.join(" --stats ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats
 
-    $GATK4 LearnReadOrientationModel \\
+    gatk LearnReadOrientationModel \\
         --tmp-dir ${params.tmpDir} \\
         -I ${f1r2_tar_gz.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
@@ -2078,7 +2135,8 @@ GetPileup_out = GetPileup_out
             TumorReplicateId, NormalReplicateId, pileupTumor, pileupNormal
         )}
 
-process 'FilterMutect2' {
+
+
 /*
 CalculateContamination (GATK4): calculate fraction of reads coming from
 cross-sample contamination
@@ -2087,6 +2145,9 @@ FilterByOrientationBias (GATK4): filter variant calls using orientation bias
 SelectVariants (GATK4): select subset of variants from a larger callset
 VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
 */
+process 'FilterMutect2' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2129,65 +2190,40 @@ VariantFiltration (GATK4): filter calls based on INFO and FORMAT annotations
     )
 
     script:
-    if (single_end)
-        """
-        mkdir -p ${params.tmpDir}
+    """
+    mkdir -p ${params.tmpDir}
 
-        $GATK4 CalculateContamination \\
-            --tmp-dir ${params.tmpDir} \\
-            -I ${pileupTumor} \\
-            --matched-normal ${pileupNormal} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_cont.table && \\
-        $GATK4 FilterMutectCalls \\
-            --tmp-dir ${params.tmpDir} \\
-            -R ${RefFasta} \\
-            -V ${vcf} \\
-            --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
-            --ob-priors ${f1r2_tar_gz} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
-        $GATK4 SelectVariants \\
-            --tmp-dir ${params.tmpDir} \\
-            --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
-            -R ${RefFasta} \\
-            --exclude-filtered true \\
-            --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
-            --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz
-        """
-    else
-        """
-        mkdir -p ${params.tmpDir}
-
-        $GATK4 CalculateContamination \\
-            --tmp-dir ${params.tmpDir} \\
-            -I ${pileupTumor} \\
-            --matched-normal ${pileupNormal} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_cont.table && \\
-        $GATK4 FilterMutectCalls \\
-            --tmp-dir ${params.tmpDir} \\
-            -R ${RefFasta} \\
-            -V ${vcf} \\
-            --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
-            --ob-priors ${f1r2_tar_gz} \\
-            -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
-        $GATK4 SelectVariants \\
-            --tmp-dir ${params.tmpDir} \\
-            --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
-            -R ${RefFasta} \\
-            --exclude-filtered true \\
-            --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
-            --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz
-        """
+    gatk CalculateContamination \\
+        --tmp-dir ${params.tmpDir} \\
+        -I ${pileupTumor} \\
+        --matched-normal ${pileupNormal} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_cont.table && \\
+    gatk FilterMutectCalls \\
+        --tmp-dir ${params.tmpDir} \\
+        -R ${RefFasta} \\
+        -V ${vcf} \\
+        --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
+        --ob-priors ${f1r2_tar_gz} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
+    gatk SelectVariants \\
+        --tmp-dir ${params.tmpDir} \\
+        --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
+        -R ${RefFasta} \\
+        --exclude-filtered true \\
+        --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
+        --output ${TumorReplicateId}_${NormalReplicateId}_mutect2_final.vcf.gz
+    """
 }
 
 
-
-
 // HaploTypeCaller
-process 'HaploTypeCaller' {
 /*
     Call germline SNPs and indels via local re-assembly of haplotypes; normal sample
     germline variants are needed for generating phased vcfs for pVACtools
 */
+process 'HaploTypeCaller' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2237,7 +2273,7 @@ process 'HaploTypeCaller' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
+    gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
@@ -2249,15 +2285,13 @@ process 'HaploTypeCaller' {
 }
 
 
-// Run a Convolutional Neural Net to filter annotated germline variants
-process 'CNNScoreVariants' {
 /*
     Run a Convolutional Neural Net to filter annotated germline variants; normal sample
     germline variants are needed for generating phased vcfs for pVACtools
 */
+process 'CNNScoreVariants' {
 
-    // TODO: deal with this smarter
-    conda "${baseDir}/assets/gatkcondaenv.yml"
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2294,7 +2328,7 @@ process 'CNNScoreVariants' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 CNNScoreVariants \\
+    gatk4 CNNScoreVariants \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
@@ -2307,8 +2341,10 @@ process 'CNNScoreVariants' {
 }
 
 
-process 'MergeHaploTypeCallerGermlineVCF' {
 // Merge scattered filtered germline vcfs
+process 'MergeHaploTypeCallerGermlineVCF' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2333,25 +2369,24 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     ) into MergeHaploTypeCallerGermlineVCF_out_ch0
 
     script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${filtered_germline_vcf.join(" I=")} \\
-        O=${NormalReplicateId}_germline_CNNscored.vcf.gz
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${filtered_germline_vcf.join(" I=")} \\
+        -O ${NormalReplicateId}_germline_CNNscored.vcf.gz
     """
 }
 
-// Apply a Convolutional Neural Net to filter annotated germline variants
-process 'FilterGermlineVariantTranches' {
 /*
     Apply a Convolutional Neural Net to filter annotated germline variants; normal sample
     germline variants are needed for generating phased vcfs for pVACtools
 */
+process 'FilterGermlineVariantTranches' {
 
-    // TODO: deal with this smarter
-    conda "${baseDir}/assets/gatkcondaenv.yml"
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2395,7 +2430,7 @@ process 'FilterGermlineVariantTranches' {
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 FilterVariantTranches \\
+    gatk FilterVariantTranches \\
         --tmp-dir ${params.tmpDir} \\
         -V ${scored_germline_vcf} \\
         --resource ${hcSNPS1000G} \\
@@ -2413,191 +2448,196 @@ process 'FilterGermlineVariantTranches' {
 // END HTC
 
 
-
-/*
-*********************************************
-**             V A R S C A N               **
-*********************************************
-*/
-
-
-process 'IndelRealignerIntervals' {
 /*
  RealignerTargetCreator (GATK3): define intervals to target for local realignment
  IndelRealigner (GATK3): perform local realignment of reads around indels
 */
+if (have_GATK3) {
+    process 'IndelRealignerIntervals' {
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(bam),
-        file(bai)
-    ) from GatherRecalBamFiles_out_IndelRealignerIntervals_ch0
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file(bam),
+            file(bai)
+        ) from GatherRecalBamFiles_out_IndelRealignerIntervals_ch0
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
 
-    set(
-        file(KnownIndels),
-        file(KnownIndelsIdx),
-        file(MillsGold),
-        file(MillsGoldIdx)
-    ) from Channel.value(
-        [ database.KnownIndels,
-          database.KnownIndelsIdx,
-          database.MillsGold,
-          database.MillsGoldIdx ]
-    )
+        set(
+            file(KnownIndels),
+            file(KnownIndelsIdx),
+            file(MillsGold),
+            file(MillsGoldIdx)
+        ) from Channel.value(
+            [ database.KnownIndels,
+            database.KnownIndelsIdx,
+            database.MillsGold,
+            database.MillsGoldIdx ]
+        )
 
-    each file(interval) from SplitIntervals_out_ch3.flatten()
+        each file(interval) from SplitIntervals_out_ch3.flatten()
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file("${procSampleName}_recal4_realign_${interval}.bam"),
-        file("${procSampleName}_recal4_realign_${interval}.bai")
-    ) into IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file("${procSampleName}_recal4_realign_${interval}.bam"),
+            file("${procSampleName}_recal4_realign_${interval}.bai")
+        ) into IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
 
-    script:
-    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
-    """
-    mkdir -p ${params.tmpDir}
+        script:
+        procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+        """
+        mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
-        -T RealignerTargetCreator \\
-        --known ${MillsGold} \\
-        --known ${KnownIndels} \\
-        -R ${RefFasta} \\
-        -L ${interval} \\
-        -I ${bam} \\
-        -o ${interval}_target.list \\
-        -nt ${task.cpus} && \\
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
-        -T IndelRealigner \\
-        -R ${RefFasta} \\
-        -L ${interval} \\
-        -I ${bam} \\
-        -targetIntervals ${interval}_target.list \\
-        -known ${KnownIndels} \\
-        -known ${MillsGold} \\
-        -nWayOut _realign_${interval}.bam && \\
-    rm ${interval}_target.list
-    """
-}
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+            -T RealignerTargetCreator \\
+            --known ${MillsGold} \\
+            --known ${KnownIndels} \\
+            -R ${RefFasta} \\
+            -L ${interval} \\
+            -I ${bam} \\
+            -o ${interval}_target.list \\
+            -nt ${task.cpus} && \\
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+            -T IndelRealigner \\
+            -R ${RefFasta} \\
+            -L ${interval} \\
+            -I ${bam} \\
+            -targetIntervals ${interval}_target.list \\
+            -known ${KnownIndels} \\
+            -known ${MillsGold} \\
+            -nWayOut _realign_${interval}.bam && \\
+        rm ${interval}_target.list
+        """
+    }
 
-process 'GatherRealignedBamFiles' {
+    process 'GatherRealignedBamFiles' {
 
-    tag "$TumorReplicateId"
+        label 'nextNEOpiENV'
 
-    publishDir "$params.outputDir/$TumorReplicateId/03_varscan/processing/",
-        mode: params.publishDirMode
+        tag "$TumorReplicateId"
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file(bam),
-        file(bai)
-    ) from IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
-        .toSortedList({a, b -> a[3].baseName <=> b[3].baseName})
-        .flatten()
-        .collate(5)
-        .groupTuple(by: [0,1,2])
+        publishDir "$params.outputDir/$TumorReplicateId/03_varscan/processing/",
+            mode: params.publishDirMode
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        sampleType,
-        file("${procSampleName}_recal_realign.bam"),
-        file("${procSampleName}_recal_realign.bam.bai")
-    ) into GatherRealignedBamFiles_out_ch
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file(bam),
+            file(bai)
+        ) from IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
+            .toSortedList({a, b -> a[3].baseName <=> b[3].baseName})
+            .flatten()
+            .collate(5)
+            .groupTuple(by: [0,1,2])
 
-    script:
-    procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
-    """
-    mkdir -p ${params.tmpDir}
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            sampleType,
+            file("${procSampleName}_recal_realign.bam"),
+            file("${procSampleName}_recal_realign.bam.bai")
+        ) into GatherRealignedBamFiles_out_ch
 
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} ${params.JAVA_Xmx} -jar $PICARD GatherBamFiles \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${bam.join(" I=")} \\
-        O=/dev/stdout \\
-        CREATE_INDEX=false \\
-        MAX_RECORDS_IN_RAM=${params.maxRecordsInRam} | \\
-    $SAMTOOLS sort \\
-        -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
-        -o ${procSampleName}_recal_realign.bam -
-    $SAMTOOLS index -@${task.cpus} ${procSampleName}_recal_realign.bam
-    """
-}
+        script:
+        procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        """
+        mkdir -p ${params.tmpDir}
 
-recalRealTumor = Channel.create()
-recalRealNormal = Channel.create()
+        mkfifo ${procSampleName}_gather.fifo
+        gatk --java-options ${java_opts} GatherBamFiles \\
+            --TMP_DIR ${params.tmpDir} \\
+            -I ${bam.join(" I=")} \\
+            -O /dev/stdout \\
+            --CREATE_INDEX false \\
+            --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} | \\
+        samtools sort \\
+            -@${task.cpus} \\
+            -m ${params.STperThreadMem} \\
+            -o ${procSampleName}_recal_realign.bam ${procSampleName}_gather.fifo
+        samtools index -@${task.cpus}  ${procSampleName}_recal_realign.bam
+        rm -f ${procSampleName}_gather.fifo
+        """
+    }
 
-(
-    GatherRealignedBamFiles_out_AlleleCounter_ch0,
-    GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0,
+    recalRealTumor = Channel.create()
+    recalRealNormal = Channel.create()
+
+    (
+        GatherRealignedBamFiles_out_AlleleCounter_ch0,
+        GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0,
+        GatherRealignedBamFiles_out_ch
+    ) = GatherRealignedBamFiles_out_ch.into(3)
+
     GatherRealignedBamFiles_out_ch
-) = GatherRealignedBamFiles_out_ch.into(3)
-
-GatherRealignedBamFiles_out_ch
-    .choice(
-        recalRealTumor, recalRealNormal
-    ) { it[2] == "T" ? 0 : 1 }
+        .choice(
+            recalRealTumor, recalRealNormal
+        ) { it[2] == "T" ? 0 : 1 }
 
 
- (
-    recalRealTumor_tmp,
-    recalRealTumor
-) = recalRealTumor.into(3)
+    (
+        recalRealTumor_tmp,
+        recalRealTumor
+    ) = recalRealTumor.into(2)
 
-recalRealTumor_tmp = recalRealTumor_tmp
+    recalRealTumor_tmp = recalRealTumor_tmp
+                            .map{ TumorReplicateId, NormalReplicateId,
+                                    sampleTypeT, realTumorBAM, realTumorBAI -> tuple(
+                                        TumorReplicateId, NormalReplicateId,
+                                        realTumorBAM, realTumorBAI
+                                    )
+                                }
+
+    (
+        GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
+        GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
+    ) = recalRealTumor_tmp.into(2)
+
+
+    RealignedBamFiles = recalRealTumor.combine(recalRealNormal, by: [0,1])
+    RealignedBamFiles = RealignedBamFiles
                         .map{ TumorReplicateId, NormalReplicateId,
-                                sampleTypeT, realTumorBAM, realTumorBAI -> tuple(
+                                sampleTypeT, realTumorBAM, realTumorBAI,
+                                sampleTypeN, realNormalBAM, realNormalBAI -> tuple(
                                     TumorReplicateId, NormalReplicateId,
-                                    realTumorBAM, realTumorBAI
+                                    realTumorBAM, realTumorBAI,
+                                    realNormalBAM, realNormalBAI
                                 )
                             }
+    (
+        VarscanBAMfiles_ch, // GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
+        GatherRealignedBamFiles_out_Mutect1scattered_ch0,
+        GatherRealignedBamFiles_out_Sequenza_ch0
+    ) = RealignedBamFiles.into(3)
 
-(
-    GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
-    GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
-) = recalRealTumor_tmp.into(2)
+} else {
 
-
-RealignedBamFiles = recalRealTumor.combine(recalRealNormal, by: [0,1])
-RealignedBamFiles = RealignedBamFiles
-                    .map{ TumorReplicateId, NormalReplicateId,
-                            sampleTypeT, realTumorBAM, realTumorBAI,
-                            sampleTypeN, realNormalBAM, realNormalBAI -> tuple(
-                                TumorReplicateId, NormalReplicateId,
-                                realTumorBAM, realTumorBAI,
-                                realNormalBAM, realNormalBAI
-                            )
-                        }
-(
-    GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
-    GatherRealignedBamFiles_out_Mutect1scattered_ch0,
-    GatherRealignedBamFiles_out_Sequenza_ch0
-) = RealignedBamFiles.into(3)
-
+    log.info "INFO: GATK3 not installed! Can not generate indel realigned BAMs for varscan and mutect1\n"
+    VarscanBAMfiles_ch = BaseRecalGATK4_out_Varscan_ch0
+} // END if have GATK3
 
 process 'VarscanSomaticScattered' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2610,7 +2650,7 @@ process 'VarscanSomaticScattered' {
         file(Normalbam),
         file(Normalbai),
         file(intervals)
-    ) from GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0
+    ) from VarscanBAMfiles_ch // GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0
         .combine(
             ScatteredIntervalListToBed_out_ch0.flatten()
         )
@@ -2638,12 +2678,12 @@ process 'VarscanSomaticScattered' {
     // varscan vcf (? wtf). Non ACGT seems to cause MergeVCF (picard) crashing
     """
     mkfifo ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
-    $SAMTOOLS mpileup \\
+    samtools mpileup \\
         -q 1 \\
         -f ${RefFasta} \\
         -l ${intervals} \\
         ${Normalbam} ${Tumorbam} > ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo &
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN somatic \\
+    varscan ${params.JAVA_Xmx} somatic \\
         ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo \\
         ${TumorReplicateId}_${NormalReplicateId}_${intervals}_varscan_tmp \\
         --output-vcf 1 \\
@@ -2670,8 +2710,10 @@ process 'VarscanSomaticScattered' {
 
 }
 
-process 'gatherVarscanVCFs' {
 // Merge scattered Varscan vcfs
+process 'gatherVarscanVCFs' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2710,26 +2752,29 @@ process 'gatherVarscanVCFs' {
     ) into gatherVarscanVCFs_out_ch0
 
     script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${snp_vcf.join(" I=")} \\
-        O=${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${snp_vcf.join(" I=")} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \\
+        --SEQUENCE_DICTIONARY ${RefDict}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${indel_vcf.join(" I=")} \\
-        O=${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${indel_vcf.join(" I=")} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \\
+        --SEQUENCE_DICTIONARY ${RefDict}
 
     """
 }
 
-process 'ProcessVarscan' {
 // Filter variants by somatic status and confidences
+process 'ProcessVarscan' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2742,7 +2787,7 @@ process 'ProcessVarscan' {
         NormalReplicateId,
         file(snp),
         file(indel)
-    ) from gatherVarscanVCFs_out_ch0 // VarscanSomatic_out_ch0
+    ) from gatherVarscanVCFs_out_ch0
 
     output:
     set(
@@ -2769,12 +2814,12 @@ process 'ProcessVarscan' {
 
     script:
     """
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN processSomatic \\
+    varscan ${params.JAVA_Xmx} processSomatic \\
         ${snp} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
         --p-value ${params.processSomatic_pvalue} && \\
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN processSomatic \\
+    varscan ${params.JAVA_Xmx} processSomatic \\
         ${indel} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
@@ -2782,12 +2827,14 @@ process 'ProcessVarscan' {
     """
 }
 
-process 'FilterVarscan' {
 /*
     AWK-script: calcualtes start-end position of variant
     Bamreadcount: generate metrics at single nucleotide positions for filtering
     fpfilter (Varscan): apply false-positive filter to variants
 */
+process 'FilterVarscan' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2812,7 +2859,7 @@ process 'FilterVarscan' {
         file(indelLOHhc),
         file(indelGerm),
         file(indelGemHc)
-    ) from GatherRealignedBamFilesTumor_out_FilterVarscan_ch0 // BaseRecalTumorGATK3_out_ch1
+    ) from GatherRealignedBamFilesTumor_out_FilterVarscan_ch0
         .combine(ProcessVarscanSNP_out_ch0, by :[0,1])
         .combine(ProcessVarscanIndel_out_ch0, by :[0,1])
 
@@ -2843,38 +2890,40 @@ process 'FilterVarscan' {
     """
     cat ${snpSomaticHc} | \\
     awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
-    $BAMREADCOUNT \\
+    bam-readcount \\
         -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
         -f ${RefFasta} \\
         ${bam} | \\
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN fpfilter \\
+    varscan ${params.JAVA_Xmx} fpfilter \\
         ${snpSomaticHc} \\
         /dev/stdin \\
         --output-file ${TumorReplicateId}_${NormalReplicateId}_varscan.snp.Somatic.hc.filtered.vcf && \\
     cat ${indelSomaticHc} | \\
     awk '{if (! /^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
-    $BAMREADCOUNT \\
+    bam-readcount \\
         -q${params.min_map_q} \\
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
         -f ${RefFasta} ${bam} | \\
-    $JAVA8 ${params.JAVA_Xmx} -jar $VARSCAN fpfilter \\
+    varscan ${params.JAVA_Xmx} fpfilter \\
         ${indelSomaticHc} \\
         /dev/stdin \\
         --output-file ${TumorReplicateId}_${NormalReplicateId}_varscan.indel.Somatic.hc.filtered.vcf
-
     """
 }
 
-process 'MergeAndRenameSamplesInVarscanVCF' {
+
 /*
     1. Merge filtered SNPS and INDELs from VarScan
     2. Rename the sample names (TUMOR/NORMAL) from varscan vcfs to the real samplenames
 */
+process 'MergeAndRenameSamplesInVarscanVCF' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -2905,192 +2954,207 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     )
 
     script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
+    mkdir -p ${params.tmpDir}
 
-    $BGZIP -c ${VarScanSNP_VCF} > ${VarScanSNP_VCF}.gz
-    $TABIX -p vcf ${VarScanSNP_VCF}.gz
-    $BGZIP -c ${VarScanINDEL_VCF} > ${VarScanINDEL_VCF}.gz
-    $TABIX -p vcf ${VarScanINDEL_VCF}.gz
+    bgzip -c ${VarScanSNP_VCF} > ${VarScanSNP_VCF}.gz
+    tabix -p vcf ${VarScanSNP_VCF}.gz
+    bgzip -c ${VarScanINDEL_VCF} > ${VarScanINDEL_VCF}.gz
+    tabix -p vcf ${VarScanINDEL_VCF}.gz
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${VarScanSNP_VCF}.gz \\
-        I=${VarScanINDEL_VCF}.gz \\
-        O=${TumorReplicateId}_varscan_combined.vcf.gz \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${VarScanSNP_VCF}.gz \\
+        -I ${VarScanINDEL_VCF}.gz \\
+        -O ${TumorReplicateId}_varscan_combined.vcf.gz \\
+        --SEQUENCE_DICTIONARY ${RefDict}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${TumorReplicateId}_varscan_combined.vcf.gz \\
-        O=${TumorReplicateId}_varscan_combined_sorted.vcf.gz \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    gatk --java-options ${java_opts} SortVcf \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${TumorReplicateId}_varscan_combined.vcf.gz \\
+        -O ${TumorReplicateId}_varscan_combined_sorted.vcf.gz \\
+        --SEQUENCE_DICTIONARY ${RefDict}
 
     # rename samples in varscan vcf
     printf "TUMOR ${TumorReplicateId}\nNORMAL ${NormalReplicateId}\n" > vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
-    $BCFTOOLS reheader \\
+    bcftools reheader \\
         -s vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp \\
         ${TumorReplicateId}_varscan_combined_sorted.vcf.gz \\
         > ${TumorReplicateId}_${NormalReplicateId}_varscan.Somatic.hc.filtered.vcf.gz
 
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_varscan.Somatic.hc.filtered.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_varscan.Somatic.hc.filtered.vcf.gz
     rm -f vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
     """
 
 }
 
-/*
-*********************************************
-**             M U T E C T 1               **
-*********************************************
-*/
+if(have_Mutect1) {
+    // Mutect1: calls SNPS from tumor and matched normal sample
+    process 'Mutect1scattered' {
 
-process 'Mutect1scattered' {
-// Mutect1: calls SNPS from tumor and matched normal sample
+        tag "$TumorReplicateId"
 
-    tag "$TumorReplicateId"
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(Tumorbam),
+            file(Tumorbai),
+            file(Normalbam),
+            file(Normalbai),
+            file(intervals)
+        ) from GatherRealignedBamFiles_out_Mutect1scattered_ch0
+            .combine(
+                SplitIntervals_out_ch6.flatten()
+            )
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(Tumorbam),
-        file(Tumorbai),
-        file(Normalbam),
-        file(Normalbai),
-        file(intervals)
-    ) from GatherRealignedBamFiles_out_Mutect1scattered_ch0
-        .combine(
-            SplitIntervals_out_ch6.flatten()
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
         )
 
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
+
+        set(
+            file(DBSNP),
+            file(DBSNPIdx),
+            file(Cosmic),
+            file(CosmicIdx)
+        ) from Channel.value(
+            [ database.DBSNP,
+            database.DBSNPIdx,
+            database.Cosmic,
+            database.CosmicIdx ]
+        )
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_${intervals}.raw.vcf.gz"),
+            file("${TumorReplicateId}_${intervals}.raw.stats.txt"),
+            file("${TumorReplicateId}_${intervals}.raw.vcf.gz.idx")
+        ) into Mutect1scattered_out_ch0
+
+        script:
+        """
+        mkdir -p ${params.tmpDir}
+
+        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \\
+            --analysis_type MuTect \\
+            --reference_sequence ${RefFasta} \\
+            --cosmic ${Cosmic} \\
+            --dbsnp ${DBSNP} \\
+            -L ${intervals} \\
+            --input_file:normal ${Normalbam} \\
+            --input_file:tumor ${Tumorbam} \\
+            --out ${TumorReplicateId}_${intervals}.raw.stats.txt \\
+            --vcf ${TumorReplicateId}_${intervals}.raw.vcf.gz
+        """
+    }
+
+    // Merge scattered Mutect1 vcfs
+    process 'gatherMutect1VCFs' {
+
+        label 'nextNEOpiENV'
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/$TumorReplicateId/03_mutect1/",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(vcf),
+            file(stats),
+            file(idx)
+        ) from Mutect1scattered_out_ch0
+            .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
+            .flatten()
+            .collate(5)
+            .groupTuple(by: [0,1])
 
 
-    set(
-        file(DBSNP),
-        file(DBSNPIdx),
-        file(Cosmic),
-        file(CosmicIdx)
-    ) from Channel.value(
-        [ database.DBSNP,
-          database.DBSNPIdx,
-          database.Cosmic,
-          database.CosmicIdx ]
-    )
+        output:
+        file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz")
+        file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt")
 
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_${intervals}.raw.vcf.gz"),
-        file("${TumorReplicateId}_${intervals}.raw.stats.txt"),
-        file("${TumorReplicateId}_${intervals}.raw.vcf.gz.idx")
-    ) into Mutect1scattered_out_ch0
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \\
-        --analysis_type MuTect \\
-        --reference_sequence ${RefFasta} \\
-        --cosmic ${Cosmic} \\
-        --dbsnp ${DBSNP} \\
-        -L ${intervals} \\
-        --input_file:normal ${Normalbam} \\
-        --input_file:tumor ${Tumorbam} \\
-        --out ${TumorReplicateId}_${intervals}.raw.stats.txt \\
-        --vcf ${TumorReplicateId}_${intervals}.raw.vcf.gz
-    """
-}
-
-process 'gatherMutect1VCFs' {
-// Merge scattered Mutect1 vcfs
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/$TumorReplicateId/03_mutect1/",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        file(RefFasta),
-        file(RefIdx),
-        file(RefDict)
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.RefDict ]
-    )
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(vcf),
-        file(stats),
-        file(idx)
-    ) from Mutect1scattered_out_ch0
-        .toSortedList({a, b -> a[2].baseName <=> b[2].baseName})
-        .flatten()
-        .collate(5)
-        .groupTuple(by: [0,1])
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            val("mutect1"),
+            file("${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz"),
+            file("${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz.tbi")
+        ) into (
+            Mutect1_out_ch0,
+            Mutect1_out_ch1
+        )
 
 
-    output:
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz")
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz.tbi")
-    file("${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt")
+        script:
+        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        """
+        mkdir -p ${params.tmpDir}
 
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        val("mutect1"),
-        file("${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz.tbi")
-    ) into (
-        Mutect1_out_ch0,
-        Mutect1_out_ch1
-    )
+        gatk --java-options ${java_opts} MergeVcfs \\
+            --TMP_DIR ${params.tmpDir} \\
+            -I ${vcf.join(" I=")} \\
+            -O ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
 
-
-    script:
-    """
-    mkdir -p ${params.tmpDir}
-
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${vcf.join(" I=")} \\
-        O=${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
-
-    $GATK4 SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
-        --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz \\
-        -R ${RefFasta} \\
-        --exclude-filtered true \\
-        --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
-        --output ${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz
+        gatk SelectVariants \\
+            --tmp-dir ${params.tmpDir} \\
+            --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz \\
+            -R ${RefFasta} \\
+            --exclude-filtered true \\
+            --select 'vc.getGenotype(\"${TumorReplicateId}\").getAD().1 >= ${params.minAD}' \\
+            --output ${TumorReplicateId}_${NormalReplicateId}_mutect1_final.vcf.gz
 
 
-    head -2 ${stats[0]} > ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
-    tail -q -n +3 ${stats.join(" ")} >> ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
-    """
-}
+        head -2 ${stats[0]} > ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
+        tail -q -n +3 ${stats.join(" ")} >> ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.stats.txt
+        """
+    }
+} else {
 
+    log.info "INFO: Mutect1 not available, skipping...."
+
+    Channel.empty().set { Mutect1_out_ch0 }
+
+    GatherRealignedBamFiles_out_Mutect1scattered_ch0
+        .map {  item -> tuple(item[0],
+                              item[1],
+                              val("mutect1"),
+                              "NO_FILE",
+                              "NO_FILE_IDX") }
+        .set { Mutect1_out_ch1 }
+
+} // END if have MUTECT1
 
 // Strelka2 and Manta
 if (! single_end) {
     process 'MantaSomaticIndels' {
-        conda 'bioconda::manta=1.6.0'
+
+        label 'Manta'
 
         tag "$TumorReplicateId"
 
@@ -3174,7 +3238,9 @@ if (! single_end) {
 }
 
 process StrelkaSomatic {
-    conda 'bioconda::strelka=2.9.10'
+
+    label 'Strelka'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/03_strelka_somatic/",
@@ -3277,14 +3343,13 @@ process StrelkaSomatic {
 
 // END Strelka2 and Manta
 
-process 'mkHCsomaticVCF' {
 /*
-    Creates a VCF that is based on the priority caller (e.g. mutect2) vcf but contains only variants
-    that are confirmed by any of the two confirming callers (e..g. mutect1, varscan)
+    Creates a VCF that is based on the primary caller (e.g. mutect2) vcf but that contains only variants
+    that are confirmed by any of the confirming callers (e..g. mutect1, varscan)
 */
+process 'mkHCsomaticVCF' {
 
-    // TODO: deal with this smarter
-    conda "${baseDir}/assets/py3_icbi.yml"
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -3328,23 +3393,72 @@ process 'mkHCsomaticVCF' {
     )
 
     script:
+    callerMap = ["M2": Mutect2_VCF, "M1": Mutect1_VCF, "VS": VarScan_VCF, "ST": Strelka_VCF]
+
+    if(!have_Mutect1) {
+        callerMap.remove("M1")
+    }
+
+    primary_caller_file = callerMap[params.primaryCaller]
+
+    callerMap.remove(params.primaryCaller)
+    confirming_caller_files = callerMap.vlaues().join(" ")
+    confirming_caller_names = callerMap.keySet().join(" ")
     """
     make_hc_vcf.py --priority ${params.priorityCaller} \\
-        --m2_vcf ${Mutect2_VCF} \\
-        --m1_vcf ${Mutect1_VCF} \\
-        --vs_vcf ${VarScan_VCF} \\
-        --st_vcf ${Strelka_VCF} \\
+        --primary ${primary_caller_file} \\
+        --primary_name ${params.primaryCaller} \\
+        --confirming ${confirming_caller_files} \\
+        --confirmint_names ${confirming_caller_names} \\
         --out_vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf \\
         --out_single_vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.single.vcf
 
-    $BGZIP -c ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf > ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf > ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf.gz
     """
 
 }
 
-process 'VepTab' {
+vep_cache_chck_file = file(params.databases.vep_cache + "/." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck")
+if(!vep_cache_chck_file.exists()) {
+
+    log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
+
+    process 'installVEPcache' {
+
+        label 'VEP'
+
+        tag 'installVEPcache'
+
+        output:
+        file(${vep_cache_chck_file}) into vep_cache_ch
+
+        script:
+        """
+        mkdir -p ${params.databases.vep_cache}
+        vep_install \\
+            -a cf \\
+            -s ${params.vep_species} \\
+            -y ${params.vep_assembly} \\
+            -c ${params.databases.vep_cache} \\
+            --CACHE_VERSION ${params.vep_cache_version} \\
+            --CONVERT 2> vep_errors.txt && \\
+        touch ${vep_cache_chck_file}
+        """
+
+    }
+
+} else {
+
+    vep_cache_ch = Channel.fromPath(vep_cache_chck_file)
+    (vep_cache_ch0, vep_cache_ch1) = vep_cache_ch.into(2)
+
+}
+
 // Variant Effect Prediction: using ensembl vep
+process 'VepTab' {
+
+    label 'VEP'
 
     tag "$TumorReplicateId"
 
@@ -3359,6 +3473,7 @@ process 'VepTab' {
         CallerName,
         file(Vcf),
         file(Idx),
+        file(vep_cache_chck_file)
     ) from FilterMutect2_out_ch0
         .concat(MergeAndRenameSamplesInVarscanVCF_out_ch0)
         .concat(Mutect1_out_ch0)
@@ -3366,6 +3481,7 @@ process 'VepTab' {
         .concat(mkHCsomaticVCF_out_ch0)
         .flatten()
         .collate(5)
+        .combine(vep_cache_ch0)
 
     output:
     file("${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep.txt")
@@ -3373,16 +3489,16 @@ process 'VepTab' {
 
     script:
     """
-    $PERL $VEP -i ${Vcf} \\
+    vep -i ${Vcf} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep.txt \\
         --fork ${task.cpus} \\
         --stats_file ${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep_summary.html \\
         --species ${params.vep_species} \\
         --assembly ${params.vep_assembly} \\
         --offline \\
-        --dir ${params.vep_dir} \\
-        --cache --dir_cache ${params.vep_cache} \\
-        --fasta ${params.VepFasta} \\
+        --dir ${params.databases.vep_cache} \\
+        --cache --dir_cache ${params.databases.vep_cache} \\
+        --fasta ${params.references.VepFasta} \\
         --format "vcf" \\
         ${params.vep_options} \\
         --tab
@@ -3390,11 +3506,15 @@ process 'VepTab' {
 }
 
 // CREATE phased VCF
-process 'mkPhasedVCF' {
 /*
     make phased vcf for pVACseq using tumor and germliine variants:
     based on https://pvactools.readthedocs.io/en/latest/pvacseq/input_file_prep/proximal_vcf.html
 */
+
+// combind germline and somatic variants
+process 'mkCombinedVCF' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -3415,68 +3535,108 @@ process 'mkPhasedVCF' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(tumorBAM),
-        file(tumorBAI),
         file(germlineVCF),
         file(germlineVCFidx),
         _,
         file(tumorVCF),
         file(tumorVCFidx)
-    ) from GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0 // BaseRecalTumorGATK3_out_ch2
-        .combine(FilterGermlineVariantTranches_out_ch0, by: [0,1])
-        .combine(mkHCsomaticVCF_out_ch1, by: [0,1])             // uses confirmed mutect2 variants
+    ) from combine(FilterGermlineVariantTranches_out_ch0, by: [0,1])
+        .combine(mkHCsomaticVCF_out_ch1, by: [0,1])          // uses confirmed mutect2 variants
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi"),
-        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
-    ) into (
-        mkPhasedVCF_out_ch0,
-        mkPhasedVCF_out_pVACseq_ch0
-    )
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
-    ) into mkPhasedVCF_out_Clonality_ch0
-    file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
-    file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
+        file(${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz),
+        file(${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz.tbi),
+    ) into mkCombinedVCF_out_ch
+
 
     script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
-    $GATK4 --java-options ${params.JAVA_Xmx} SelectVariants \\
+    gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta} \\
         -V ${tumorVCF} \\
         --sample-name ${TumorReplicateId} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD RenameSampleInVcf \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${germlineVCF} \\
-        NEW_SAMPLE_NAME=${TumorReplicateId} \\
-        O=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
+    gatk --java-options ${java_opts} RenameSampleInVcf \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${germlineVCF} \\
+        --NEW_SAMPLE_NAME ${TumorReplicateId} \\
+        -O ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
-        I=${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \\
-        O=${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz
+    gatk --java-options ${java_opts} $PICARD MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
+        -I ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz \\
-        O=${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    gatk --java-options ${java_opts} SortVcf \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz \\
+        --SEQUENCE_DICTIONARY ${RefDict}
+    """
+}
 
-    $PERL $VEP -i ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz \\
+process 'VEPvcf' {
+
+    label 'VEP'
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/07_PhasedVCF",
+        mode: params.publishDirMode
+
+
+    input:
+    set (
+        TumorReplicateId,
+        NormalReplicateId,
+        file(combinedVCF),
+        file(combinedVCFidx)
+        _,
+        file(tumorVCF),
+        file(tumorVCFidx),
+        file(vep_cache_chck_file)
+    ) from mkCombinedVCF_out_ch
+        .combine(mkHCsomaticVCF_out_ch2, by: [0,1])
+        .combine(vep_cache_ch1)
+
+    output:
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.tbi"),
+    ) into (
+        VEPvcf_out_ch0
+    )
+
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
+    ) into (
+        VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
+        VEPvcf_out_ch2
+    )
+    file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
+    file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
+
+
+
+    script:
+    """
+    mkdir -p ${params.tmpDir}
+
+    vep -i ${combinedVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_summary.html \\
@@ -3484,14 +3644,14 @@ process 'mkPhasedVCF' {
         --assembly ${params.vep_assembly} \\
         --offline \\
         --cache \\
-        --dir ${params.vep_dir} \\
-        --dir_cache ${params.vep_cache} \\
-        --fasta ${params.VepFasta} \\
+        --dir ${params.databases.vep_cache} \\
+        --dir_cache ${params.databases.vep_cache} \\
+        --fasta ${params.references.VepFasta} \\
         --pick --plugin Downstream --plugin Wildtype \\
         --symbol --terms SO --transcript_version --tsl \\
         --vcf
 
-    $PERL $VEP -i ${tumorVCF} \\
+    vep -i ${tumorVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_summary.html \\
@@ -3499,33 +3659,83 @@ process 'mkPhasedVCF' {
         --assembly ${params.vep_assembly} \\
         --offline \\
         --cache \\
-        --dir ${params.vep_dir} \\
-        --dir_cache ${params.vep_cache} \\
-        --fasta ${params.VepFasta} \\
+        --dir ${params.databases.vep_cache} \\
+        --dir_cache ${params.databases.vep_cache} \\
+        --fasta ${params.references.VepFasta} \\
         --pick --plugin Downstream --plugin Wildtype \\
         --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
         --vcf
 
-    $BGZIP -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
         > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
 
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
 
-    $BGZIP -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         > ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
 
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
-
-
-    $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
-        -T ReadBackedPhasing \\
-        -R ${RefFasta} \\
-        -I ${tumorBAM} \\
-        -V ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \\
-        -L ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz \\
-        -o ${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
     """
+}
+
+if(have_GATK3) {
+    process 'ReadBackedphasing' {
+
+        tag "$TumorReplicateId"
+
+        input:
+        set (
+            TumorReplicateId,
+            NormalReplicateId,
+            file(tumorBAM),
+            file(tumorBAI),
+            file(combinedVCF),
+            file(combinedVCFidx)
+        ) from GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
+            .combine(VEPvcf_out_ch0, by: [0,1])
+
+        set(
+            file(RefFasta),
+            file(RefIdx),
+            file(RefDict)
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.RefDict ]
+        )
+
+        output:
+        set (
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz"),
+            file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi")
+        ) into (
+            mkPhasedVCF_out_ch0,
+            mkPhasedVCF_out_pVACseq_ch0,
+            generate_protein_fasta_phased_vcf_ch0
+        )
+
+        script:
+        """
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+            -T ReadBackedPhasing \\
+            -R ${RefFasta} \\
+            -I ${tumorBAM} \\
+            -V ${combinedVCF} \\
+            -L ${combinedVCF} \\
+            -o ${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz
+        """
+    }
+} else {
+
+    log.warn "WARNING: GATK3 not installed! Can not generate readbacked phased VCF:\n" +
+        "You should manually review the sequence data for all candidates (e.g. in IGV) for proximal variants and\n" +
+        " either account for these manually, or eliminate these candidates. Failure to do so may lead to inclusion\n" +
+        " of incorrect peptide sequences."
+
+    (mkPhasedVCF_out_ch0, mkPhasedVCF_out_pVACseq_ch0, generate_protein_fasta_phased_vcf_ch0) = VEPvcf_out_ch0.into(2)
 }
 // END CREATE phased VCF
 
@@ -3534,6 +3744,8 @@ process 'mkPhasedVCF' {
 
 // adopted from sarek nfcore
 process AlleleCounter {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId - $NormalReplicateId"
 
@@ -3571,7 +3783,7 @@ process AlleleCounter {
     outFileName = (sampleType == "T") ? TumorReplicateId + ".alleleCount" : NormalReplicateId + ".alleleCount"
     if(single_end)
         """
-        $ALLELECOUNT \\
+        alleleCounter \\
             -l ${acLoci} \\
             -d \\
             -r ${RefFasta} \\
@@ -3581,7 +3793,7 @@ process AlleleCounter {
     """
     else
         """
-        $ALLELECOUNT \\
+        alleleCounter \\
             -l ${acLoci} \\
             -d \\
             -r ${RefFasta} \\
@@ -3604,6 +3816,8 @@ AlleleCounter_out_ch0 = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0
 // R script from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process ConvertAlleleCounts {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -3642,6 +3856,8 @@ process ConvertAlleleCounts {
 // R scripts from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
 process 'Ascat' {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -3683,6 +3899,8 @@ process 'Ascat' {
 if (params.controlFREEC) {
     process 'Mpileup4ControFREEC' {
 
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId - $NormalReplicateId"
 
         input:
@@ -3717,12 +3935,12 @@ if (params.controlFREEC) {
 
         script:
         """
-        $SAMTOOLS mpileup \\
+        samtools mpileup \\
             -q 1 \\
             -f ${RefFasta} \\
             -l ${interval} \\
             ${BAM} | \\
-        $BGZIP --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz
+        bgzip --threads ${task.cpus} -c > ${TumorReplicateId}_${NormalReplicateId}_${sampleType}_${interval}.pileup.gz
         """
 
 
@@ -3730,8 +3948,10 @@ if (params.controlFREEC) {
 
     Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0, 1, 2])
 
-    process 'gatherMpileups' {
     // Merge scattered Varscan vcfs
+    process 'gatherMpileups' {
+
+        label 'nextNEOpiENV'
 
         tag "$TumorReplicateId - $NormalReplicateId"
 
@@ -3772,6 +3992,8 @@ if (params.controlFREEC) {
 
     // run ControlFREEC : adopted from nfcore sarek
     process 'ControlFREEC' {
+
+        label 'Freec'
 
         tag "$TumorReplicateId"
 
@@ -3862,7 +4084,7 @@ if (params.controlFREEC) {
         echo "" >> ${config}
         echo "[target]" >> ${config}
         echo "${captureRegions}" >> ${config}
-        $FREEC -conf ${config}
+        freec -conf ${config}
         """
     }
 
@@ -3900,8 +4122,8 @@ if (params.controlFREEC) {
         """
         cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
         cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
-        $PERL ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
-        $PERL ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
+        perl ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
+        perl ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
         """
     }
 }
@@ -3914,9 +4136,9 @@ Channel
 
 process 'SequenzaUtils' {
 
-    tag "$TumorReplicateId"
+    label 'nextNEOpiENV'
 
-    conda "${baseDir}/assets/py3_icbi.yml"
+    tag "$TumorReplicateId"
 
     input:
     set(
@@ -3963,13 +4185,15 @@ process 'SequenzaUtils' {
         -w 50 \\
         -s - \\
         | \\
-    $BGZIP \\
+    bgzip \\
         --threads ${task.cpus} -c > ${chromosome}_${TumorReplicateId}_seqz.gz
 
     """
 }
 
 process gatherSequenzaInput {
+
+    label 'nextNEOpiENV'
 
     tag "$TumorReplicateId"
 
@@ -4010,6 +4234,8 @@ process gatherSequenzaInput {
 
 process Sequenza {
 
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     errorStrategy "ignore"
@@ -4037,7 +4263,7 @@ process Sequenza {
     script:
     gender = genderMap[TumorReplicateId]
     """
-    $RSCRIPT \\
+    Rscript \\
         ${workflow.projectDir}/bin/SequenzaScript.R \\
         ${seqz_file} \\
         ${TumorReplicateId} \\
@@ -4051,9 +4277,9 @@ process Sequenza {
 
 process make_CNVkit_access_file {
 
-    tag 'mkCNVkitaccess'
+    label 'CNVkit'
 
-    conda 'bioconda::cnvkit=0.9.7'
+    tag 'mkCNVkitaccess'
 
     publishDir "$params.outputDir/00_prepare_CNVkit/", mode: params.publishDirMode
 
@@ -4083,9 +4309,9 @@ process make_CNVkit_access_file {
 
 process CNVkit {
 
-    tag "$TumorReplicateId"
+    label 'CNVkit'
 
-    conda 'bioconda::cnvkit=0.9.7'
+    tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/16_CNVkit/",
         mode: params.publishDirMode
@@ -4282,13 +4508,13 @@ clonality_input = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
 
 process 'Clonality' {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/17_Clonality/",
         mode: params.publishDirMode
-
-
-    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -4302,7 +4528,7 @@ process 'Clonality' {
         file(seqz_purity),
         ascatOK,
         sequenzaOK
-    ) from mkPhasedVCF_out_Clonality_ch0
+    ) from VEPvcf_out_ch1 // mkPhasedVCF_out_Clonality_ch0
         .combine(clonality_input, by: [0,1])
 
 
@@ -4338,7 +4564,7 @@ process 'Clonality' {
             ${purity_opt} \\
             --min_vaf 0.01 \\
             --result_table ${TumorReplicateId}_segments_CCF_input.txt
-        ${RSCRIPT} \\
+        Rscript \\
             ${workflow.projectDir}/bin/CCF.R \\
             ${TumorReplicateId}_segments_CCF_input.txt \\
             ${TumorReplicateId}_CCFest.tsv \\
@@ -4355,6 +4581,9 @@ process 'Clonality' {
 // HLA TYPING
 
 process 'mhc_extract' {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     input:
@@ -4393,14 +4622,14 @@ process 'mhc_extract' {
         mkfifo mhc_mapped_bam
         mkfifo R.fastq
 
-        $SAMTOOLS  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        $SAMTOOLS  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
 
-        $SAMTOOLS merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
-            $SAMTOOLS sort -@4 -n - | \\
-            $SAMTOOLS fastq -@2 -0 R.fastq \\
+        samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
+            samtools sort -@4 -n - | \\
+            samtools fastq -@2 -0 R.fastq \\
             -i - &
-        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
+        perl -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
 
         wait
         touch NO_FILE
@@ -4414,15 +4643,15 @@ process 'mhc_extract' {
         mkfifo R1.fastq
         mkfifo R2.fastq
 
-        $SAMTOOLS  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        $SAMTOOLS  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
+        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
 
-        $SAMTOOLS merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
-            $SAMTOOLS sort -@4 -n - | \\
-            $SAMTOOLS fastq -@2 -1 R1.fastq -2 R2.fastq -s /dev/null -0 /dev/null \\
+        samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
+            samtools sort -@4 -n - | \\
+            samtools fastq -@2 -1 R1.fastq -2 R2.fastq -s /dev/null -0 /dev/null \\
             -i - &
-        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R1.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R1.fastq.gz &
-        $PERL -ple 'if ((\$. % 4) == 1) { s/\$/ 2:N:0:NNNNNNNN/; }' R2.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R2.fastq.gz &
+        perl -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R1.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R1.fastq.gz &
+        perl -ple 'if ((\$. % 4) == 1) { s/\$/ 2:N:0:NNNNNNNN/; }' R2.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R2.fastq.gz &
 
         wait
 
@@ -4446,6 +4675,9 @@ process 'mhc_extract' {
  */
 
 process 'pre_map_hla' {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     input:
@@ -4474,17 +4706,17 @@ process 'pre_map_hla' {
 
     if (single_end)
         """
-        $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
-            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+        yara -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
+            samtools view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
         """
     else
         """
         mkfifo R1 R2
-        $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
-            $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
+        yara -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
+            samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
             tee R1 R2 > /dev/null &
-            $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
-            $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
+            samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
+            samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
         wait
         rm -f R1 R2
         """
@@ -4500,6 +4732,9 @@ process 'pre_map_hla' {
  */
 
 process 'OptiType' {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
@@ -4520,7 +4755,7 @@ process 'OptiType' {
 
     script:
     """
-    $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+    OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
     mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
     mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
     rm -rf ./tmp/
@@ -4529,6 +4764,9 @@ process 'OptiType' {
 
 if (have_RNAseq) {
     process 'pre_map_hla_RNA' {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         input:
@@ -4557,23 +4795,26 @@ if (have_RNAseq) {
 
         if (single_end_RNA)
             """
-            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
-                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
+                samtools view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
             """
         else
             """
             mkfifo R1 R2
-            $YARA -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
-                $SAMTOOLS view -@ $samtools_cpus -h -F 4 -b1 | \\
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
+                samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
                 tee R1 R2 > /dev/null &
-                $SAMTOOLS view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
-                $SAMTOOLS view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
+                samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
+                samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > mapped_2.bam &
             wait
             rm -f R1 R2
             """
     }
 
     process 'OptiType_RNA' {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/08_OptiType/",
@@ -4597,7 +4838,7 @@ if (have_RNAseq) {
             """
             MHC_MAPPED=`$SAMTOOLS view -c ${reads}`
             if [ "\$MHC_MAPPED" != "0" ]; then
-                $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
                 mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
@@ -4611,7 +4852,7 @@ if (have_RNAseq) {
             MHC_MAPPED_FWD=`$SAMTOOLS view -c ${reads[0]}`
             MHC_MAPPED_REV=`$SAMTOOLS view -c ${reads[1]}`
             if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
-                $PYTHON $OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
                 mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
@@ -4633,9 +4874,10 @@ if (have_RNAseq) {
 
 process 'run_hla_hd' {
 
+    label 'HLAHD'
+
     tag "$TumorReplicateId"
 
-    conda "${baseDir}/assets/hlahdenv.yml"
 
     publishDir "$params.outputDir/$TumorReplicateId/09_HLA_HD/",
         mode: params.publishDirMode
@@ -4694,6 +4936,9 @@ From slack discussion on 20200425 (FF, GF, DR):
 */
 
 process get_vhla {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     input:
@@ -4829,6 +5074,8 @@ if (have_RNAseq) {
     */
     process add_geneID {
 
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         input:
@@ -4863,14 +5110,12 @@ if (have_RNAseq) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            file(vep_phased_vcf_gz),
-            file(vep_phased_vcf_gz_tbi),
             file(vep_somatic_vcf_gz),
             file(vep_somatic_vcf_gz_tbi),
             file(final_tpm),
             file(RNA_bam),
             file(RNA_bai),
-        ) from mkPhasedVCF_out_ch0
+        ) from VEPvcf_out_ch2
             .combine(final_file, by: 0)
             .combine(star_bam_file, by: 0)
         set(
@@ -4886,17 +5131,10 @@ if (have_RNAseq) {
             NormalReplicateId,
             file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
             file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
-        ) into vcf_vep_ex_gz
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz"),
-            file("${TumorReplicateId}_${NormalReplicateId}_vep_phased.vcf.gz.tbi"),
-            file("${TumorReplicateId}_vep_somatic_gx.vcf.gz"),
-            file("${TumorReplicateId}_vep_somatic_gx.vcf.gz.tbi")
         ) into (
-            gene_annotator_out_getseq_ch0,
-            gene_annotator_out_mixMHC2pred_ch0
+            vcf_vep_ex_gz,
+            gene_annotator_out_mixMHC2pred_ch0,
+            generate_protein_fasta_tumor_vcf_ch0
         )
 
         script:
@@ -4944,44 +5182,8 @@ if (have_RNAseq) {
     }
 } else { // no RNAseq data
 
-    process no_gene_annotator {
+    (vcf_vep_ex_gz,  gene_annotator_out_mixMHC2pred_ch0, generate_protein_fasta_tumor_vcf_ch0) = VEPvcf_out_ch2.into(3)
 
-        tag "$TumorReplicateId"
-
-        input:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(vep_phased_vcf_gz),
-            file(vep_phased_vcf_gz_tbi),
-            file(vep_somatic_vcf_gz),
-            file(vep_somatic_vcf_gz_tbi)
-        ) from mkPhasedVCF_out_ch0
-
-        output:
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(vep_somatic_vcf_gz),
-            file(vep_somatic_vcf_gz_tbi)
-        ) into vcf_vep_ex_gz
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file(vep_phased_vcf_gz),
-            file(vep_phased_vcf_gz_tbi),
-            file(vep_somatic_vcf_gz),
-            file(vep_somatic_vcf_gz_tbi)
-        ) into (
-            gene_annotator_out_getseq_ch0,
-            gene_annotator_out_mixMHC2pred_ch0
-        )
-
-        script:
-        // do nothing
-        """
-        """
-    }
 }
 
 /*
@@ -4989,6 +5191,7 @@ Run pVACseq
 */
 
 process 'pVACseq' {
+
     tag "$TumorReplicateId"
 
     input:
@@ -4997,14 +5200,11 @@ process 'pVACseq' {
         NormalReplicateId,
         vep_phased_vcf_gz,
         vep_phased_vcf_gz_tbi,
-        _,
-        _,
-        _,
         anno_vcf,
         anno_vcf_tbi,
         hla_types
     ) from mkPhasedVCF_out_pVACseq_ch0
-        .combine(vcf_vep_ex_gz, by: 0)
+        .combine(vcf_vep_ex_gz, by: [0,1])
         .combine(hlas.splitText(), by: 0)
 
     output:
@@ -5025,11 +5225,22 @@ process 'pVACseq' {
     hla_type = (hla_types - ~/\n/)
     NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
     NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
+    phased_vcf_opt = (have_GATK3) ? "-p " vep_phased_vcf_gz : ""
+
+    if(!have_GATK3) {
+
+        log.warn "WARNING: GATK3 not installed! Have no readbacked phased VCF:\n" +
+            "You should manually review the sequence data for all candidates (e.g. in IGV) for proximal variants and\n" +
+            " either account for these manually, or eliminate these candidates. Failure to do so may lead to inclusion\n" +
+            " of incorrect peptide sequences."
+
+    }
+
     """
     pvacseq run \\
         --iedb-install-directory /opt/iedb \\
         -t ${task.cpus} \\
-        -p ${vep_phased_vcf_gz} \\
+        ${phased_vcf_opt} \\
         -e1 ${params.mhci_epitope_len} \\
         -e2 ${params.mhcii_epitope_len} \\
         --normal-sample-name ${NormalReplicateId} \\
@@ -5040,6 +5251,7 @@ process 'pVACseq' {
 }
 
 process concat_mhcI_files {
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_I/",
@@ -5077,6 +5289,7 @@ process concat_mhcI_files {
 }
 
 process concat_mhcII_files {
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_II/",
@@ -5114,6 +5327,7 @@ process concat_mhcII_files {
 
 
 process aggregated_reports {
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
@@ -5146,6 +5360,7 @@ process aggregated_reports {
 }
 
 process 'pVACtools_generate_protein_seq' {
+
     tag "$TumorReplicateId"
 
     input:
@@ -5156,7 +5371,8 @@ process 'pVACtools_generate_protein_seq' {
         vep_phased_vcf_idx,
         vep_tumor_vcf_gz,
         vep_tumor_vcf_idx
-    ) from gene_annotator_out_getseq_ch0
+    ) from generate_protein_fasta_phased_vcf_ch0
+        .combine(generate_protein_fasta_tumor_vcf_ch0, by:[0,1])
 
     output:
     set(
@@ -5166,9 +5382,19 @@ process 'pVACtools_generate_protein_seq' {
     ) optional true into pVACtools_generate_protein_seq
 
     script:
+    phased_vcf_opt = (have_GATK3) ? "-p " vep_phased_vcf_gz : ""
+
+    if(!have_GATK3) {
+
+        log.warn "WARNING: GATK3 not installed! Have no readbacked phased VCF:\n" +
+        "You should manually review the sequence data for all candidates (e.g. in IGV) for proximal variants and\n" +
+        " either account for these manually, or eliminate these candidates. Failure to do so may lead to inclusion\n" +
+        " of incorrect peptide sequences."
+    }
+
     """
     pvacseq generate_protein_fasta \\
-        -p ${vep_phased_vcf_gz} \\
+        ${phased_vcf_opt} \\
         -s ${TumorReplicateId} \\
         ${vep_tumor_vcf_gz} \\
         31 \\
@@ -5177,12 +5403,13 @@ process 'pVACtools_generate_protein_seq' {
 }
 
 process 'pepare_mixMHC2_seq' {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     // publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred/",
     //     mode: params.publishDirMode
-
-    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -5218,26 +5445,63 @@ process 'pepare_mixMHC2_seq' {
     """
 }
 
+mixmhc2pred_chck_file = file(workflow.projectDir + "/bin/.mixmhc2pred_install_ok.chck")
+if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
+    process install_mixMHC2pred {
+
+        tag 'install mixMHC2pred'
+
+        output:
+        file(${mixmhc2pred_chck_file}) into mixmhc2pred_chck_ch
+
+        script:
+        """
+        curl -k ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip
+        unzip mixmhc2pred.zip
+        chmod +x MixMHC2pred_unix
+        cp -f MixMHC2pred_unix ${workflow.projectDir}/bin/
+        touch ${mixmhc2pred_chck_file}
+        """
+    }
+} else if (!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED != "") {
+    process install_mixMHC2pred {
+
+        tag 'install mixMHC2pred'
+
+        output:
+        file(${mixmhc2pred_chck_file}) into mixmhc2pred_chck_ch
+
+        script:
+        """
+        ln -s ${params.MiXMHC2PRED} MixMHC2pred_unix ${workflow.projectDir}/bin/MixMHC2pred_unix
+        touch ${mixmhc2pred_chck_file}
+        """
+    }
+} else {
+    mixmhc2pred_chck_ch = Channel.fromPath(mixmhc2pred_chck_file)
+}
 
 process mixMHC2pred {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
         mode: params.publishDirMode
 
-    conda "${baseDir}/assets/py3_icbi.yml"
+    label 'nextNEOpiENV'
 
     input:
     set(
         TumorReplicateId,
         NormalReplicateId,
         mut_peps,
-        _,
-        _,
         vep_somatic_gx_vcf_gz,
         vep_somatic_gx_vcf_gz_tbi
     ) from pepare_mixMHC2_seq_out_ch0
         .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
+        .combine(mixmhc2pred_chck_ch)
     val allelesFile from pepare_mixMHC2_seq_out_ch1
 
     output:
@@ -5247,7 +5511,7 @@ process mixMHC2pred {
     script:
     alleles = file(allelesFile).readLines().join(" ")
     """
-    ${MiXMHC2PRED} \\
+    MixMHC2pred_unix \\
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${alleles}
@@ -5268,12 +5532,13 @@ process mixMHC2pred {
 
 // add CCF clonality to neoepitopes result files
 process addCCF {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/17_Clonality",
         mode: params.publishDirMode
-
-    conda "${baseDir}/assets/py3_icbi.yml"
 
     input:
     set(
@@ -5313,6 +5578,9 @@ process addCCF {
 */
 
 process csin {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
@@ -5342,6 +5610,9 @@ process csin {
 
 
 process immunogenicity_scoring {
+
+    label 'nextNEOpiENV'
+
     tag "$TumorReplicateId"
 
     // TODO: check why sometimes this fails: workaround ignore errors
@@ -5381,6 +5652,9 @@ process immunogenicity_scoring {
 
 if(params.TCR) {
     process mixcr_DNA_tumor {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
@@ -5404,7 +5678,7 @@ if(params.TCR) {
         script:
         reads = (single_end) ? readFWD : readFWD + " " + readREV
         """
-        $MIXCR analyze shotgun \\
+        mixcr analyze shotgun \\
             --align "--threads ${task.cpus}" \\
             --species hs \\
             --starting-material dna \\
@@ -5415,6 +5689,9 @@ if(params.TCR) {
     }
 
     process mixcr_DNA_normal {
+
+        label 'nextNEOpiENV'
+
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
@@ -5438,7 +5715,7 @@ if(params.TCR) {
         script:
         reads = (single_end) ? readFWD : readFWD + " " + readREV
         """
-        $MIXCR analyze shotgun \\
+        mixcr analyze shotgun \\
             --align "--threads ${task.cpus}" \\
             --species hs \\
             --starting-material dna \\
@@ -5450,6 +5727,9 @@ if(params.TCR) {
 
     if (have_RNAseq) {
         process mixcr_RNA {
+
+            label 'nextNEOpiENV'
+
             tag "$TumorReplicateId"
 
             publishDir "$params.outputDir/$TumorReplicateId/13_MiXCR",
@@ -5472,7 +5752,7 @@ if(params.TCR) {
             script:
             readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
             """
-            $MIXCR analyze shotgun \\
+            mixcr analyze shotgun \\
                 --align "--threads ${task.cpus}" \\
                 --species hs \\
                 --starting-material rna \\
@@ -5568,7 +5848,7 @@ def defineReference() {
             'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
             'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+            'VepFasta'          : params.references.VepFasta,
             'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
             'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
             'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
@@ -5594,7 +5874,7 @@ def defineReference() {
             'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
             'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : checkParamReturnFileReferences("VepFasta"),
+            'VepFasta'          : params.references.VepFasta,
             'BaitsBed'          : "",
             'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
             'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
@@ -5611,7 +5891,7 @@ def defineReference() {
 }
 
 def defineDatabases() {
-    if (params.databases.size() != 16) exit 1, """
+    if (params.databases.size() != 17) exit 1, """
     ERROR: Not all Databases needed found in configuration
     Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
     """
@@ -5632,6 +5912,7 @@ def defineDatabases() {
         'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
         'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
         'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
+        'vep_cache'      : params.databases.vep_cache
     ]
 }
 

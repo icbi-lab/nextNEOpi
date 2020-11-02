@@ -4,6 +4,7 @@ name: hlahd
 channels:
 - conda-forge
 - bioconda
+- defaults
 dependencies:
 - _libgcc_mutex=0.1
 - bowtie2=2.3.5

@@ -31,99 +31,49 @@ from vcf.parser import _Info
 from vcf.utils import walk_together
 
 
-def make_hc_somatic_vars(fm2, fm1, fvs, fst, fout, fout_single, priority):
+def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirming_caller_names_, fout, fout_single):
     """Picks the given VARs from the priority vcf to a new
     VCF if they are confirmed by one of the others."""
 
-    # TODO: make this more generic so that any number of caller can be used
+    primary_reader = vcf.Reader(f_primary)
 
-    m2_reader = vcf.Reader(fm2)
-    m1_reader = vcf.Reader(fm1)
-    vs_reader = vcf.Reader(fvs)
-    st_reader = vcf.Reader(fst)
+    confirming_reader = []
+    for f in f_confirming:
+        confirming_reader.append(vcf.Reader(f))
 
-    if priority == "m2":
-        priority_reader = m2_reader
-        priority_caller_name = "M2"
-        confirming1_reader = m1_reader
-        confirming1_call_name = "M1"
-        confirming2_reader = vs_reader
-        confirming2_call_name = "VS"
-        confirming3_reader = st_reader
-        confirming3_call_name = "ST"
-    elif priority == "m1":
-        priority_reader = m1_reader
-        priority_caller_name = "M1"
-        confirming1_reader = m2_reader
-        confirming1_call_name = "M2"
-        confirming2_reader = vs_reader
-        confirming2_call_name = "VS"
-        confirming3_reader = st_reader
-        confirming3_call_name = "ST"
-    elif priority == "vs":
-        priority_reader = vs_reader
-        priority_caller_name = "VS"
-        confirming1_reader = m2_reader
-        confirming1_call_name = "M2"
-        confirming2_reader = m1_reader
-        confirming2_call_name = "M1"
-        confirming3_reader = st_reader
-        confirming3_call_name = "ST"
-    elif priority == "st":
-        priority_reader = st_reader
-        priority_caller_name = "ST"
-        confirming1_reader = m2_reader
-        confirming1_call_name = "M2"
-        confirming2_reader = m1_reader
-        confirming2_call_name = "M1"
-        confirming3_reader = vs_reader
-        confirming3_call_name = "VS"
-    else:
-        print("Unknown priority vcf: " + priority)
-        sys.exit(1)
-
-    secondary_caller_names = [confirming1_call_name, confirming2_call_name, confirming3_call_name]
-
-    priority_reader.infos["VariantCalledBy"] = _Info(
+    primary_reader.infos["VariantCalledBy"] = _Info(
         "VariantCalledBy", ".", "String", "variant callers that called the variant", "caller ", "0.1"
     )
 
     # some sanity checks
-    if (
-        priority_reader.samples
-        != confirming1_reader.samples
-        != confirming2_reader.samples
-        != confirming3_reader.samples
-    ):
-        raise ValueError("Input VCF files must have the same sample column " "headers.")
-    if (
-        sorted(priority_reader.contigs.keys())
-        != sorted(confirming1_reader.contigs.keys())
-        != sorted(confirming2_reader.contigs.keys())
-        != sorted(confirming3_reader.contigs.keys())
-    ):
-        raise ValueError("Input VCF files must denote the same contigs.")
+    sorted_primary_contigs = sorted(primary_reader.contigs.keys())
+    for cr in confirming_reader:
+        if primary_reader.samples != cr.samples:
+            raise ValueError("Input VCF files must have the same sample column " "headers.")
+        if sorted_primary_contigs != sorted(cr.contigs.keys()):
+            raise ValueError("Input VCF files must denote the same contigs.")
 
-    out_writer = vcf.Writer(fout, priority_reader)
-    out_writer_single = vcf.Writer(fout_single, priority_reader)
+    out_writer = vcf.Writer(fout, primary_reader)
+    out_writer_single = vcf.Writer(fout_single, primary_reader)
 
-    for priority_rec, confrirming1_rec, confrirming2_rec, confrirming3_rec in walk_together(
-        priority_reader, confirming1_reader, confirming2_reader, confirming3_reader
-    ):
+    all_readers = [primary_reader]
+    for r in confirming_reader:
+        all_readers.append(r)
+
+    for primary_rec, *confirming_recs in walk_together(*all_readers):
         confirmed = False
-        confirming_recs = [confrirming1_rec, confrirming2_rec, confrirming3_rec]
-        if priority_rec is not None:
+        if primary_rec is not None:
             confirmed_idx = [i for i, x in enumerate(confirming_recs) if x is not None]
             if len(confirmed_idx) > 0:
-                confirming_caller_names = ",".join(secondary_caller_names[i] for i in confirmed_idx)
-                priority_rec.add_info("VariantCalledBy", priority_caller_name + "," + confirming_caller_names)
+                confirming_caller_names = ",".join(confirming_caller_names_[i] for i in confirmed_idx)
+                primary_rec.add_info("VariantCalledBy", primary_caller_name + "," + confirming_caller_names)
                 confirmed = True
             else:
-                priority_rec.add_info("VariantCalledBy", priority_caller_name)
-                out_writer_single.write_record(priority_rec)
+                primary_rec.add_info("VariantCalledBy", primary_caller_name)
+                out_writer_single.write_record(primary_rec)
 
             if confirmed:
-                out_writer.write_record(priority_rec)
+                out_writer.write_record(primary_rec)
 
 
 if __name__ == "__main__":
@@ -147,16 +97,24 @@ if __name__ == "__main__":
         return open(fname, "w")
 
     parser.add_argument(
-        "--priority",
+        "--primary",
         required=True,
-        type=str,
-        choices=["m2", "m1", "vs", "st"],
-        help="Which caller's variant is kept when a variant is called in " "both files",
+        type=_file_read,
+        help="VCF file from which variants are kept when confirmed by any other vcf in --confirming",
     )
-    parser.add_argument("--m2_vcf", required=True, type=_file_read, help="VCF file produced by " "Mutect2")
-    parser.add_argument("--m1_vcf", required=True, type=_file_read, help="VCF file produced by " "Mutect1")
-    parser.add_argument("--vs_vcf", required=True, type=_file_read, help="VCF file produced by " "Varscan2")
-    parser.add_argument("--st_vcf", required=True, type=_file_read, help="VCF file produced by " "Strelka2")
+    parser.add_argument(
+        "--primary_name", required=True, type=str, help="Name of the primary variant caller",
+    )
+    parser.add_argument(
+        "--confirming",
+        required=True,
+        nargs="*",
+        type=_file_read,
+        help="VCF files used to confirm variants in --primary",
+    )
+    parser.add_argument(
+        "--confirming_names", required=True, type=str, nargs="*", help="Names of the confirming variant callers",
+    )
     parser.add_argument(
         "--out_vcf", required=True, type=_file_write, help="VCF file for confirmed vars produced by " "this tool"
     )
@@ -172,5 +130,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     make_hc_somatic_vars(
-        args.m2_vcf, args.m1_vcf, args.vs_vcf, args.st_vcf, args.out_vcf, args.out_single_vcf, args.priority
+        args.primary, args.primary_name, args.confirming, args.confirming_names, args.out_vcf, args.out_single_vcf
     )
