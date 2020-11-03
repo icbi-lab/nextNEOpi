@@ -401,7 +401,7 @@ YARA		  = file(params.YARA)
 PYTHON		  = file(params.PYTHON)
 OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
-MIXCR		  = file(params.MIXCR)
+MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 ALLELECOUNT   = file(params.ALLELECOUNT)
 FREEC         = file(params.FREEC)
@@ -5708,15 +5708,19 @@ if(params.TCR) {
             tag 'install mixcr'
 
             output:
-            file(".mixcr_install_ok") into mixcr_chck_ch
+            file(".mixcr_install_ok.chck") into (
+                mixcr_chck_ch0,
+                mixcr_chck_ch1,
+                mixcr_chck_ch2
+            )
 
             script:
             """
             curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
             unzip mixcr.zip && \\
-            chmod +x mixcr && \\
-            cp -f mixcr ${mixcr_target} && \\
-            cp -f mixcr.jar ${mixcr_target} && \\
+            chmod +x mixcr*/mixcr && \\
+            cp -f mixcr*/mixcr ${mixcr_target} && \\
+            cp -f mixcr*/mixcr.jar ${mixcr_target} && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
             """
@@ -5727,7 +5731,11 @@ if(params.TCR) {
             tag 'link mixcr'
 
             output:
-            file(".mixcr_install_ok") into mixcr_chck_ch
+            file(".mixcr_install_ok.chck") into (
+                mixcr_chck_ch0,
+                mixcr_chck_ch1,
+                mixcr_chck_ch2
+            )
 
             script:
             """
@@ -5739,7 +5747,7 @@ if(params.TCR) {
         }
     } else {
         mixcr_chck_ch = Channel.fromPath(mixcr_chck_file)
-        (mixcr_chck_ch0, mixcr_chck_ch1, mixcr_chck_ch3) = mixcr_chck_ch.into(3)
+        (mixcr_chck_ch0, mixcr_chck_ch1, mixcr_chck_ch2) = mixcr_chck_ch.into(3)
     }
 
 
@@ -5839,7 +5847,7 @@ if(params.TCR) {
                 readRNAREV,
                 file(mixcr_chck_file)
             ) from reads_tumor_mixcr_RNA_ch
-                .combine(mixcr_chck_ch3)
+                .combine(mixcr_chck_ch2)
 
             output:
             set(
