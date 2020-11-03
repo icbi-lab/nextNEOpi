@@ -119,7 +119,7 @@ summary['GnomADfull']                    = params.databases.GnomADfull
 summary['GnomADfullIdx']                 = params.databases.GnomADfullIdx
 summary['KnownIndels']                   = params.databases.KnownIndels
 summary['KnownIndelsIdx']                = params.databases.KnownIndelsIdx
-summary['priority variant Caller']       = params.priorityCaller
+summary['priority variant Caller']       = params.primaryCaller
 summary['Mutect 1 and 2 minAD']          = params.minAD
 summary['VarScan min_cov']               = params.min_cov
 summary['VarScan min_cov_tumor']         = params.min_cov_tumor
@@ -138,9 +138,6 @@ summary['VEP assembly']                  = params.vep_assembly
 summary['VEP species']                   = params.vep_species
 summary['VEP options']                   = params.vep_options
 summary['Number of scatters']            = params.scatter_count
-summary['Max Memory']                    = params.max_memory
-summary['Max CPUs']                      = params.max_cpus
-summary['Max Time']                      = params.max_time
 summary['Output dir']                    = params.outputDir
 summary['Working dir']                   = workflow.workDir
 summary['TMP dir']                       = params.tmpDir
@@ -405,7 +402,7 @@ PYTHON		  = file(params.PYTHON)
 OPTITYPE	  = file(params.OPTITYPE)
 HLAHD		  = file(params.HLAHD)
 MIXCR		  = file(params.MIXCR)
-MiXMHC2PRED   = file(params.MiXMHC2PRED)
+MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 ALLELECOUNT   = file(params.ALLELECOUNT)
 FREEC         = file(params.FREEC)
 RSCRIPT       = file(params.RSCRIPT)
@@ -671,8 +668,8 @@ process 'ScatteredIntervalListToBed' {
     script:
     """
     gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
-        I=${IntervalsList} \\
-        O=${IntervalsList.baseName}.bed
+        -I ${IntervalsList} \\
+        -O ${IntervalsList.baseName}.bed
     """
 }
 
@@ -1716,9 +1713,10 @@ process 'scatterBaseRecalGATK4' {
 
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
+
     """
     mkdir -p ${params.tmpDir}
-    gatk  --java-options '${params.JAVA_Xmx}' BaseRecalibrator \\
+    gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1835,7 +1833,7 @@ process 'scatterGATK4applyBQSRS' {
     """
     mkdir -p ${params.tmpDir}
     gatk ApplyBQSR \\
-        --java-options '${params.JAVA_Xmx}' \\
+        --java-options ${params.JAVA_Xmx} \\
         --tmp-dir ${params.tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
@@ -1890,10 +1888,10 @@ process 'GatherRecalBamFiles' {
     mkfifo ${procSampleName}_gather.fifo
     gatk --java-options ${java_opts} GatherBamFiles \\
         --TMP_DIR ${params.tmpDir} \\
-        -I ${bam.join(" I=")} \\
-        -O /dev/stdout \\
+        -I ${bam.join(" -I ")} \\
+        -O ${procSampleName}_gather.fifo \\
         --CREATE_INDEX false \\
-        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} | \\
+        --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
     samtools sort \\
         -@${task.cpus} \\
         -m ${params.STperThreadMem} \\
@@ -1985,7 +1983,7 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
           recalNormalBAM, recalNormalBAI
         )}
 
-if (haveGATK3) {
+if (have_GATK3) {
     (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(3)
 } else {
     (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_Varscan_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(4)
@@ -2100,12 +2098,13 @@ process 'gatherMutect2VCFs' {
     ) into gatherMutect2VCFs_out_ch0
 
     script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${params.tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${params.tmpDir} \\
-        -I ${vcf.join(" I=")} \\
+        -I ${vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz
 
     gatk MergeMutectStats \\
@@ -2328,7 +2327,7 @@ process 'CNNScoreVariants' {
     """
     mkdir -p ${params.tmpDir}
 
-    gatk4 CNNScoreVariants \\
+    gatk CNNScoreVariants \\
         --tmp-dir ${params.tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
@@ -2375,7 +2374,7 @@ process 'MergeHaploTypeCallerGermlineVCF' {
 
     gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${params.tmpDir} \\
-        -I ${filtered_germline_vcf.join(" I=")} \\
+        -I ${filtered_germline_vcf.join(" -I ")} \\
         -O ${NormalReplicateId}_germline_CNNscored.vcf.gz
     """
 }
@@ -2566,10 +2565,10 @@ if (have_GATK3) {
         mkfifo ${procSampleName}_gather.fifo
         gatk --java-options ${java_opts} GatherBamFiles \\
             --TMP_DIR ${params.tmpDir} \\
-            -I ${bam.join(" I=")} \\
-            -O /dev/stdout \\
+            -I ${bam.join(" -I ")} \\
+            -O ${procSampleName}_gather.fifo \\
             --CREATE_INDEX false \\
-            --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} | \\
+            --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
         samtools sort \\
             -@${task.cpus} \\
             -m ${params.STperThreadMem} \\
@@ -2758,13 +2757,13 @@ process 'gatherVarscanVCFs' {
 
     gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${params.tmpDir} \\
-        -I ${snp_vcf.join(" I=")} \\
+        -I ${snp_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${params.tmpDir} \\
-        -I ${indel_vcf.join(" I=")} \\
+        -I ${indel_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
@@ -3118,7 +3117,7 @@ if(have_Mutect1) {
 
         gatk --java-options ${java_opts} MergeVcfs \\
             --TMP_DIR ${params.tmpDir} \\
-            -I ${vcf.join(" I=")} \\
+            -I ${vcf.join(" -I ")} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
 
         gatk SelectVariants \\
@@ -3276,14 +3275,13 @@ process StrelkaSomatic {
     tuple(
         TumorReplicateId,
         NormalReplicateId,
-        val("strelka"),
-        file("${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz.tbi")
+        file("${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz.tbi"),
+        file("${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz.tbi"),
     ) into (
-        StrelkaSomatic_out_ch0,
-        StrelkaSomatic_out_ch1
+        StrelkaSomatic_out_ch0
     )
-    file("${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz")
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.tsv")
     file("${TumorReplicateId}_${NormalReplicateId}_runStats.xml")
 
@@ -3304,42 +3302,88 @@ process StrelkaSomatic {
     cp strelka_${TumorReplicateId}/results/stats/runStats.tsv ${TumorReplicateId}_${NormalReplicateId}_runStats.tsv
     cp strelka_${TumorReplicateId}/results/stats/runStats.xml ${TumorReplicateId}_${NormalReplicateId}_runStats.xml
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD MergeVcfs \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${TumorReplicateId}_${NormalReplicateId}_somatic.snvs.vcf.gz \\
-        I=${TumorReplicateId}_${NormalReplicateId}_somatic.indels.vcf.gz \\
-        O=${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
-        SEQUENCE_DICTIONARY=${RefDict}
+    """
+}
 
-    $JAVA8 ${params.JAVA_Xmx} -jar $PICARD SortVcf \\
-        TMP_DIR=${params.tmpDir} \\
-        I=${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
-        O=${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \\
-        SEQUENCE_DICTIONARY=${RefDict}
+process 'finalizeStrelkaVCF' {
+    label 'nextNEOpiENV'
 
-    # rename samples in varscan vcf
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/03_strelka_somatic/",
+        mode: params.publishDirMode
+
+
+    input:
+    tuple(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(somatic_snvs),
+        file(somatic_snvs_tbi),
+        file(somatic_indels),
+        file(somatic_indels_tbi),
+    ) from StrelkaSomatic_out_ch0
+
+    set(
+        file(RefFasta),
+        file(RefIdx),
+        file(RefDict)
+    ) from Channel.value(
+        [ reference.RefFasta,
+          reference.RefIdx,
+          reference.RefDict ]
+    )
+
+    output:
+    tuple(
+        TumorReplicateId,
+        NormalReplicateId,
+        val("strelka"),
+        file("${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz.tbi")
+    ) into (
+        StrelkaSomaticFinal_out_ch0,
+        StrelkaSomaticFinal_out_ch1
+    )
+    file("${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz")
+
+    script:
+    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    """
+
+    gatk --java-options ${java_opts} MergeVcfs \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${somatic_snvs} \\
+        -I ${somatic_indels} \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
+        --SEQUENCE_DICTIONARY ${RefDict}
+
+    gatk --java-options ${java_opts} SortVcf \\
+        --TMP_DIR ${params.tmpDir} \\
+        -I ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
+        -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \\
+        --SEQUENCE_DICTIONARY ${RefDict}
+
+    # rename samples in strelka vcf
     printf "TUMOR ${TumorReplicateId}\nNORMAL ${NormalReplicateId}\n" > vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
-    $BCFTOOLS reheader \\
+    bcftools reheader \\
         -s vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp \\
         ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \\
         > ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz
 
-    $TABIX -p vcf ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz
     rm -f vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
-    $GATK4 SelectVariants \\
+    gatk SelectVariants \\
         --tmp-dir ${params.tmpDir} \\
         --variant ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
         --output ${TumorReplicateId}_${NormalReplicateId}_strelka_somatic_final.vcf.gz
 
-
     """
-
 }
-
 
 // END Strelka2 and Manta
 
@@ -3377,7 +3421,7 @@ process 'mkHCsomaticVCF' {
     ) from FilterMutect2_out_ch1
         .combine(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0, 1])
         .combine(Mutect1_out_ch1, by: [0, 1])
-        .combine(StrelkaSomatic_out_ch0, by: [0, 1])
+        .combine(StrelkaSomaticFinal_out_ch0, by: [0, 1])
 
     output:
     set(
@@ -3419,7 +3463,8 @@ process 'mkHCsomaticVCF' {
 
 }
 
-vep_cache_chck_file = file(params.databases.vep_cache + "/." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck")
+vep_cache_chck_file_name = "." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck"
+vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
 if(!vep_cache_chck_file.exists()) {
 
     log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
@@ -3431,7 +3476,7 @@ if(!vep_cache_chck_file.exists()) {
         tag 'installVEPcache'
 
         output:
-        file(${vep_cache_chck_file}) into vep_cache_ch
+        file("${vep_cache_chck_file_name}") into vep_cache_ch
 
         script:
         """
@@ -3443,7 +3488,8 @@ if(!vep_cache_chck_file.exists()) {
             -c ${params.databases.vep_cache} \\
             --CACHE_VERSION ${params.vep_cache_version} \\
             --CONVERT 2> vep_errors.txt && \\
-        touch ${vep_cache_chck_file}
+        touch ${vep_cache_chck_file_name} && \\
+        cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
         """
 
     }
@@ -3477,7 +3523,7 @@ process 'VepTab' {
     ) from FilterMutect2_out_ch0
         .concat(MergeAndRenameSamplesInVarscanVCF_out_ch0)
         .concat(Mutect1_out_ch0)
-        .concat(StrelkaSomatic_out_ch1)
+        .concat(StrelkaSomaticFinal_out_ch1)
         .concat(mkHCsomaticVCF_out_ch0)
         .flatten()
         .collate(5)
@@ -3507,11 +3553,11 @@ process 'VepTab' {
 
 // CREATE phased VCF
 /*
-    make phased vcf for pVACseq using tumor and germliine variants:
+    make phased vcf for pVACseq using tumor and germline variants:
     based on https://pvactools.readthedocs.io/en/latest/pvacseq/input_file_prep/proximal_vcf.html
 */
 
-// combind germline and somatic variants
+// combined germline and somatic variants
 process 'mkCombinedVCF' {
 
     label 'nextNEOpiENV'
@@ -3540,15 +3586,15 @@ process 'mkCombinedVCF' {
         _,
         file(tumorVCF),
         file(tumorVCFidx)
-    ) from combine(FilterGermlineVariantTranches_out_ch0, by: [0,1])
+    ) from FilterGermlineVariantTranches_out_ch0
         .combine(mkHCsomaticVCF_out_ch1, by: [0,1])          // uses confirmed mutect2 variants
 
     output:
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file(${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz),
-        file(${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz.tbi),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz.tbi"),
     ) into mkCombinedVCF_out_ch
 
 
@@ -3570,7 +3616,7 @@ process 'mkCombinedVCF' {
         --NEW_SAMPLE_NAME ${TumorReplicateId} \\
         -O ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
 
-    gatk --java-options ${java_opts} $PICARD MergeVcfs \\
+    gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${params.tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
         -I ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \\
@@ -3599,7 +3645,7 @@ process 'VEPvcf' {
         TumorReplicateId,
         NormalReplicateId,
         file(combinedVCF),
-        file(combinedVCFidx)
+        file(combinedVCFidx),
         _,
         file(tumorVCF),
         file(tumorVCFidx),
@@ -3745,7 +3791,7 @@ if(have_GATK3) {
 // adopted from sarek nfcore
 process AlleleCounter {
 
-    label 'nextNEOpiENV'
+    label 'AlleleCounter'
 
     tag "$TumorReplicateId - $NormalReplicateId"
 
@@ -4627,8 +4673,7 @@ process 'mhc_extract' {
 
         samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
             samtools sort -@4 -n - | \\
-            samtools fastq -@2 -0 R.fastq \\
-            -i - &
+            samtools fastq -@2 -0 R.fastq - &
         perl -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc.fastq.gz
 
         wait
@@ -4648,8 +4693,7 @@ process 'mhc_extract' {
 
         samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
             samtools sort -@4 -n - | \\
-            samtools fastq -@2 -1 R1.fastq -2 R2.fastq -s /dev/null -0 /dev/null \\
-            -i - &
+            samtools fastq -@2 -1 R1.fastq -2 R2.fastq -s /dev/null -0 /dev/null - &
         perl -ple 'if ((\$. % 4) == 1) { s/\$/ 1:N:0:NNNNNNNN/; }' R1.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R1.fastq.gz &
         perl -ple 'if ((\$. % 4) == 1) { s/\$/ 2:N:0:NNNNNNNN/; }' R2.fastq | gzip -1 > ${TumorReplicateId}_reads_mhc_R2.fastq.gz &
 
@@ -4706,13 +4750,13 @@ process 'pre_map_hla' {
 
     if (single_end)
         """
-        yara -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
+        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
             samtools view -@ $samtools_cpus -h -F 4 -b1 -o mapped_1.bam
         """
     else
         """
         mkfifo R1 R2
-        yara -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
+        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
             samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
             tee R1 R2 > /dev/null &
             samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > mapped_1.bam &
@@ -5225,7 +5269,7 @@ process 'pVACseq' {
     hla_type = (hla_types - ~/\n/)
     NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
     NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
-    phased_vcf_opt = (have_GATK3) ? "-p " vep_phased_vcf_gz : ""
+    phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz : ""
 
     if(!have_GATK3) {
 
@@ -5382,7 +5426,7 @@ process 'pVACtools_generate_protein_seq' {
     ) optional true into pVACtools_generate_protein_seq
 
     script:
-    phased_vcf_opt = (have_GATK3) ? "-p " vep_phased_vcf_gz : ""
+    phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz : ""
 
     if(!have_GATK3) {
 
@@ -5446,35 +5490,38 @@ process 'pepare_mixMHC2_seq' {
 }
 
 mixmhc2pred_chck_file = file(workflow.projectDir + "/bin/.mixmhc2pred_install_ok.chck")
+mixmhc2pred_target = workflow.projectDir + "/bin/MixMHC2pred_unix"
 if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
     process install_mixMHC2pred {
 
         tag 'install mixMHC2pred'
 
         output:
-        file(${mixmhc2pred_chck_file}) into mixmhc2pred_chck_ch
+        file(".mixmhc2pred_install_ok") into mixmhc2pred_chck_ch
 
         script:
         """
-        curl -k ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip
-        unzip mixmhc2pred.zip
-        chmod +x MixMHC2pred_unix
-        cp -f MixMHC2pred_unix ${workflow.projectDir}/bin/
-        touch ${mixmhc2pred_chck_file}
+        curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
+        unzip mixmhc2pred.zip && \\
+        chmod +x MixMHC2pred_unix && \\
+        cp -f MixMHC2pred_unix ${mixmhc2pred_target} && \\
+        touch .mixmhc2pred_install_ok.chck && \\
+        cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
         """
     }
 } else if (!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED != "") {
-    process install_mixMHC2pred {
+    process link_mixMHC2pred {
 
-        tag 'install mixMHC2pred'
+        tag 'link mixMHC2pred'
 
         output:
-        file(${mixmhc2pred_chck_file}) into mixmhc2pred_chck_ch
+        file(".mixmhc2pred_install_ok") into mixmhc2pred_chck_ch
 
         script:
         """
-        ln -s ${params.MiXMHC2PRED} MixMHC2pred_unix ${workflow.projectDir}/bin/MixMHC2pred_unix
-        touch ${mixmhc2pred_chck_file}
+        ln -s ${params.MiXMHC2PRED} ${mixmhc2pred_target} && \\
+        touch .mixmhc2pred_install_ok.chck && \\
+        cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
         """
     }
 } else {
@@ -5498,7 +5545,8 @@ process mixMHC2pred {
         NormalReplicateId,
         mut_peps,
         vep_somatic_gx_vcf_gz,
-        vep_somatic_gx_vcf_gz_tbi
+        vep_somatic_gx_vcf_gz_tbi,
+        file(mixmhc2pred_chck_file)
     ) from pepare_mixMHC2_seq_out_ch0
         .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
         .combine(mixmhc2pred_chck_ch)
@@ -5651,6 +5699,50 @@ process immunogenicity_scoring {
 }
 
 if(params.TCR) {
+
+    mixcr_chck_file = file(workflow.projectDir + "/bin/.mixcr_install_ok.chck")
+    mixcr_target = workflow.projectDir + "/bin/"
+    if(!mixcr_chck_file.exists() && params.MIXCR == "") {
+        process install_mixcr {
+
+            tag 'install mixcr'
+
+            output:
+            file(".mixcr_install_ok") into mixcr_chck_ch
+
+            script:
+            """
+            curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
+            unzip mixcr.zip && \\
+            chmod +x mixcr && \\
+            cp -f mixcr ${mixcr_target} && \\
+            cp -f mixcr.jar ${mixcr_target} && \\
+            touch .mixcr_install_ok.chck && \\
+            cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
+            """
+        }
+    } else if (!mixcr_chck_file.exists() && params.MIXCR != "") {
+        process link_mixcr {
+
+            tag 'link mixcr'
+
+            output:
+            file(".mixcr_install_ok") into mixcr_chck_ch
+
+            script:
+            """
+            ln -s ${params.MIXCR}/mixcr ${mixcr_target} && \\
+            ln -s ${params.MIXCR}/mixcr.jar ${mixcr_target} && \\
+            touch .mixcr_install_ok.chck && \\
+            cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
+            """
+        }
+    } else {
+        mixcr_chck_ch = Channel.fromPath(mixcr_chck_file)
+        (mixcr_chck_ch0, mixcr_chck_ch1, mixcr_chck_ch3) = mixcr_chck_ch.into(3)
+    }
+
+
     process mixcr_DNA_tumor {
 
         label 'nextNEOpiENV'
@@ -5666,8 +5758,10 @@ if(params.TCR) {
             NormalReplicateId,
             readFWD,
             readREV,
-            _
+            _,
+            file(mixcr_chck_file)
         ) from reads_tumor_mixcr_DNA_ch
+            .combine(mixcr_chck_ch0)
 
         output:
         set(
@@ -5679,7 +5773,7 @@ if(params.TCR) {
         reads = (single_end) ? readFWD : readFWD + " " + readREV
         """
         mixcr analyze shotgun \\
-            --align "--threads ${task.cpus}" \\
+            --threads ${task.cpus} \\
             --species hs \\
             --starting-material dna \\
             --only-productive \\
@@ -5703,8 +5797,10 @@ if(params.TCR) {
             NormalReplicateId,
             readFWD,
             readREV,
-            _
+            _,
+            file(mixcr_chck_file)
         ) from reads_normal_mixcr_DNA_ch
+            .combine(mixcr_chck_ch1)
 
         output:
         set(
@@ -5716,7 +5812,7 @@ if(params.TCR) {
         reads = (single_end) ? readFWD : readFWD + " " + readREV
         """
         mixcr analyze shotgun \\
-            --align "--threads ${task.cpus}" \\
+            --threads ${task.cpus} \\
             --species hs \\
             --starting-material dna \\
             --only-productive \\
@@ -5740,8 +5836,10 @@ if(params.TCR) {
                 TumorReplicateId,
                 NormalReplicateId,
                 readRNAFWD,
-                readRNAREV
+                readRNAREV,
+                file(mixcr_chck_file)
             ) from reads_tumor_mixcr_RNA_ch
+                .combine(mixcr_chck_ch3)
 
             output:
             set(
@@ -5753,7 +5851,7 @@ if(params.TCR) {
             readsRNA = (single_end_RNA) ? readRNAFWD : readRNAFWD + " " + readRNAREV
             """
             mixcr analyze shotgun \\
-                --align "--threads ${task.cpus}" \\
+                --threads ${task.cpus} \\
                 --species hs \\
                 --starting-material rna \\
                 --only-productive \\
@@ -5911,7 +6009,7 @@ def defineDatabases() {
         'GnomADfull'     : checkParamReturnFileDatabases("GnomADfull"),
         'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
         'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
-        'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx")
+        'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx"),
         'vep_cache'      : params.databases.vep_cache
     ]
 }

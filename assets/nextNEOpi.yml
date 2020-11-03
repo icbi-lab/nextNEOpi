@@ -17,10 +17,13 @@ dependencies:
 - bcftools
 - varscan
 - bam-readcount
-- cancerit-allelecount
 - yara
 - optitype
-- mixcr
+# mixcr can currently not be distributed via anaconda - license issues
+# there is a pull request from rieder@icbi-lab to add the package as soon
+# issues are solved. We do a local installation from assets for now
+# - mixcr=3.0.13 
+
 
 # core python dependencies for GATK4 (4.1.9.0)
 - conda-forge::python=3.6.10        # do not update
@@ -46,14 +49,19 @@ dependencies:
 - conda-forge::pandas=1.0.3
 
 # core R dependencies; these should only be used for plotting and do not take precedence over core python dependencies!
-# - r-base=3.6.2
-# - r-data.table=1.12.8
-# - r-dplyr=0.8.5
-# - r-getopt=1.20.3
-# - r-ggplot2=3.3.0
-# - r-gplots=3.0.3
-# - r-gsalib=2.1
-# - r-optparse=1.6.4
+- r-base=3.6.2
+- r-data.table
+- r-dplyr
+- r-getopt
+- r-ggplot2
+- r-gplots
+- r-gsalib
+- r-optparse
+- r-reshape2
+- r-caret
+- r-peptides
+- r-doparallel
+- r-sequenza
 
 # other python dependencies; these should be removed after functionality is moved into Java code
 - biopython=1.76
