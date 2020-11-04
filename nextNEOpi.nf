@@ -3476,7 +3476,10 @@ if(!vep_cache_chck_file.exists()) {
         tag 'installVEPcache'
 
         output:
-        file("${vep_cache_chck_file_name}") into vep_cache_ch
+        file("${vep_cache_chck_file_name}") into (
+            vep_cache_ch0,
+            vep_cache_ch1
+        )
 
         script:
         """
@@ -3505,7 +3508,7 @@ vep_plugins_chck_file_name = "." + params.vep_cache_version + "_plugins_ok.chck"
 vep_plugins_chck_file = file(params.databases.vep_cache + "/" + vep_plugins_chck_file_name)
 if(!vep_plugins_chck_file.exists()) {
 
-    log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
+    log.warn "WARNING: VEP plugins not installed, starting installation. This may take a while."
 
     process 'installVEPplugins' {
 
@@ -3514,7 +3517,10 @@ if(!vep_plugins_chck_file.exists()) {
         tag 'installVEPplugins'
 
         output:
-        file("${vep_plugins_chck_file_name}") into vep_plugins_ch
+        file("${vep_plugins_chck_file_name}") into (
+            vep_plugins_ch0,
+            vep_plugins_ch1
+        )
 
         script:
         """
@@ -3523,6 +3529,7 @@ if(!vep_plugins_chck_file.exists()) {
             -a p \\
             -c ${params.databases.vep_cache} \\
             --PLUGINS all 2> vep_errors.txt && \\
+        cp -f ${baseDir}/assets/Wildtype.pm ${params.databases.vep_cache}/Plugins && \\
         touch ${vep_plugins_chck_file_name} && \\
         cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
         """
@@ -3554,7 +3561,8 @@ process 'VepTab' {
         CallerName,
         file(Vcf),
         file(Idx),
-        file(vep_cache_chck_file)
+        file(vep_cache_chck_file),
+        file(vep_plugin_chck_file)
     ) from FilterMutect2_out_ch0
         .concat(MergeAndRenameSamplesInVarscanVCF_out_ch0)
         .concat(Mutect1_out_ch0)
@@ -3583,7 +3591,7 @@ process 'VepTab' {
         --fasta ${params.references.VepFasta} \\
         --format "vcf" \\
         ${params.vep_options} \\
-        --tab
+        --tab 2> vep_errors.txt
     """
 }
 
@@ -3685,7 +3693,8 @@ process 'VEPvcf' {
         _,
         file(tumorVCF),
         file(tumorVCFidx),
-        file(vep_cache_chck_file)
+        file(vep_cache_chck_file),
+        file(vep_plugin_chck_file)
     ) from mkCombinedVCF_out_ch
         .combine(mkHCsomaticVCF_out_ch2, by: [0,1])
         .combine(vep_cache_ch1)
@@ -3695,8 +3704,8 @@ process 'VEPvcf' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf"),
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.tbi"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz.tbi"),
     ) into (
         VEPvcf_out_ch0
     )
@@ -3732,7 +3741,7 @@ process 'VEPvcf' {
         --fasta ${params.references.VepFasta} \\
         --pick --plugin Downstream --plugin Wildtype \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf
+        --vcf 2> vep_errors_0.txt
 
     vep -i ${tumorVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
@@ -3748,7 +3757,7 @@ process 'VEPvcf' {
         --pick --plugin Downstream --plugin Wildtype \\
         --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf
+        --vcf 2> vep_errors_1.txt
 
     bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
         > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
@@ -5526,22 +5535,20 @@ process 'pepare_mixMHC2_seq' {
     """
 }
 
-mixmhc2pred_chck_file = file(workflow.projectDir + "/bin/.mixmhc2pred_install_ok.chck")
-mixmhc2pred_target = workflow.projectDir + "/bin/MixMHC2pred_unix"
+mixmhc2pred_chck_file = file(workflow.workDir + "/.mixmhc2pred_install_ok.chck")
+mixmhc2pred_target = workflow.workDir + "/MixMHC2pred"
 if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
     process install_mixMHC2pred {
 
         tag 'install mixMHC2pred'
 
         output:
-        file(".mixmhc2pred_install_ok") into mixmhc2pred_chck_ch
+        file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
 
         script:
         """
         curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
-        unzip mixmhc2pred.zip && \\
-        chmod +x MixMHC2pred_unix && \\
-        cp -f MixMHC2pred_unix ${mixmhc2pred_target} && \\
+        unzip mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
         touch .mixmhc2pred_install_ok.chck && \\
         cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
         """
@@ -5552,7 +5559,7 @@ if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
         tag 'link mixMHC2pred'
 
         output:
-        file(".mixmhc2pred_install_ok") into mixmhc2pred_chck_ch
+        file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
 
         script:
         """
@@ -5596,7 +5603,7 @@ process mixMHC2pred {
     script:
     alleles = file(allelesFile).readLines().join(" ")
     """
-    MixMHC2pred_unix \\
+    ${mixmhc2pred_target}/MixMHC2pred_unix \\
         -i ${mut_peps} \\
         -o ${TumorReplicateId}_mixMHC2pred.tsv \\
         -a ${alleles}
