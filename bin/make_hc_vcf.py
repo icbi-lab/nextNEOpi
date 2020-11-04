@@ -48,7 +48,7 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
     # some sanity checks
     sorted_primary_contigs = sorted(primary_reader.contigs.keys())
     for cr in confirming_reader:
-        if primary_reader.samples != cr.samples:
+        if sorted(primary_reader.samples) != sorted(cr.samples):
             raise ValueError("Input VCF files must have the same sample column " "headers.")
         if sorted_primary_contigs != sorted(cr.contigs.keys()):
             raise ValueError("Input VCF files must denote the same contigs.")

@@ -3419,8 +3419,8 @@ process 'mkHCsomaticVCF' {
         Strelka_VCF,
         Strelka_IDX
     ) from FilterMutect2_out_ch1
-        .combine(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0, 1])
         .combine(Mutect1_out_ch1, by: [0, 1])
+        .combine(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0, 1])
         .combine(StrelkaSomaticFinal_out_ch0, by: [0, 1])
 
     output:
@@ -3446,14 +3446,14 @@ process 'mkHCsomaticVCF' {
     primary_caller_file = callerMap[params.primaryCaller]
 
     callerMap.remove(params.primaryCaller)
-    confirming_caller_files = callerMap.vlaues().join(" ")
+    confirming_caller_files = callerMap.values().join(" ")
     confirming_caller_names = callerMap.keySet().join(" ")
     """
-    make_hc_vcf.py --priority ${params.priorityCaller} \\
+    make_hc_vcf.py \\
         --primary ${primary_caller_file} \\
         --primary_name ${params.primaryCaller} \\
         --confirming ${confirming_caller_files} \\
-        --confirmint_names ${confirming_caller_names} \\
+        --confirming_names ${confirming_caller_names} \\
         --out_vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.hc.vcf \\
         --out_single_vcf ${TumorReplicateId}_${NormalReplicateId}_Somatic.single.vcf
 
