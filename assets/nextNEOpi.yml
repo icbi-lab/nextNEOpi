@@ -22,7 +22,7 @@ dependencies:
 # mixcr can currently not be distributed via anaconda - license issues
 # there is a pull request from rieder@icbi-lab to add the package as soon
 # issues are solved. We do a local installation from assets for now
-# - mixcr=3.0.13 
+# - mixcr=3.0.13
 
 
 # core python dependencies for GATK4 (4.1.9.0)
@@ -62,6 +62,7 @@ dependencies:
 - r-peptides
 - r-doparallel
 - r-sequenza
+- r-gbm
 
 # other python dependencies; these should be removed after functionality is moved into Java code
 - biopython=1.76

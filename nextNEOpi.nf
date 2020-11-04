@@ -3501,6 +3501,41 @@ if(!vep_cache_chck_file.exists()) {
 
 }
 
+vep_plugins_chck_file_name = "." + params.vep_cache_version + "_plugins_ok.chck"
+vep_plugins_chck_file = file(params.databases.vep_cache + "/" + vep_plugins_chck_file_name)
+if(!vep_plugins_chck_file.exists()) {
+
+    log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
+
+    process 'installVEPplugins' {
+
+        label 'VEP'
+
+        tag 'installVEPplugins'
+
+        output:
+        file("${vep_plugins_chck_file_name}") into vep_plugins_ch
+
+        script:
+        """
+        mkdir -p ${params.databases.vep_cache}
+        vep_install \\
+            -a p \\
+            -c ${params.databases.vep_cache} \\
+            --PLUGINS all 2> vep_errors.txt && \\
+        touch ${vep_plugins_chck_file_name} && \\
+        cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
+        """
+
+    }
+
+} else {
+
+    vep_plugins_ch = Channel.fromPath(vep_plugins_chck_file)
+    (vep_plugins_ch0, vep_plugins_ch1) = vep_plugins_ch.into(2)
+
+}
+
 // Variant Effect Prediction: using ensembl vep
 process 'VepTab' {
 
@@ -3528,6 +3563,7 @@ process 'VepTab' {
         .flatten()
         .collate(5)
         .combine(vep_cache_ch0)
+        .combine(vep_plugins_ch0)
 
     output:
     file("${TumorReplicateId}_${NormalReplicateId}_${CallerName}_vep.txt")
@@ -3653,6 +3689,7 @@ process 'VEPvcf' {
     ) from mkCombinedVCF_out_ch
         .combine(mkHCsomaticVCF_out_ch2, by: [0,1])
         .combine(vep_cache_ch1)
+        .combine(vep_plugins_ch1)
 
     output:
     set(
