@@ -1,0 +1,109 @@
+Bootstrap: docker
+From: continuumio/miniconda3:4.8.2
+
+
+%files
+    ./docker-pvactools/LICENSE /opt/iedb/
+    ./docker-pvactools/netmhccons_1_1_python_interface.py /opt/iedb/
+
+%post
+ apt-get update && apt-get install -y \
+    tcsh \
+    gcc \
+    build-essential \
+    zlib1g-dev \
+    gawk \
+    git \
+    git-core \
+    pandoc \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    liblzma-dev \
+    libssl-dev \
+    cmake \
+    libncurses-dev \
+    patch
+
+
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/conda/bin:$PATH
+
+    conda config --add channels defaults
+    conda config --add channels bioconda
+    conda config --add channels conda-forge
+
+    mkdir -p /opt/iedb
+
+    cd /opt/iedb
+    wget https://downloads.iedb.org/tools/mhci/3.1/IEDB_MHC_I-3.1.tar.gz
+    tar -xzvf IEDB_MHC_I-3.1.tar.gz
+    cd /opt/iedb/mhc_i
+    bash -l -c "./configure"
+    cd /opt/iedb
+    mv -f netmhccons_1_1_python_interface.py /opt/iedb/mhc_i/method/netmhccons-1.1-executable/netmhccons_1_1_executable/netmhccons_1_1_python_interface.py
+    rm IEDB_MHC_I-3.1.tar.gz
+
+    wget https://downloads.iedb.org/tools/mhcii/3.1/IEDB_MHC_II-3.1.tar.gz
+    tar -xzvf IEDB_MHC_II-3.1.tar.gz
+    cd /opt/iedb/mhc_ii
+    bash -l -c "python ./configure.py"
+    cd /opt/iedb
+    rm IEDB_MHC_II-3.1.tar.gz
+
+    mkdir /opt/mhcflurry_data
+    export MHCFLURRY_DOWNLOADS_CURRENT_RELEASE=2.0.0
+    export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
+    pip install --upgrade pip
+    pip install Cython
+    pip install "pysam>=0.15.2"
+    pip install "setuptools>=41.0.0"
+    pip install "numpy<1.19.0,>=1.16.0"
+    pip install mhcflurry==2.0.1
+    pip install mhcnuggets==2.3.3
+    mhcflurry-downloads fetch
+
+    cd /opt
+    mkdir tmp_src
+    cd tmp_src
+    git clone https://github.com/griffithlab/pVACtools.git
+    cd pVACtools
+    git checkout 1b3fa5f
+    pip install xvfbwrapper
+    pip install mhctools
+    python setup.py install
+
+    cd /opt/tmp_src
+    rm -rf pVACtools
+
+    git clone https://github.com/atks/vt.git
+    cd vt
+    make
+    cp vt /usr/local/bin
+    chmod 755 /usr/local/bin/vt
+    cd /opt/tmp_src
+    rm -rf vt
+
+    pip install cyvcf2
+    pip install vatools
+    wget -O /usr/local/bin/bam_readcount_helper.py https://raw.githubusercontent.com/genome/docker-bam_readcount_helper-cwl/master/bam_readcount_helper.py
+    chmod 755 /usr/local/bin/bam_readcount_helper.py
+
+    cd /opt/tmp_src
+    git clone https://github.com/genome/bam-readcount.git
+    cd bam-readcount
+    cmake .
+    make
+    cp bin/bam-readcount /usr/bin
+    chmod 755 /usr/bin/bam-readcount
+    cd /opt/tmp_src
+    rm -rf bam-readcount
+
+    conda install tabix
+    conda install bcftools
+
+
+%environment
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/conda/bin:$PATH
+    export MHCFLURRY_DOWNLOADS_CURRENT_RELEASE=2.0.1
+    export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data

@@ -887,7 +887,7 @@ if (params.trim_adapters) {
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
-            val adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
+            adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
             fastpAdapter = "--adapter_fasta $adapterSeqFile"
         } else {
             if(params.adapterSeq != false) {
@@ -967,7 +967,7 @@ if (params.trim_adapters) {
 
         def fastpAdapter = ''
         if(params.adapterSeqFile != false) {
-            val adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
+            adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
             fastpAdapter = "--adapter_fasta $adapterSeqFile"
         } else {
             if(params.adapterSeq != false) {
@@ -1124,7 +1124,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
 
         def fastpAdapter = ''
         if(params.adapterSeqFileRNAseq != false) {
-            val adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
+            adapterSeqFile = Channel.fromPath(params.adapterSeqFileRNAseq)
             fastpAdapter = "--adapter_fasta $adapterSeqFile"
         } else {
             if(params.adapterSeqRNAseq != false) {
@@ -5452,6 +5452,10 @@ process aggregated_reports {
 process 'pVACtools_generate_protein_seq' {
 
     tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/",
+    mode: params.publishDirMode
+
 
     input:
     set(
