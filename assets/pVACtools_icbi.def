@@ -105,5 +105,5 @@ From: continuumio/miniconda3:4.8.2
 %environment
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
     export PATH=/opt/conda/bin:$PATH
-    export MHCFLURRY_DOWNLOADS_CURRENT_RELEASE=2.0.1
+    export MHCFLURRY_DOWNLOADS_CURRENT_RELEASE=2.0.0
     export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
