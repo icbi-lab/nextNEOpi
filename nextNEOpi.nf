@@ -709,22 +709,15 @@ process FastQC {
         file(tumor_readsFWD),
         file(tumor_readsREV),
         sampleGroup,      // unused so far
-    ) from fastqc_reads_tumor_ch
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
         file(normal_readsFWD),
         file(normal_readsREV),
         sampleGroup,      // unused so far
-    ) from fastqc_reads_normal_ch
-
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
         file(readsRNAseq_FWD),
         file(readsRNAseq_REV)
-    ) from fastqc_readsRNAseq_ch
+    ) from fastqc_reads_tumor_ch
+        .combine(fastqc_reads_normal_ch, by: [0,1])
+        .combine(fastqc_readsRNAseq_ch, by: [0,1])
+
 
     output:
     set(
@@ -1029,15 +1022,11 @@ if (params.trim_adapters) {
             file(tumor_readsFWD),
             file(tumor_readsREV),
             sampleGroup,      // unused so far
-        ) from fastqc_reads_tumor_trimmed_ch
-
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
             file(normal_readsFWD),
             file(normal_readsREV),
             sampleGroup,      // unused so far
-        ) from fastqc_reads_normal_trimmed_ch
+        ) from fastqc_reads_tumor_trimmed_ch
+            .combine(fastqc_reads_normal_trimmed_ch, by: [0,1])
 
 
         output:
