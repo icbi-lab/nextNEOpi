@@ -3576,7 +3576,9 @@ process 'VepTab' {
         --assembly ${params.vep_assembly} \\
         --offline \\
         --dir ${params.databases.vep_cache} \\
-        --cache --dir_cache ${params.databases.vep_cache} \\
+        --cache ${params.vep_cache_version} \\
+        --cache_version
+        --dir_cache ${params.databases.vep_cache} \\
         --fasta ${params.references.VepFasta} \\
         --format "vcf" \\
         ${params.vep_options} \\
@@ -3725,6 +3727,7 @@ process 'VEPvcf' {
         --assembly ${params.vep_assembly} \\
         --offline \\
         --cache \\
+        --cache ${params.vep_cache_version} \\
         --dir ${params.databases.vep_cache} \\
         --dir_cache ${params.databases.vep_cache} \\
         --fasta ${params.references.VepFasta} \\
@@ -3740,6 +3743,7 @@ process 'VEPvcf' {
         --assembly ${params.vep_assembly} \\
         --offline \\
         --cache \\
+        --cache ${params.vep_cache_version} \\
         --dir ${params.databases.vep_cache} \\
         --dir_cache ${params.databases.vep_cache} \\
         --fasta ${params.references.VepFasta} \\
