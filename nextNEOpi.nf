@@ -3820,7 +3820,7 @@ if(have_GATK3) {
         " either account for these manually, or eliminate these candidates. Failure to do so may lead to inclusion\n" +
         " of incorrect peptide sequences."
 
-    (mkPhasedVCF_out_ch0, mkPhasedVCF_out_pVACseq_ch0, generate_protein_fasta_phased_vcf_ch0) = VEPvcf_out_ch0.into(2)
+    (mkPhasedVCF_out_ch0, mkPhasedVCF_out_pVACseq_ch0, generate_protein_fasta_phased_vcf_ch0) = VEPvcf_out_ch0.into(3)
 }
 // END CREATE phased VCF
 
