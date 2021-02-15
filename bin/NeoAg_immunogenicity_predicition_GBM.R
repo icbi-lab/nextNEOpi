@@ -19,7 +19,7 @@ if (length(args)==0 || length(args)==1) {
 
 neo_tab_path = args[1]
 outFile = args[2]
-GBM_model_path = "/data/projects/2019/NeoAG/neoag/Final_gbm_model.rds"
+GBM_model_path = args[3]
 
 #Example input
 neo_tab = fread(neo_tab_path)

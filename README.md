@@ -7,6 +7,9 @@ The pipeline uses the following tools:
 * MuTect1
 * VarScan2
 * Strekla2/Manta
+* Sequenza
+* ASCAT
+* CNVkit
 * OptiType
 * HLAHD
 * pVACseq (netMHCpan, netMHCIIpan, mhcflurry)
@@ -19,6 +22,11 @@ where called with each of the callers and a high confidence vcf file (hc) in
 which only variants that were called by a minimum of 2 of the callers are listed.
 All vcf files are annotatd with VEP. In addition the germline variants are called
 using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
+Copy number variations are analyzed using CNVkit, ASCAT, and sequenza. Tumor purity
+is estimated by ASCAT and Sequenza and is used to derive the clonality measure for
+the predicted neoantigens. Tumor mutational burden (TMB) is calculated for all
+variants over the entire read covered genome and for coding variants on read covered
+exons.
 HLA class I and class II alleles are predicted with OptiType and HLAHD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
@@ -33,27 +41,40 @@ Finally mixcr is run to predict TCRs.
 
 ## 1. Installation
 
-## 1.1 Singularity Image
+## 1.1 Nextflow
 
-To run the pipeline using singularity, the image has to be build:
+Please see the installation instructions at:
+https://www.nextflow.io/index.html#GetStarted
+
+
 ```
-singularity build coolNameHere.sif docker://icbi/wes
+curl -s https://get.nextflow.io | bash
+
 ```
+
 ## 1.2 Software
-To run the pipeline local, the required software has to be installed:
+The pipeline will install almost all required tools via conda environments or Singularity images.
+The only software that needs to be available is Java (minimum version 8), Nextflow (see above), conda,
+Singularity.
+
+Due to license concerns you also need to download and install HLA-HD by your on.
+
+[Not recommended]:
+If you can not run either conda or Singularity you need to install the required software tools
+locally.
+
 * FASTQC        (Version >= 0.11.8)
 * FASTP         (Version >= v0.20.1)
 * JAVA7 		(Version 1.7)
 * JAVA8 		(Version 1.8)
 * BWA 			(Version 0.7.17)
 * SAMTOOLS 		(Version 1.9)
-* PICARD 		(Version 2.22.1)
 * GATK3 		(Version 3.8-0)
-* GATK4 		(Version 4.1.7.0)
+* GATK4 		(Version >= 4.1.7.0)
 * VARSCAN 		(Version 2.4.3)
-* MUTECT1 		(Version 1.1.7)
+* MUTECT1 		(Version 1.1.7) ---- optional
 * BAMREADCOUNT 	(Version 0.8.0)
-* VEP 			(Version v99)
+* VEP 			(Version v102)
 * BGZIP
 * TABIX
 * BCFTOOLS
@@ -62,60 +83,64 @@ To run the pipeline local, the required software has to be installed:
 * SAMBAMBA
 * OPTITYPE
 * PYTHON
+* PERL
 * CONDA
 * YARA
 * HLAHD
-* MIXCR
-* MiXMHC2PRED
 * ALLELECOUNT
-* controlFREEC
 * RSCRIPT
+* SEQUENZA
+* CNVkit
+[End not recommended]
 
 
 ## 1.2 References
 the Pipeline requires different references and databases:
 
-References:
-* RefFasta - reference.fa - Reference Genome; FASTA file
-* RefIdx - reference.fai - Referene Genome Index, FAI file
-* RefDict - reference.dict - Reference Genome Dictionary, DICT file
-* BwaRef - reference.{amb,sa,ann,pac,bwt} - Reference Genome prepared for BWA mem
-* VepFasta - reference.toplevel.fa - Reference genome; ENSEMBL toplevel
-* YaraIndex - hla index for yara mapper
-* HLAHDFreqData
-* HLAHDGeneSplit
-* HLAHDDict
-* AnnoFile - gencode annotation GTF
+please see ```resources.config``
+
+We prepared a bundle with all needed references, indexes and databases which can be obtained from:
+
+https://apps-01.i-med.ac.at/resources/nextNEOpi/nextNEOpi_resources.tar.gz
+
+download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir```
+
+The structure should look as shown blow:
+
+```
+├── {resourcesBaseDir}
+    ├── databases
+    ├── ExomeCaptureKits
+    └── references
+```
 
 
-Databases:
-* MillsGold/Idx - Mills_and_1000G_gold_standard.indels.vcf/idx -  Gold standard Indels database, VCF file, IDX File
-* 1000G high confidence SNPs - VCF + IDX
-* HapMap VCF + IDF
-* Cosmic/Idx - CosmicCodingMuts.vcf - Cosmic conding mutations, VCF file, IDX file
-* DBSNP/Idx - Homo_sapiens_assembly.dbsnp.vcf/idx - SNPS, microsatellites, and small-scale insertions and deletions, VCF file, IDX file
-* GnomAD/Idx - small_exac_common_3.vcf/idx - exonix sites only for contamination estimation from GATK, VCF file, IDX file
-* GnomADfull VCF + IDX
-* KnownIdenls/Idx - Homo_sapiens_assembly.known_indels.vcf/idx - Known Indels from GATK resource Bundle, VCF file, IDX file
-
-see also:
+Ref:
 <https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle>
 <https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/>
 <ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/>
 
+
 ## 2. Usage
-Before running the pipeline, the config files has to be edited. In the
-params.config parameters like references, databases and default settings are defined. The sge.config
-is a template for the configuration to run the pipeline on cluster.
+Before running the pipeline, the config files may need to be edited. In the
+params.config parameters default settings are defined. The process.config
+is a template for the configuration of the single processes, you may check
+the number of cpus assigned for each process.
 
 Every parameter can be edited in the params file or with the command lind by using --NameOfTheParameter given in the params.config.
-References, Databases and Software should be edited in the params.config.
+References, Databases and Software should be edited in the resources.config.
 
 ```
-nextflow run wes.nf "--readsTumor <tumorFastq> --readsNormal <nomralFastq>"|--batchFile <batchFile.csv>" [--single_end]
+nextflow run nextNEOpi.nf "--readsTumor <tumorFastq> --readsNormal <nomralFastq>"|--batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume]
 ```
-#### Singularity
-The singularity mode has to be enabled in the params.config file and the path to the image has to be edited.
+
+#### Profiles: conda or singularity
+We highly recommend to use either the ```singularity``` or ```conda``` profile. You can specify one of the two profiles using the option ```-profile singularity``` or ```-profile conda```
+
+#### Profiles: cluster
+We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
+Please see profiles. to adjust the cluster profile to your schedulin system.
+
 
 #### Single-end reads:
 **--single_end:** sets parameter to TRUE (default false)
@@ -141,7 +166,7 @@ or
  sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1
  sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1
  ...
- sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,groupX
+ sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None,groupX
 
 * CSV-file, single-end T/N reads, NO RNAseq reads:
 
@@ -202,7 +227,7 @@ Note: gender can be XX or Female, XY or Male. If not specified or "None" Male is
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
                             (see params.conf)
 
-## 3. Output
+## 3. Output  (this is not uptodate, will be changed when we have the final structure)
 The Pipeline creates an ouput directory with the following structure:
 ```
 RESULTS

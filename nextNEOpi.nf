@@ -9,6 +9,7 @@ log.info ""
 log.info " Features: "
 log.info " - somatic variants from tumor + matched normal samples"
 log.info " - CNV analysis"
+log.info " - tumor muational burden"
 log.info " - class I and class II HLA typing"
 log.info " - gene fusion peptide prediction using RNAseq data"
 log.info " - peptide MHC binding perdiction"
@@ -53,19 +54,6 @@ single_end_RNA = params.single_end_RNA
 // initialize RNAseq presence
 have_RNAseq = false
 
-// check if we have mutect1 installed
-if (file(params.MUTECT1) && file(params.JAVA7)) {
-    have_Mutect1 = true
-} else {
-    have_Mutect1 = false
-}
-// check if we have GATK3 installed
-if (file(params.MUTECT1) && file(params.JAVA7)) {
-    have_GATK3 = true
-} else {
-    have_GATK3 = false
-}
-
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
 
@@ -88,7 +76,7 @@ if ( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ) {
 
 // Summary
 def summary = [:]
-summary['Pipeline Name']                                   = 'icbi/wes'
+summary['Pipeline Name']                                   = 'icbi/nextNEOpi'
 summary['Pipeline Version']                                = workflow.manifest.version
 if(params.batchFile) summary['Batch file']                 = params.batchFile
 if(params.readsNormal != "NO_FILE") summary['Reads normal fastq files'] = params.readsNormal
@@ -96,29 +84,16 @@ if(params.readsTumor != "NO_FILE") summary['Reads tumor fastq files']   = params
 if(params.customHLA != "NO_FILE") summary['Custom HLA file']   = params.customHLA
 summary['Gender']                        = params.gender
 summary['Read length']                   = params.readLength
-summary['Baits bed file']                = params.references.BaitsBed
-summary['Regions bed file']              = params.references.RegionsBed
+summary['Exome capture kit']             = params.exomeCaptureKit
 summary['Fasta Ref']                     = params.references.RefFasta
-summary['Fasta Index']                   = params.references.RefIdx
-summary['Fasta dict ']                   = params.references.RefDict
-summary['BWA Index']                     = params.references.BwaRef
-summary['VEP Fasta']                     = params.references.VepFasta
 summary['MillsGold']                     = params.databases.MillsGold
-summary['MillsGoldIdx']                  = params.databases.MillsGoldIdx
 summary['hcSNPS1000G']                   = params.databases.hcSNPS1000G
-summary['hcSNPS1000GIdx']                = params.databases.hcSNPS1000GIdx
 summary['HapMap']                        = params.databases.HapMap
-summary['HapMapIdx']                     = params.databases.HapMapIdx
 summary['Cosmic']                        = params.databases.Cosmic
-summary['CosmicIdx']                     = params.databases.CosmicIdx
 summary['DBSNP']                         = params.databases.DBSNP
-summary['DBSNPIdx']                      = params.databases.DBSNPIdx
 summary['GnomAD']                        = params.databases.GnomAD
-summary['GnomADIdx']                     = params.databases.GnomADIdx
 summary['GnomADfull']                    = params.databases.GnomADfull
-summary['GnomADfullIdx']                 = params.databases.GnomADfullIdx
 summary['KnownIndels']                   = params.databases.KnownIndels
-summary['KnownIndelsIdx']                = params.databases.KnownIndelsIdx
 summary['priority variant Caller']       = params.primaryCaller
 summary['Mutect 1 and 2 minAD']          = params.minAD
 summary['VarScan min_cov']               = params.min_cov
@@ -379,33 +354,64 @@ if (! params.batchFile) {
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
-FASTQC        = file(params.FASTQC)
-FASTP         = file(params.FASTP)
-BWA           = file(params.BWA)
-VARSCAN       = file(params.VARSCAN)
-GATK4         = file(params.GATK4)
-GATK3         = file(params.GATK3)
-MUTECT1       = file(params.MUTECT1)
-SAMTOOLS      = file(params.SAMTOOLS)
-SAMBAMBA      = file(params.SAMBAMBA)
-VEP           = file(params.VEP)
-PICARD        = file(params.PICARD)
-BAMREADCOUNT  = file(params.BAMREADCOUNT)
-JAVA8         = file(params.JAVA8)
-JAVA7         = file(params.JAVA7)
-PERL          = file(params.PERL)
-BGZIP         = file(params.BGZIP)
-TABIX         = file(params.TABIX)
-BCFTOOLS      = file(params.BCFTOOLS)
-YARA		  = file(params.YARA)
-PYTHON		  = file(params.PYTHON)
-OPTITYPE	  = file(params.OPTITYPE)
-HLAHD		  = file(params.HLAHD)
+HLAHD_DIR		  = file(params.HLAHD_DIR)
 MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
-ALLELECOUNT   = file(params.ALLELECOUNT)
-FREEC         = file(params.FREEC)
-RSCRIPT       = file(params.RSCRIPT)
+
+// check HLAHD
+HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
+if (checkToolAvailable(HLAHD, "exists", "warn")) {
+    HLAHD_PATH = HLAHD_DIR + "/bin"
+} else {
+    exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
+}
+
+// check if all tools are installed when not running conda or singularity
+if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
+    have_vep = false
+    def execTools = ["fastqc", "fastp", "bwa", "samtools", "sambamba", "gatk", "vep", "bam-readcount",
+                     "perl", "bgzip", "tabix", "bcftools", "yara_mapper", "python", "cnvkit.py",
+                     "OptiTypePipeline.py", "alleleCounter", "freec", "Rscript", "java", "multiqc",
+                     "sequenza-utils"]
+
+    for (tool in execTools) {
+        checkToolAvailable(tool, "inPath", "error")
+    }
+
+    VARSCAN = "java " + params.JAVA_Xmx + " -jar " + file(params.VARSCAN)
+    have_vep = true
+} else {
+    VARSCAN = "varscan " + params.JAVA_Xmx
+}
+
+// check if we have mutect1 installed
+have_Mutect1 = false
+if (file(params.MUTECT1) && file(params.JAVA7)) {
+    if(checkToolAvailable(params.JAVA7, "inPath", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
+        JAVA7 = file(params.JAVA7)
+        MUTECT1 = file(params.MUTECT1)
+        have_Mutect1 = true
+    }
+}
+
+// check if we have GATK3 installed
+have_GATK3 = false
+if (file(params.GATK3) && file(params.JAVA8 && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
+    if(checkToolAvailable(params.JAVA8, "inPath", "warn") && checkToolAvailable(params.GATK3, "exists", "warn")) {
+        JAVA8 = file(params.JAVA8)
+        GATK3 = file(params.GATK3)
+        have_GATK3 = true
+    }
+} else if (workflow.profile.contains('singularity')) {
+    JAVA8 = "java"
+    GATK3 = "/usr/local/opt/gatk-3.8/GenomeAnalysisTK.jar"
+    have_GATK3 = true
+} else if (workflow.profile.contains('conda')) {
+    JAVA8 = "java"
+    GATK3 = "\$CONDA_PREFIX/opt/gatk-3.8/GenomeAnalysisTK.jar"
+    have_GATK3 = true
+}
+
 
 /*
 ________________________________________________________________________________
@@ -1973,9 +1979,22 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
         )}
 
 if (have_GATK3) {
-    (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(3)
+    (
+        BaseRecalGATK4_out_Mutect2_ch0,
+        BaseRecalGATK4_out_MantaSomaticIndels_ch0,
+        BaseRecalGATK4_out_StrelkaSomatic_ch0,
+        BaseRecalGATK4_out_MutationalBurden_ch0,
+        BaseRecalGATK4_out_MutationalBurden_ch1,
+    ) = BaseRecalGATK4_out.into(5)
 } else {
-    (BaseRecalGATK4_out_Mutect2_ch0, BaseRecalGATK4_out_Varscan_ch0, BaseRecalGATK4_out_MantaSomaticIndels_ch0, BaseRecalGATK4_out_StrelkaSomatic_ch0) = BaseRecalGATK4_out.into(4)
+    (
+        BaseRecalGATK4_out_Mutect2_ch0,
+        BaseRecalGATK4_out_MantaSomaticIndels_ch0,
+        BaseRecalGATK4_out_StrelkaSomatic_ch0,
+        BaseRecalGATK4_out_MutationalBurden_ch0,
+        BaseRecalGATK4_out_MutationalBurden_ch1,
+        BaseRecalGATK4_out
+    ) = BaseRecalGATK4_out.into(6)
 }
 
 /*
@@ -2443,6 +2462,8 @@ process 'FilterGermlineVariantTranches' {
 if (have_GATK3) {
     process 'IndelRealignerIntervals' {
 
+        label 'GATK3'
+
         tag "$TumorReplicateId"
 
         input:
@@ -2620,7 +2641,24 @@ if (have_GATK3) {
 } else {
 
     log.info "INFO: GATK3 not installed! Can not generate indel realigned BAMs for varscan and mutect1\n"
-    VarscanBAMfiles_ch = BaseRecalGATK4_out_Varscan_ch0
+
+    (
+        VarscanBAMfiles_ch,
+        GatherRealignedBamFiles_out_Mutect1scattered_ch0,
+        GatherRealignedBamFiles_out_Sequenza_ch0,
+        BaseRecalGATK4_out
+    ) = BaseRecalGATK4_out.into(4)
+
+    GatherRealignedBamFilesTumor_out_FilterVarscan_ch0 = BaseRecalGATK4_out
+                                                            .map{ TumorReplicateId, NormalReplicateId,
+                                                                  recalTumorBAM, recalTumorBAI,
+                                                                  recalNormalBAM, recalNormalBAI -> tuple(
+                                                                      TumorReplicateId, NormalReplicateId,
+                                                                      recalTumorBAM, recalTumorBAI
+                                                                  )
+                                                            }
+    GatherRealignedBamFiles_out_AlleleCounter_ch0 = GatherRecalBamFiles_out_IndelRealignerIntervals_ch0
+
 } // END if have GATK3
 
 process 'VarscanSomaticScattered' {
@@ -3012,14 +3050,10 @@ if(have_Mutect1) {
 
         set(
             file(DBSNP),
-            file(DBSNPIdx),
-            file(Cosmic),
-            file(CosmicIdx)
+            file(DBSNPIdx)
         ) from Channel.value(
             [ database.DBSNP,
-            database.DBSNPIdx,
-            database.Cosmic,
-            database.CosmicIdx ]
+              database.DBSNPIdx ]
         )
 
         output:
@@ -3032,13 +3066,17 @@ if(have_Mutect1) {
         ) into Mutect1scattered_out_ch0
 
         script:
+        cosmic = ( file(params.databases.Cosmic).exists() &&
+                   file(params.databases.CosmicIdx).exists()
+                 ) ? "--cosmic " + file(params.databases.Cosmic)
+                   : ""
         """
         mkdir -p ${params.tmpDir}
 
         $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \\
             --analysis_type MuTect \\
             --reference_sequence ${RefFasta} \\
-            --cosmic ${Cosmic} \\
+            ${cosmic} \\
             --dbsnp ${DBSNP} \\
             -L ${intervals} \\
             --input_file:normal ${Normalbam} \\
@@ -3454,7 +3492,7 @@ process 'mkHCsomaticVCF' {
 
 vep_cache_chck_file_name = "." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck"
 vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
-if(!vep_cache_chck_file.exists()) {
+if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
 
     log.warn "WARNING: VEP cache not installed, starting installation. This may take a while."
 
@@ -3471,19 +3509,24 @@ if(!vep_cache_chck_file.exists()) {
         )
 
         script:
-        """
-        mkdir -p ${params.databases.vep_cache}
-        vep_install \\
-            -a cf \\
-            -s ${params.vep_species} \\
-            -y ${params.vep_assembly} \\
-            -c ${params.databases.vep_cache} \\
-            --CACHE_VERSION ${params.vep_cache_version} \\
-            --CONVERT 2> vep_errors.txt && \\
-        touch ${vep_cache_chck_file_name} && \\
-        cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
-        """
-
+        if(!have_vep)
+            """
+            mkdir -p ${params.databases.vep_cache}
+            vep_install \\
+                -a cf \\
+                -s ${params.vep_species} \\
+                -y ${params.vep_assembly} \\
+                -c ${params.databases.vep_cache} \\
+                --CACHE_VERSION ${params.vep_cache_version} \\
+                --CONVERT 2> vep_errors.txt && \\
+            echo "OK" > ${vep_cache_chck_file_name} && \\
+            cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
+            """
+        else
+            """
+            echo "OK" > ${vep_cache_chck_file_name} && \\
+            cp -f  ${vep_cache_chck_file_name} ${vep_cache_chck_file}
+            """
     }
 
 } else {
@@ -3495,7 +3538,7 @@ if(!vep_cache_chck_file.exists()) {
 
 vep_plugins_chck_file_name = "." + params.vep_cache_version + "_plugins_ok.chck"
 vep_plugins_chck_file = file(params.databases.vep_cache + "/" + vep_plugins_chck_file_name)
-if(!vep_plugins_chck_file.exists()) {
+if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
 
     log.warn "WARNING: VEP plugins not installed, starting installation. This may take a while."
 
@@ -3512,17 +3555,23 @@ if(!vep_plugins_chck_file.exists()) {
         )
 
         script:
-        """
-        mkdir -p ${params.databases.vep_cache}
-        vep_install \\
-            -a p \\
-            -c ${params.databases.vep_cache} \\
-            --PLUGINS all 2> vep_errors.txt && \\
-        cp -f ${baseDir}/assets/Wildtype.pm ${params.databases.vep_cache}/Plugins && \\
-        touch ${vep_plugins_chck_file_name} && \\
-        cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
-        """
-
+        if(!have_vep)
+            """
+            mkdir -p ${params.databases.vep_cache}
+            vep_install \\
+                -a p \\
+                -c ${params.databases.vep_cache} \\
+                --PLUGINS all 2> vep_errors.txt && \\
+            cp -f ${baseDir}/assets/Wildtype.pm ${params.databases.vep_cache}/Plugins && \\
+            cp -f ${baseDir}/assets/Frameshift.pm ${params.databases.vep_cache}/Plugins && \\
+            echo "OK" > ${vep_plugins_chck_file_name} && \\
+            cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
+            """
+        else
+            """
+            echo "OK" > ${vep_plugins_chck_file_name} && \\
+            cp -f  ${vep_plugins_chck_file_name} ${vep_plugins_chck_file}
+            """
     }
 
 } else {
@@ -3708,7 +3757,9 @@ process 'VEPvcf' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
         VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
-        VEPvcf_out_ch2
+        VEPvcf_out_ch2,
+        VEPvcf_out_ch3,
+        VEPvcf_out_ch4
     )
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
@@ -3730,9 +3781,11 @@ process 'VEPvcf' {
         --cache_version ${params.vep_cache_version} \\
         --dir ${params.databases.vep_cache} \\
         --dir_cache ${params.databases.vep_cache} \\
+        --hgvs \\
         --fasta ${params.references.VepFasta} \\
-        --pick --plugin Downstream --plugin Wildtype \\
+        --pick --plugin Frameshift --plugin Wildtype \\
         --symbol --terms SO --transcript_version --tsl \\
+        --format vcf \\
         --vcf 2> vep_errors_0.txt
 
     vep -i ${tumorVCF} \\
@@ -3746,8 +3799,9 @@ process 'VEPvcf' {
         --cache_version ${params.vep_cache_version} \\
         --dir ${params.databases.vep_cache} \\
         --dir_cache ${params.databases.vep_cache} \\
+        --hgvs \\
         --fasta ${params.references.VepFasta} \\
-        --pick --plugin Downstream --plugin Wildtype \\
+        --pick --plugin Frameshift --plugin Wildtype \\
         --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
         --vcf 2> vep_errors_1.txt
@@ -3766,6 +3820,8 @@ process 'VEPvcf' {
 
 if(have_GATK3) {
     process 'ReadBackedphasing' {
+
+        label 'GATK3'
 
         tag "$TumorReplicateId"
 
@@ -3824,6 +3880,94 @@ if(have_GATK3) {
 }
 // END CREATE phased VCF
 
+
+// mutational burden all variants all covered positions
+process 'MutationalBurden' {
+
+    label 'nextNEOpiENV'
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/18_MutationalBurden/",
+        mode: params.publishDirMode
+
+
+    input:
+        set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(Tumorbam),
+        file(Tumorbai),
+        file(Normalbam),
+        file(Normalbai),
+        file(vep_somatic_vcf_gz),
+        file(vep_somatic_vcf_gz_tbi),
+    ) from BaseRecalGATK4_out_MutationalBurden_ch0
+        .combine(VEPvcf_out_ch3, by: [0,1])
+
+
+    output:
+    file("${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt")
+
+
+    script:
+    """
+    mutationalLoad.py \\
+        --normal_bam ${Normalbam} \\
+        --tumor_bam ${Tumorbam} \\
+        --vfc ${vep_somatic_vcf_gz} \\
+        --min_coverage 5 \\
+        --min_BQ 20 \\
+        --cpus ${task.cpus} \\
+        --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt
+
+    """
+}
+
+// mutational burden coding variants coding (exons) covered positions
+process 'MutationalBurdenCoding' {
+
+    label 'nextNEOpiENV'
+
+    tag "$TumorReplicateId - $NormalReplicateId"
+
+    publishDir "$params.outputDir/$TumorReplicateId/18_MutationalBurden/",
+        mode: params.publishDirMode
+
+    input:
+        set(
+        TumorReplicateId,
+        NormalReplicateId,
+        file(Tumorbam),
+        file(Tumorbai),
+        file(Normalbam),
+        file(Normalbai),
+        file(vep_somatic_vcf_gz),
+        file(vep_somatic_vcf_gz_tbi),
+    ) from BaseRecalGATK4_out_MutationalBurden_ch1
+        .combine(VEPvcf_out_ch4, by: [0,1])
+
+
+    output:
+    file("${TumorReplicateId}_${NormalReplicateId}_mutational_burden_coding.txt")
+
+
+    script:
+    """
+    mutationalLoad.py \\
+        --normal_bam ${Normalbam} \\
+        --tumor_bam ${Tumorbam} \\
+        --vfc ${vep_somatic_vcf_gz} \\
+        --min_coverage 5 \\
+        --min_BQ 20 \\
+        --bed ./gencode.v33.primary_assembly.annotation.exon_merged.bed
+        --variant_type coding \\
+        --cpus ${task.cpus} \\
+        --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt
+
+    """
+}
+
 // CNVs: ASCAT + FREEC
 
 
@@ -3875,7 +4019,7 @@ process AlleleCounter {
             -b ${BAM} \\
             -f 0 \\
             -o ${outFileName}
-    """
+        """
     else
         """
         alleleCounter \\
@@ -4770,7 +4914,9 @@ process 'pre_map_hla' {
         file(readsFWD),
         file(readsREV),
     ) from reads_tumor_hla_ch
-    val yaraIdx from Channel.value(reference.YaraIndexDNA)
+
+    file yaraIdx_files from Channel.value(reference.YaraIndexDNA)
+    val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
 
     output:
     set (
@@ -4838,7 +4984,8 @@ process 'OptiType' {
 
     script:
     """
-    OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+    OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
     mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
     mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
     rm -rf ./tmp/
@@ -4859,7 +5006,9 @@ if (have_RNAseq) {
             readRNAFWD,
             readRNAREV
         ) from reads_tumor_optitype_ch
-        val yaraIdx from Channel.value(reference.YaraIndexRNA)
+
+    file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
+    val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
 
         output:
         set (
@@ -4919,9 +5068,10 @@ if (have_RNAseq) {
         script:
         if (single_end_RNA)
             """
-            MHC_MAPPED=`$SAMTOOLS view -c ${reads}`
+            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+            MHC_MAPPED=`samtools view -c ${reads}`
             if [ "\$MHC_MAPPED" != "0" ]; then
-                OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
                 mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
@@ -4932,10 +5082,11 @@ if (have_RNAseq) {
             """
         else
             """
-            MHC_MAPPED_FWD=`$SAMTOOLS view -c ${reads[0]}`
-            MHC_MAPPED_REV=`$SAMTOOLS view -c ${reads[1]}`
+            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+            MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
+            MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
             if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
-                OptiTypePipeline.py -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
                 mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
                 mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
                 rm -rf ./tmp/
@@ -4972,9 +5123,10 @@ process 'run_hla_hd' {
         file(readsFWD),
         file(readsREV)
     ) from reads_tumor_hlaHD_ch
-    val frData from Channel.value(reference.HLAHDFreqData)
+
+    file frData from Channel.value(reference.HLAHDFreqData)
     file gSplit from Channel.value(reference.HLAHDGeneSplit)
-    val dict from Channel.value(reference.HLAHDDict)
+    file dict from Channel.value(reference.HLAHDDict)
 
     output:
     set (
@@ -4986,7 +5138,7 @@ process 'run_hla_hd' {
     )
 
     script:
-    hlahd_p = Channel.value(params.HLAHD_PATH).getVal()
+    hlahd_p = Channel.value(HLAHD_PATH).getVal()
 
     if (single_end)
         """
@@ -5534,7 +5686,7 @@ process 'pepare_mixMHC2_seq' {
 
 mixmhc2pred_chck_file = file(workflow.workDir + "/.mixmhc2pred_install_ok.chck")
 mixmhc2pred_target = workflow.workDir + "/MixMHC2pred"
-if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
+if(( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED == "") {
     process install_mixMHC2pred {
 
         tag 'install mixMHC2pred'
@@ -5546,11 +5698,11 @@ if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
         """
         curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
         unzip mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
-        touch .mixmhc2pred_install_ok.chck && \\
+        echo "OK" > .mixmhc2pred_install_ok.chck && \\
         cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
         """
     }
-} else if (!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED != "") {
+} else if (( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED != "") {
     process link_mixMHC2pred {
 
         tag 'link mixMHC2pred'
@@ -5561,7 +5713,7 @@ if(!mixmhc2pred_chck_file.exists() && params.MiXMHC2PRED == "") {
         script:
         """
         ln -s ${params.MiXMHC2PRED} ${mixmhc2pred_target} && \\
-        touch .mixmhc2pred_install_ok.chck && \\
+        echo "OK" > .mixmhc2pred_install_ok.chck && \\
         cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
         """
     }
@@ -5577,8 +5729,6 @@ process mixMHC2pred {
 
     publishDir "$params.outputDir/$TumorReplicateId/12_mixMHC2pred",
         mode: params.publishDirMode
-
-    label 'nextNEOpiENV'
 
     input:
     set(
@@ -5700,7 +5850,7 @@ process csin {
 
 process immunogenicity_scoring {
 
-    label 'nextNEOpiENV'
+    label 'IGS'
 
     tag "$TumorReplicateId"
 
@@ -5730,7 +5880,8 @@ process immunogenicity_scoring {
     NR_EPI=`wc -l ./${TumorReplicateId}_epitopes.tsv | cut -d" " -f 1`
     if [ \$NR_EPI -gt 1 ]; then
         NeoAg_immunogenicity_predicition_GBM.R \\
-            ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv
+            ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv \\
+            ${baseDir}/assets/Final_gbm_model.rds \\
         immuno_score.py \\
             --pvacseq_tsv $pvacseq_file \\
             --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
@@ -5918,6 +6069,8 @@ if(params.TCR) {
 */
 process multiQC {
 
+    label 'nextNEOpiENV'
+
     publishDir "${params.outputDir}/$TumorReplicateId/02_QC", mode: params.publishDirMode
 
     input:
@@ -5947,6 +6100,8 @@ process multiQC {
 
     script:
     """
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
     multiqc .
     """
 
@@ -5984,7 +6139,7 @@ def setExomeCaptureKit(captureKit) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 19) exit 1, """
+        if (params.references.size() != 20) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -6005,12 +6160,13 @@ def defineReference() {
             'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
             'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
             'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
             'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
         ]
     } else {
-        if (params.references.size() < 17) exit 1, """
+        if (params.references.size() < 18) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -6030,6 +6186,7 @@ def defineReference() {
             'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
             'STARidx'           : checkParamReturnFileReferences("STARidx"),
             'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
+            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
             'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
             'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
@@ -6038,7 +6195,7 @@ def defineReference() {
 }
 
 def defineDatabases() {
-    if (params.databases.size() != 17) exit 1, """
+    if (params.databases.size() < 15) exit 1, """
     ERROR: Not all Databases needed found in configuration
     Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
     """
@@ -6049,8 +6206,6 @@ def defineDatabases() {
         'hcSNPS1000GIdx' : checkParamReturnFileDatabases("hcSNPS1000GIdx"),
         'HapMap'         : checkParamReturnFileDatabases("HapMap"),
         'HapMapIdx'      : checkParamReturnFileDatabases("HapMapIdx"),
-        'Cosmic'         : checkParamReturnFileDatabases("Cosmic"),
-        'CosmicIdx'      : checkParamReturnFileDatabases("CosmicIdx"),
         'DBSNP'          : checkParamReturnFileDatabases("DBSNP"),
         'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
         'GnomAD'         : checkParamReturnFileDatabases("GnomAD"),
@@ -6063,13 +6218,48 @@ def defineDatabases() {
     ]
 }
 
+def checkToolAvailable(tool, check, errMode) {
+    def checkResult = false
+    def res = ""
+
+    if (check == "inPath") {
+        def chckCmd = "which " + tool
+        res = chckCmd.execute().text.trim()
+    }
+    if (check == "exists") {
+        if (file(tool).exists()) {
+            res = tool
+        }
+    }
+
+    if (res == "") {
+        def msg = tool + " not found, please make sure " + tool + " is installed"
+
+        if(errMode == "err") {
+            msg = "ERROR: " + msg
+            msg = (check == "inPath") ? msg + " and in your \$PATH" : msg
+            exit(1, msg)
+        } else {
+            msg = "Warning: " + msg
+            msg = (check == "inPath") ? msg + " and in your \$PATH" : msg
+            println("Warning: " + msg)
+        }
+    } else {
+        println("Found " + tool + " at: " + res)
+        checkResult = true
+    }
+
+    return checkResult
+}
+
+
 def helpMessage() {
     log.info ""
     log.info "----------------------------"
     log.info "--        U S A G E       NOT UP TO DATE PLEASE FIX --"
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run wes.nf "--readsTumor|--batchFile" "[--readsNormal]" "--RegionsBed" "--BaitsBed" [--single_end]'
+    log.info ' nextflow run nextNEOpi.nf ["--readsTumor" "--readsNormal"] | ["--batchFile"] "-profile [conda|singularity],[cluster]" ["-resume"]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
@@ -6080,21 +6270,41 @@ def helpMessage() {
     log.info " Mandatory arguments:"
     log.info " --------------------"
     log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
+    log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
     log.info "   or"
     log.info "--batchFile"
-    log.info "CSV-file, paired-end T/N reads:"
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,HLAfile,group"
-    log.info "tumor1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,None,group1"
-    log.info "tumor2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,None,group1"
-    log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,NormalN_reads_1.fastq,NormalN_reads_2.fastq,None,groupX"
     log.info ""
-    log.info "CSV-file, single-end T only reads:"
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,readsNormalFWD,readsNormalREV,HLAfile,group"
-    log.info "tumor1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,noname,NO_FILE,NO_FILE,None,group1"
-    log.info "tumor2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,noname,NO_FILE,NO_FILE,None,group1"
+    log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
+
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1"
+    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,None,,None,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX,groupX"
+
+    log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
+
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1"
+    log.info "..."
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None,groupX"
+
+    log.info "CSV-file, single-end T/N reads, NO RNAseq reads:"
+
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1"
+    log.info "..."
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX,groupX"
+
+
+    log.info "Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all"
+    log.info "DNA reads paired-end and all RNAseq reads single-end or vice-versa."
+
+    log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below"
+
+    log.info "Note: gender can be XX or Female, XY or Male. If not specified or \"None\" Male is assumed"
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
@@ -6103,56 +6313,31 @@ def helpMessage() {
     log.info ""
     log.info " Optional argument:"
     log.info " ------------------"
-    log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ file (can be zipped)"
     log.info "--tumorSampleName \t\t  tumor sample name. If not specified samples will be named according to the fastq filenames."
     log.info "--normalSampleName \t\t  normal sample name. If not specified samples will be named according to the fastq filenames."
-    log.info "--trim_adapters \t\t  If true Illumina universal adpter (AGATCGGAAGAG) will be trimmed from reads unless adapter seqs are provided."
+    log.info "--trim_adapters \t\t  If true adpter sequences are automatically determined and will be trimmed from reads. If"
+    log.info "          --adapterSeq (string of atapter sequence) or --adapterSeqFile (fasta file with adapter sequences) is provided"
+    log.info "          then adapters will be used as specified (no automatic detection). Default: false"
     log.info "--adapterSeq \t\t  String of atapter sequence (see --trim_adapers)."
     log.info "--adapterSeqFile \t\t  Fasta file with atapter sequences (see --trim_adapers)."
+    log.info "--trim_adapters_RNAseq \t\t  If true adpter sequences are automatically determined and will be trimmed from reads. If"
+    log.info "          --adapterSeqRNAseq (string of atapter sequence) or --adapterSeqFileRNAseq (fasta file with adapter sequences)"
+    log.info "           is provided then adapters will be used as specified (no automatic detection). Default: false"
+    log.info "--adapterSeqRNAseq \t\t  String of atapter sequence (see --trim_adapers_RNAseq)."
+    log.info "--adapterSeqFileRNAseq \t\t  Fasta file with atapter sequences (see --trim_adapers_RNAseq)."
     log.info ""
-    log.info " All references, databases, software should be edited in the nextflow.config file"
+    log.info " All references, databases, software should be edited in the resources.config file"
     log.info ""
-    log.info " Mandatory references:"
-    log.info " ---------------------"
-    log.info " RefFasta \t\t reference.fa \t\t\t Reference Genome; FASTA file"
-    log.info " RefIdx \t\t\t reference.fai \t\t\t Referene Genome Index, FAI file"
-    log.info " RefDict \t\t reference.dict \t\t Reference Genome Dictionary, DICT file"
-    log.info " BwaRef \t\t\t reference.{amb,sa,ann,pac,bwt}  Reference Genome prepared for BWA mem"
-    log.info " VepFasta \t\t reference.toplevel.fa \t\t Reference genome; ENSEMBL toplevel"
-    log.info ""
-    log.info " Mandatory databases:"
-    log.info " --------------------"
-    log.info " MillsGold/Idx \t\t Mills_and_1000G_gold_standard.indels.vcf/idx \t Gold standard Indels database, VCF file, IDX File"
-    log.info " hcSNPS1000G/Idx \t\t 1000G_phase1.snps.high_confidence.hg38.vcf.gz/idx \t high confidence SNPS from 1000G project, VCF file, IDX File"
-    log.info " HapMap/Idx \t\t hapmap_3.3.hg38.vcf.gz/idx \t HapMap for germline filtration of HaploType caller, VCF file, IDX File"
-    log.info " Cosmic/Idx \t\t CosmicCodingMuts.vcf \t\t\t\t Cosmic conding mutations, VCF file, IDX file"
-    log.info " DBSNP/Idx \t\t Homo_sapiens_assembly.dbsnp.vcf/idx \t\t SNPS, microsatellites, and small-scale insertions and deletions, VCF file, IDX file"
-    log.info " GnomAD/Idx \t\t small_exac_common_3.vcf/idx \t\t\t exonix sites only for contamination estimation from GATK, VCF file, IDX file"
-    log.info " GnomADfull/Idx \t\t af-only-gnomad.hg38.vcf.gz/idx \t\t\t for mutect2, VCF file, IDX file"
-    log.info " KnownIdenls/Idx \t Homo_sapiens_assembly.known_indels.vcf/idx \t Known Indels from GATK resource Bundle, VCF file, IDX file"
-    log.info ""
-    log.info " Required software:"
-    log.info " ------------------"
-    log.info " JAVA7 \t\t\t Version 1.7"
-    log.info " JAVA8 \t\t\t Version 1.8"
-    log.info " BWA \t\t\t Version 0.7.17"
-    log.info " SAMTOOLS \t\t Version 1.9"
-    log.info " PICARD \t\t\t Version 2.21.4"
-    log.info " GATK3 \t\t\t Version 3.8-0"
-    log.info " GATK4 \t\t\t Version 4.1.4.1"
-    log.info " VARSCAN \t\t Version 2.4.3"
-    log.info " MUTECT1 \t\t Version 1.1.7"
-    log.info " BAMREADCOUNT \t\t Version 0.8.0"
-    log.info " VEP \t\t\t Version 2.0"
+    log.info " For further options see the README.md and the params.config files"
     log.info "-------------------------------------------------------------------------"
 }
 
 // workflow complete
 workflow.onComplete {
     // Set up the e-mail variables
-    def subject = "[icbi/wes] Successful: $workflow.runName"
+    def subject = "[icbi/nextNEOpi] Successful: $workflow.runName"
     if(!workflow.success){
-        subject = "[icbi/wes] FAILED: $workflow.runName"
+        subject = "[icbi/nextNEOpi] FAILED: $workflow.runName"
     }
     def email_fields = [:]
     email_fields['version'] = workflow.manifest.version
@@ -6200,11 +6385,11 @@ workflow.onComplete {
             if( params.plaintext_email ){ throw GroovyException('Send plaintext e-mail, not HTML') }
             // Try to send HTML e-mail using sendmail
             [ 'sendmail', '-t' ].execute() << sendmail_html
-            log.info "[icbi/wes] Sent summary e-mail to $params.email (sendmail)"
+            log.info "[icbi/nextNEOpi] Sent summary e-mail to $params.email (sendmail)"
         } catch (all) {
             // Catch failures and try with plaintext
             [ 'mail', '-s', subject, params.email ].execute() << email_txt
-            log.info "[icbi/wes] Sent summary e-mail to $params.email (mail)"
+            log.info "[icbi/nextNEOpi] Sent summary e-mail to $params.email (mail)"
         }
     }
 
@@ -6218,5 +6403,5 @@ workflow.onComplete {
     def output_tf = new File( output_d, "pipeline_report.txt" )
     output_tf.withWriter { w -> w << email_txt }
 
-    log.info "[icbi/wes] Pipeline Complete! You can find your results in ${params.outputDir}"
+    log.info "[icbi/nextNEOpi] Pipeline Complete! You can find your results in ${params.outputDir}"
 }

@@ -13,7 +13,6 @@ dependencies:
 - fastqc
 - multiqc
 - sambamba
-- tabix
 - bcftools
 - varscan
 - bam-readcount
@@ -68,7 +67,7 @@ dependencies:
 # other python dependencies; these should be removed after functionality is moved into Java code
 - biopython=1.76
 - pyvcf=0.6.8
-- bioconda::pysam=0.15.3            # using older conda-installed versions may result in libcrypto / openssl bugs
+- bioconda::pysam=0.16.0.1            # using older conda-installed versions may result in libcrypto / openssl bugs
 
 # pip installs should be avoided, as pip may not respect the dependencies found by the conda solver
 - pip:
