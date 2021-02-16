@@ -13,7 +13,7 @@ else
 fi
 mkdir -p ${BUILD_DIR}/{conf,bin,assets,resources}
 
-cp nextNEOpi.nf example_batchFile.csv README.md ${BUILD_DIR}
+cp nextNEOpi.nf example_batchFile.csv README.md README.html ${BUILD_DIR}
 cp assets/Alleles_list.txt ${BUILD_DIR}/assets
 cp assets/Final_gbm_model.rds ${BUILD_DIR}/assets
 cp assets/Frameshift.pm ${BUILD_DIR}/assets
@@ -54,7 +54,8 @@ cp bin/run_ascat.r ${BUILD_DIR}/bin
 
 if [ "$ICBI" != "" ]; then
     cp conf/params_icbi.config  ${BUILD_DIR}/conf/params.config
-    cp conf/resources_icbi.config  ${BUILD_DIR}/conf/resources.config
+    # cp conf/resources_icbi.config  ${BUILD_DIR}/conf/resources.config
+    cp conf/resources.config  ${BUILD_DIR}/conf/resources.config
 else
     cp conf/params.config  ${BUILD_DIR}/conf
     cp conf/resources.config  ${BUILD_DIR}/conf
