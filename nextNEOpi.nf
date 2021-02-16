@@ -351,6 +351,9 @@ if (! params.batchFile) {
             .set { custom_hlas_ch }
 }
 
+// optional panel of normals file
+pon_file = file(params.mutect2ponFile)
+
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
@@ -367,8 +370,8 @@ if (checkToolAvailable(HLAHD, "exists", "warn")) {
 }
 
 // check if all tools are installed when not running conda or singularity
+have_vep = false
 if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
-    have_vep = false
     def execTools = ["fastqc", "fastp", "bwa", "samtools", "sambamba", "gatk", "vep", "bam-readcount",
                      "perl", "bgzip", "tabix", "bcftools", "yara_mapper", "python", "cnvkit.py",
                      "OptiTypePipeline.py", "alleleCounter", "freec", "Rscript", "java", "multiqc",
@@ -396,7 +399,7 @@ if (file(params.MUTECT1) && file(params.JAVA7)) {
 
 // check if we have GATK3 installed
 have_GATK3 = false
-if (file(params.GATK3) && file(params.JAVA8 && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
+if (file(params.GATK3) && file(params.JAVA8) && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
     if(checkToolAvailable(params.JAVA8, "inPath", "warn") && checkToolAvailable(params.GATK3, "exists", "warn")) {
         JAVA8 = file(params.JAVA8)
         GATK3 = file(params.GATK3)
@@ -1880,6 +1883,7 @@ process 'GatherRecalBamFiles' {
     """
     mkdir -p ${params.tmpDir}
 
+    rm -f ${procSampleName}_gather.fifo
     mkfifo ${procSampleName}_gather.fifo
     gatk --java-options ${java_opts} GatherBamFiles \\
         --TMP_DIR ${params.tmpDir} \\
@@ -1984,7 +1988,7 @@ if (have_GATK3) {
         BaseRecalGATK4_out_MantaSomaticIndels_ch0,
         BaseRecalGATK4_out_StrelkaSomatic_ch0,
         BaseRecalGATK4_out_MutationalBurden_ch0,
-        BaseRecalGATK4_out_MutationalBurden_ch1,
+        BaseRecalGATK4_out_MutationalBurden_ch1
     ) = BaseRecalGATK4_out.into(5)
 } else {
     (
@@ -2025,6 +2029,7 @@ process 'Mutect2' {
           database.GnomADfull,
           database.GnomADfullIdx ]
     )
+    file pon from pon_file
 
     set(
         TumorReplicateId,
@@ -2051,13 +2056,12 @@ process 'Mutect2' {
 
 
     script:
-    if(params.mutect2ponFile != false) {
-        panel_of_normals = "--panel-of-normals ${params.mutect2ponFile}"
-    } else {
-        panel_of_normals = ""
-    }
+    def panel_of_normals = (pon.name != 'NO_FILE') ? "--panel-of-normals $pon" : ""
+    def mk_pon_idx = (pon.name != 'NO_FILE') ? "tabix -f $pon" : ""
     """
     mkdir -p ${params.tmpDir}
+
+    ${mk_pon_idx}
 
     gatk Mutect2 \\
         --tmp-dir ${params.tmpDir} \\
@@ -2572,6 +2576,7 @@ if (have_GATK3) {
         """
         mkdir -p ${params.tmpDir}
 
+        rm -f ${procSampleName}_gather.fifo
         mkfifo ${procSampleName}_gather.fifo
         gatk --java-options ${java_opts} GatherBamFiles \\
             --TMP_DIR ${params.tmpDir} \\
@@ -2703,6 +2708,7 @@ process 'VarscanSomaticScattered' {
     // awk filters at the end needed, found at least one occurence of "W" in Ref field of
     // varscan vcf (? wtf). Non ACGT seems to cause MergeVCF (picard) crashing
     """
+    rm -f ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
     mkfifo ${TumorReplicateId}_${NormalReplicateId}_${intervals}_mpileup.fifo
     samtools mpileup \\
         -q 1 \\
@@ -4847,6 +4853,7 @@ process 'mhc_extract' {
 
     if(single_end)
         """
+        rm -f unmapped_bam mhc_mapped_bam R.fastq
         mkfifo unmapped_bam
         mkfifo mhc_mapped_bam
         mkfifo R.fastq
@@ -4866,6 +4873,7 @@ process 'mhc_extract' {
         """
     else
         """
+        rm -f unmapped_bam mhc_mapped_bam R1.fastq R2.fastq
         mkfifo unmapped_bam
         mkfifo mhc_mapped_bam
         mkfifo R1.fastq
@@ -4940,6 +4948,7 @@ process 'pre_map_hla' {
         """
     else
         """
+        rm -f R1 R2
         mkfifo R1 R2
         yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
             samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
@@ -5032,6 +5041,7 @@ if (have_RNAseq) {
             """
         else
             """
+            rm -f R1 R2
             mkfifo R1 R2
             yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
                 samtools view -@ $samtools_cpus -h -F 4 -b1 | \\

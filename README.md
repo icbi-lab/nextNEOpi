@@ -1,5 +1,5 @@
 # NeoEpitope predictions Nextflow Pipeline
-Pipeline takes fastq file from Tumor and Normal samples and optionally RNAseq from tumor
+Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
 to predict neoepitopes.
 
 The pipeline uses the following tools:
@@ -32,18 +32,17 @@ Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
 neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
-A GBM model is be used to predict immunogenicity scores for MHC class I single nucleotide
-variant (SNV) neoantigens 8-11 amino acid residues in length. https://github.com/vincentlaboratories/.
-Finally mixcr is run to predict TCRs.
+A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
+variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict TCRs.
 
+[1] https://github.com/vincentlaboratories/.
 
-![Beschreibung](img/flowchart.png)
 
 ## 1. Installation
 
-## 1.1 Nextflow
+### 1.1 Nextflow
 
-Please see the installation instructions at:
+The command below may be used to install Nextflow. Please see also the installation instructions at:
 https://www.nextflow.io/index.html#GetStarted
 
 
@@ -52,16 +51,18 @@ curl -s https://get.nextflow.io | bash
 
 ```
 
-## 1.2 Software
+### 1.2 Analysis tools and software packages
+
 The pipeline will install almost all required tools via conda environments or Singularity images.
-The only software that needs to be available is Java (minimum version 8), Nextflow (see above), conda,
-Singularity.
 
-Due to license concerns you also need to download and install HLA-HD by your on.
+The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Conda**,
+**Singularity**.
 
-[Not recommended]:
-If you can not run either conda or Singularity you need to install the required software tools
-locally.
+Further, due to license issues you also need to download and install **HLA-HD** by your on, and set the installation path in ```config/params.config```.
+
+_**[Manual installaton: Not recommended]:**_
+
+If you prefer local installation of the analysis tools please install the following software:
 
 * FASTQC        (Version >= 0.11.8)
 * FASTP         (Version >= v0.20.1)
@@ -88,22 +89,25 @@ locally.
 * YARA
 * HLAHD
 * ALLELECOUNT
-* RSCRIPT
-* SEQUENZA
+* RSCRIPT (R > 3.6.1)
+* SEQUENZA (3.0)
 * CNVkit
-[End not recommended]
+
+all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.
+
+_**[End manual installation: not recommended]**_
 
 
-## 1.2 References
-the Pipeline requires different references and databases:
+### 1.2 References
+The pipeline requires different reference files, indexes and databases:
 
-please see ```resources.config``
+please see ```config/resources.config```
 
 We prepared a bundle with all needed references, indexes and databases which can be obtained from:
 
-https://apps-01.i-med.ac.at/resources/nextNEOpi/nextNEOpi_resources.tar.gz
+https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_resources.tar.gz
 
-download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir```
+download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```config/params.config``` file.
 
 The structure should look as shown blow:
 
@@ -115,119 +119,154 @@ The structure should look as shown blow:
 ```
 
 
-Ref:
-<https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle>
-<https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/>
-<ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/>
+**Notes**
+1. You may also provide your own versions of these files. To do so, please change the ```config/resources.config``` accordingly.
+2. Due to license restriction, we do not provide a copy of the optional COSMIC database. If you also want to include COSMIC data, you may get a copy at https://cancer.sanger.ac.uk/cosmic
+3. We provide the region and bait files for two different Exome capturing kits from Agilent:
+   - SureSelect Human All Exon V6 exome
+   - SureSelect Human All Exon V7 exome
+You may add your own region and bait files by defining an entry in ```config/resources.config```
+
+
+
+Refs:
+- <https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle>
+- <https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/>
+- <ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/>
+- <https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files>
+- <https://www.gencodegenes.org/human/>
 
 
 ## 2. Usage
-Before running the pipeline, the config files may need to be edited. In the
-params.config parameters default settings are defined. The process.config
+Before running the pipeline, the config files in the ```config/``` directory may need to be edited. In the
+```params.config``` parameters default settings are defined. The ```process.config```
 is a template for the configuration of the single processes, you may check
-the number of cpus assigned for each process.
+the number of CPUs assigned for each process and adjust according to your systems capabilities.
 
-Every parameter can be edited in the params file or with the command lind by using --NameOfTheParameter given in the params.config.
-References, Databases and Software should be edited in the resources.config.
+Most pipeline parameters can be edited in the ```params.config``` file or changed on run time with command line options by using ```--NameOfTheParameter``` given in the ```params.config```.
+References, databases should be edited in the ```resources.config``` file.
 
 ```
 nextflow run nextNEOpi.nf "--readsTumor <tumorFastq> --readsNormal <nomralFastq>"|--batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume]
 ```
 
-#### Profiles: conda or singularity
-We highly recommend to use either the ```singularity``` or ```conda``` profile. You can specify one of the two profiles using the option ```-profile singularity``` or ```-profile conda```
+**Profiles:** conda or singularity
 
-#### Profiles: cluster
+We highly recommend to use either the ```singularity``` or ```conda``` profile. You can specify one of the two profiles using the option ```-profile singularity``` or ```-profile conda```. This way you do not have to care about installing all the required software including all
+its dependencies.
+
+**Profiles:** cluster
+
 We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
-Please see profiles. to adjust the cluster profile to your schedulin system.
+
+Please see ```profiles``` in ```config/profiles.config``` to adjust the cluster profile to your scheduling system.
 
 
-#### Single-end reads:
-**--single_end:** sets parameter to TRUE (default false)
+**Single-end reads:**
 
-#### Mandatory arguments:
-**--readsTumor:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA
-**--readsNormal:** 		 reads_{1,2}.fastq or reads_1.fastq; 		 paired-end or single-end reads; FASTA files (can be zipped)
+```--single_end``` sets parameter to TRUE (default false)
+
+**Mandatory arguments:**
+
+```--readsTumor``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)
+
+```--readsNormal``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)
 
 or
 
-**--batchFile:**
-* CSV-file, paired-end T/N reads, paired-end RNAseq reads:
+```--batchFile``` _[recommended]_
 
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
- sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1
- sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1
- ...
- sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX,groupX
+* e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:
 
-* CSV-file, single-end T/N reads, single-end RNAseq reads:
-
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
- sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1
- sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1
- ...
- sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None,groupX
-
-* CSV-file, single-end T/N reads, NO RNAseq reads:
-
- tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group
- sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1
- sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1
- ...
- sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX,groupX
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
+ | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX | group1
+ sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY | group1
+ |... |
+ sampleN | TumorN_reads_1.fastq | TumorN_reads_2.fastq | normalN | NormalN_reads_1.fastq | NormalN_reads_2.fastq | TumorN_RNAseq_reads_1.fastq | TumorN_RNAseq_reads_2.fastq | custom_HLAs.txt | XX | groupX
 
 
-Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
-DNA reads paired-end and all RNAseq reads single-end or vice-versa.
+* e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:
 
-Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX | group1
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY | group1
+ |... |
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | TumorN_RNAseq_reads_1.fastq | None | custom_HLAs.txt | XX | groupX
 
-Note: gender can be XX or Female, XY or Male. If not specified or "None" Male is assumed
 
-#### Optional argument:
-**--tumorSampleName**       tumor sample name. If not specified samples will be named according to the fastq filenames.
 
-**--normalSampleName**      normal sample name. If not specified samples will be named according to the fastq filenames.
+* e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:
 
-**--trim_adapters**         If true adpter sequences are automatically determined and will be trimmed from reads. If
-                            --adapterSeq (string of atapter sequence) or --adapterSeqFile (fasta file with adapter sequences) is provided
-                            then adapters will be used as specified (no automatic detection).
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX | group1
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY | group1
+ |... |
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX | groupX
+
+
+
+**Notes**
+- _You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
+DNA reads paired-end and all RNAseq reads single-end or vice-versa._
+
+- in the ```HLAfile``` coulumn a user suppiled HLA types file may be specified for a given sample, see also ```--customHLA``` option below
+
+- the ```gender``` column can be XX or Female, XY or Male. If not specified or "None" Male is assumed
+
+
+**Example run command with batchfile:**
+```
+nextflow run nextNEOpi.n -
+```
+
+**Optional argument:**
+
+```--tumorSampleName```       tumor sample name. If not specified samples will be named according to the fastq filenames.
+
+```--normalSampleName```      normal sample name. If not specified samples will be named according to the fastq filenames.
+
+```--trim_adapters```         If true adpter sequences are automatically determined and will be trimmed from reads. If
+                            ```--adapterSeq``` (string of atapter sequence) or ```--adapterSeqFile``` (fasta file with adapter sequences) is provided then adapters will be used as specified (no automatic detection).
                             Default: false
 
-**--trim_adapters_RNAseq**  If true adpter sequences are automatically determined and will be trimmed from RNAseq reads. If
-                            --adapterSeqRNAseq (string of atapter sequence) or --adapterSeqFileRNAseq (fasta file with adapter
+```--trim_adapters_RNAseq```  If true adpter sequences are automatically determined and will be trimmed from RNAseq reads. If
+                            ```--adapterSeqRNAseq``` (string of atapter sequence) or ```--adapterSeqFileRNAseq``` (fasta file with adapter
                             sequences) is provided then adapters will be used as specified (no automatic detection).
                             Default: false
 
-**--adapterSeq**            String of atapter sequence (see --trim_adapers)
-**--adapterSeqFile**        Fasta file with atapter sequence(s) (see --trim_adapers)
+```--adapterSeq```            String of atapter sequence (see ```--trim_adapers```)
+```--adapterSeqFile```        Fasta file with atapter sequence(s) (see ```--trim_adapers```)
 
-**--adapterSeqRNAseq**      String of atapter sequence (see --trim_adapers_RNAseq)
-**--adapterSeqFileRNAseq**  Fasta file with atapter sequence(s) (see --trim_adapers_RNAseq)
+```--adapterSeqRNAseq```      String of atapter sequence (see ```--trim_adapers_RNAseq```)
+```--adapterSeqFileRNAseq```  Fasta file with atapter sequence(s) (see ```--trim_adapers_RNAseq```)
 
-**--mutect2ponFile**        Panel of Normals file for Mutect2 (https://gatk.broadinstitute.org/hc/en-us/articles/360040510131-CreateSomaticPanelOfNormals-BETA-)
+```--mutect2ponFile```        Panel of Normals file for Mutect2 (https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON-)
                             Default: false
 
-**--priorityCaller**        Set the variant caller used as base for the hc variants. Only variants that are confirmed by any of the two confirming
-                            callers (e..g. mutect1, varscan) will be retained. m2 = mutect2, m1 = mutect1, vs = varscan, st = strelka
-                            Default: m2
+```--priorityCaller```        Set the variant caller used as base for the hc variants. Only variants that are confirmed by any of the two confirming
+                            callers (e..g. mutect1, varscan) will be retained. M2 = mutect2, M1 = mutect1, VS = varscan, ST = strelka
+                            Default: M2
 
-**--minAD**                 Minimum allelic depth (reads covering a variant)
+```--minAD```                 Minimum allelic depth (reads covering a variant)
                             Default: 5
 
-**-use_NetChop**            Use NetChop to generate peptides
+```--use_NetChop```            Use NetChop to generate peptides
                             Default: false
 
-**--TCR**                   Run mixcr for TCR prediction
+```--TCR```                   Run mixcr for TCR prediction
                             Default: true
-**--customHLA**             Provide a custom HLA types file. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
 
-**--gender**                Provide the gender of the sample (XX or Female, XY or Male)
+```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
+
+```--gender```                Provide the gender of the sample (XX or Female, XY or Male, None)
 
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
-                            (see params.conf)
+                            (see ```config/params.config```)
 
-## 3. Output  (this is not uptodate, will be changed when we have the final structure)
+## 3. Output  (_this is not up to date, will be changed when we have the final structure_)
 The Pipeline creates an ouput directory with the following structure:
 ```
 RESULTS
