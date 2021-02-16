@@ -3966,7 +3966,7 @@ process 'MutationalBurdenCoding' {
         --vcf ${vep_somatic_vcf_gz} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
-        --bed ./gencode.v33.primary_assembly.annotation.exon_merged.bed
+        --bed ./gencode.v33.primary_assembly.annotation.exon_merged.bed \\
         --variant_type coding \\
         --cpus ${task.cpus} \\
         --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt
