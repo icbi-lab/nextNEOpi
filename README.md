@@ -176,6 +176,8 @@ or
 
 ```--batchFile``` _[recommended]_
 
+Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also `example_batchFile.csv`
+
 * e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:
 
  | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |

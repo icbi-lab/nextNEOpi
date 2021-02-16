@@ -3970,7 +3970,7 @@ process 'MutationalBurdenCoding' {
         --bed ${exons} \\
         --variant_type coding \\
         --cpus ${task.cpus} \\
-        --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt
+        --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden_coding.txt
 
     """
 }
