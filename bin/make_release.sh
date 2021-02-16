@@ -2,10 +2,15 @@
 
 
 VERSION=$1
+ICBI=$2
 
-BASE_DIR=nextNEOpi_v${VERSION}
-BUILD_DIR=make_nextNEOpi_release/${BASE_DIR}/
-
+if [ "$ICBI" != "" ]; then
+    BASE_DIR=nextNEOpi_v${VERSION}_icbi
+    BUILD_DIR=make_nextNEOpi_release/${BASE_DIR}/
+else
+    BASE_DIR=nextNEOpi_v${VERSION}
+    BUILD_DIR=make_nextNEOpi_release/${BASE_DIR}/
+fi
 mkdir -p ${BUILD_DIR}/{conf,bin,assets,resources}
 
 cp nextNEOpi.nf example_batchFile.csv README.md ${BUILD_DIR}
@@ -47,10 +52,16 @@ cp bin/parse_mixMHC2pred.py ${BUILD_DIR}/bin
 cp bin/pepChopper.py ${BUILD_DIR}/bin
 cp bin/run_ascat.r ${BUILD_DIR}/bin
 
-cp conf/params.config  ${BUILD_DIR}/conf
+if [ "$ICBI" != "" ]; then
+    cp conf/params_icbi.config  ${BUILD_DIR}/conf/params.config
+    cp conf/resources_icbi.config  ${BUILD_DIR}/conf/resources.config
+else
+    cp conf/params.config  ${BUILD_DIR}/conf
+    cp conf/resources.config  ${BUILD_DIR}/conf
+fi
+
 cp conf/process.config  ${BUILD_DIR}/conf
 cp conf/profiles.config  ${BUILD_DIR}/conf
-cp conf/resources.config  ${BUILD_DIR}/conf
 
 cd $BUILD_DIR
 cd ..
