@@ -20,3 +20,4 @@ bin/compareVCF.py
 bin/mkPlots.R
 bin/filterVCF.py
 make_nextNEOpi_release/nextNEOpi_v1.0.tar.gz
+make_nextNEOpi_release/
