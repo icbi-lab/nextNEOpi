@@ -58,7 +58,7 @@ The pipeline will install almost all required tools via conda environments or Si
 The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Conda**,
 **Singularity**.
 
-Further, due to license issues you also need to download and install **HLA-HD** by your on, and set the installation path in ```conf/params.config```.
+Further, due to license restrictions you also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```.
 
 _**[Manual installaton: Not recommended]:**_
 
@@ -125,6 +125,7 @@ The structure should look as shown blow:
 3. We provide the region and bait files for two different Exome capturing kits from Agilent:
    - SureSelect Human All Exon V6 exome
    - SureSelect Human All Exon V7 exome
+
 You may add your own region and bait files by defining an entry in ```conf/resources.config```
 
 
@@ -147,7 +148,7 @@ Most pipeline parameters can be edited in the ```params.config``` file or change
 References, databases should be edited in the ```resources.config``` file.
 
 ```
-nextflow run nextNEOpi.nf "--readsTumor <tumorFastq> --readsNormal <nomralFastq>"|--batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume]
+nextflow run nextNEOpi.nf --readsTumor <tumorFastq> --readsNormal <nomralFastq> | --batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume]
 ```
 
 **Profiles:** conda or singularity
