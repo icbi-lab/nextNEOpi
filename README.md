@@ -58,7 +58,7 @@ The pipeline will install almost all required tools via conda environments or Si
 The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Conda**,
 **Singularity**.
 
-Further, due to license issues you also need to download and install **HLA-HD** by your on, and set the installation path in ```config/params.config```.
+Further, due to license issues you also need to download and install **HLA-HD** by your on, and set the installation path in ```conf/params.config```.
 
 _**[Manual installaton: Not recommended]:**_
 
@@ -101,13 +101,13 @@ _**[End manual installation: not recommended]**_
 ### 1.2 References
 The pipeline requires different reference files, indexes and databases:
 
-please see ```config/resources.config```
+please see ```conf/resources.config```
 
 We prepared a bundle with all needed references, indexes and databases which can be obtained from:
 
 https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_resources.tar.gz
 
-download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```config/params.config``` file.
+download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```conf/params.config``` file.
 
 The structure should look as shown blow:
 
@@ -120,12 +120,12 @@ The structure should look as shown blow:
 
 
 **Notes**
-1. You may also provide your own versions of these files. To do so, please change the ```config/resources.config``` accordingly.
+1. You may also provide your own versions of these files. To do so, please change the ```conf/resources.config``` accordingly.
 2. Due to license restriction, we do not provide a copy of the optional COSMIC database. If you also want to include COSMIC data, you may get a copy at https://cancer.sanger.ac.uk/cosmic
 3. We provide the region and bait files for two different Exome capturing kits from Agilent:
    - SureSelect Human All Exon V6 exome
    - SureSelect Human All Exon V7 exome
-You may add your own region and bait files by defining an entry in ```config/resources.config```
+You may add your own region and bait files by defining an entry in ```conf/resources.config```
 
 
 
@@ -138,7 +138,7 @@ Refs:
 
 
 ## 2. Usage
-Before running the pipeline, the config files in the ```config/``` directory may need to be edited. In the
+Before running the pipeline, the config files in the ```conf/``` directory may need to be edited. In the
 ```params.config``` parameters default settings are defined. The ```process.config```
 is a template for the configuration of the single processes, you may check
 the number of CPUs assigned for each process and adjust according to your systems capabilities.
@@ -159,7 +159,7 @@ its dependencies.
 
 We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
-Please see ```profiles``` in ```config/profiles.config``` to adjust the cluster profile to your scheduling system.
+Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster profile to your scheduling system.
 
 
 **Single-end reads:**
@@ -219,7 +219,15 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa._
 
 **Example run command with batchfile:**
 ```
-nextflow run nextNEOpi.n -
+nextflow run nextNEOpi.nf \
+    --batchFile batchfile.csv \
+    -config conf/params.config \
+    --outputDir /data/results/nextNEOpi/myResults \
+    --trim_adapters true \
+    --trim_adapters_RNAseq true \
+    --use_NetChop false \
+    -profile singularity,cluster \
+    -resume
 ```
 
 **Optional argument:**
@@ -264,7 +272,7 @@ nextflow run nextNEOpi.n -
 ```--gender```                Provide the gender of the sample (XX or Female, XY or Male, None)
 
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
-                            (see ```config/params.config```)
+                            (see ```conf/params.config```)
 
 ## 3. Output  (_this is not up to date, will be changed when we have the final structure_)
 The Pipeline creates an ouput directory with the following structure:

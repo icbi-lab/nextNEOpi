@@ -3921,7 +3921,7 @@ process 'MutationalBurden' {
     mutationalLoad.py \\
         --normal_bam ${Normalbam} \\
         --tumor_bam ${Tumorbam} \\
-        --vfc ${vep_somatic_vcf_gz} \\
+        --vcf ${vep_somatic_vcf_gz} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
         --cpus ${task.cpus} \\
@@ -3963,7 +3963,7 @@ process 'MutationalBurdenCoding' {
     mutationalLoad.py \\
         --normal_bam ${Normalbam} \\
         --tumor_bam ${Tumorbam} \\
-        --vfc ${vep_somatic_vcf_gz} \\
+        --vcf ${vep_somatic_vcf_gz} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
         --bed ./gencode.v33.primary_assembly.annotation.exon_merged.bed
