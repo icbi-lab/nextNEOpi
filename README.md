@@ -148,7 +148,7 @@ Most pipeline parameters can be edited in the ```params.config``` file or change
 References, databases should be edited in the ```resources.config``` file.
 
 ```
-nextflow run nextNEOpi.nf --readsTumor <tumorFastq> --readsNormal <nomralFastq> | --batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume]
+nextflow run nextNEOpi.nf --readsTumor <tumorFastq> --readsNormal <normalFastq> | --batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 ```
 
 **Profiles:** conda or singularity

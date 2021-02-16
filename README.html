@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>README.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="neoepitope-predictions-nextflow-pipeline">NeoEpitope predictions Nextflow Pipeline</h1>
+<p>Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
+to predict neoepitopes.</p>
+<p>The pipeline uses the following tools:</p>
+<ul>
+<li>MuTect2</li>
+<li>MuTect1</li>
+<li>VarScan2</li>
+<li>Strekla2/Manta</li>
+<li>Sequenza</li>
+<li>ASCAT</li>
+<li>CNVkit</li>
+<li>OptiType</li>
+<li>HLAHD</li>
+<li>pVACseq (netMHCpan, netMHCIIpan, mhcflurry)</li>
+<li>NeoFuse</li>
+<li>mixMHC2pred</li>
+<li>mixcr</li>
+</ul>
+<p>It outputs a vcf files with the annotated and filtered SNPs and Indels, which
+where called with each of the callers and a high confidence vcf file (hc) in
+which only variants that were called by a minimum of 2 of the callers are listed.
+All vcf files are annotatd with VEP. In addition the germline variants are called
+using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
+Copy number variations are analyzed using CNVkit, ASCAT, and sequenza. Tumor purity
+is estimated by ASCAT and Sequenza and is used to derive the clonality measure for
+the predicted neoantigens. Tumor mutational burden (TMB) is calculated for all
+variants over the entire read covered genome and for coding variants on read covered
+exons.
+HLA class I and class II alleles are predicted with OptiType and HLAHD.
+Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
+netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
+neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
+CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
+A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
+variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict TCRs.</p>
+<p>[1] https://github.com/vincentlaboratories/.</p>
+<h2 id="1-installation">1. Installation</h2>
+<h3 id="11-nextflow">1.1 Nextflow</h3>
+<p>The command below may be used to install Nextflow. Please see also the installation instructions at:
+https://www.nextflow.io/index.html#GetStarted</p>
+<pre class="hljs"><code><div>curl -s https://get.nextflow.io | bash
+
+</div></code></pre>
+<h3 id="12-analysis-tools-and-software-packages">1.2 Analysis tools and software packages</h3>
+<p>The pipeline will install almost all required tools via conda environments or Singularity images.</p>
+<p>The software that needs to be present on the system is <strong>Java</strong> (minimum version 8), <strong>Nextflow</strong> (see above), <strong>Conda</strong>,
+<strong>Singularity</strong>.</p>
+<p>Further, due to license restrictions you also need to download and install <strong>HLA-HD</strong> by your own, and set the installation path in <code>conf/params.config</code>.</p>
+<p><em><strong>[Manual installaton: Not recommended]:</strong></em></p>
+<p>If you prefer local installation of the analysis tools please install the following software:</p>
+<ul>
+<li>FASTQC        (Version &gt;= 0.11.8)</li>
+<li>FASTP         (Version &gt;= v0.20.1)</li>
+<li>JAVA7 		(Version 1.7)</li>
+<li>JAVA8 		(Version 1.8)</li>
+<li>BWA 			(Version 0.7.17)</li>
+<li>SAMTOOLS 		(Version 1.9)</li>
+<li>GATK3 		(Version 3.8-0)</li>
+<li>GATK4 		(Version &gt;= 4.1.7.0)</li>
+<li>VARSCAN 		(Version 2.4.3)</li>
+<li>MUTECT1 		(Version 1.1.7) ---- optional</li>
+<li>BAMREADCOUNT 	(Version 0.8.0)</li>
+<li>VEP 			(Version v102)</li>
+<li>BGZIP</li>
+<li>TABIX</li>
+<li>BCFTOOLS</li>
+<li>MANTA</li>
+<li>STRELKA</li>
+<li>SAMBAMBA</li>
+<li>OPTITYPE</li>
+<li>PYTHON</li>
+<li>PERL</li>
+<li>CONDA</li>
+<li>YARA</li>
+<li>HLAHD</li>
+<li>ALLELECOUNT</li>
+<li>RSCRIPT (R &gt; 3.6.1)</li>
+<li>SEQUENZA (3.0)</li>
+<li>CNVkit</li>
+</ul>
+<p>all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.</p>
+<p><em><strong>[End manual installation: not recommended]</strong></em></p>
+<h3 id="12-references">1.2 References</h3>
+<p>The pipeline requires different reference files, indexes and databases:</p>
+<p>please see <code>conf/resources.config</code></p>
+<p>We prepared a bundle with all needed references, indexes and databases which can be obtained from:</p>
+<p>https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_resources.tar.gz</p>
+<p>download and extract the contents of the archive into the directory you specified for <code>resourcesBaseDir</code> in the <code>conf/params.config</code> file.</p>
+<p>The structure should look as shown blow:</p>
+<pre class="hljs"><code><div>├── {resourcesBaseDir}
+    ├── databases
+    ├── ExomeCaptureKits
+    └── references
+</div></code></pre>
+<p><strong>Notes</strong></p>
+<ol>
+<li>You may also provide your own versions of these files. To do so, please change the <code>conf/resources.config</code> accordingly.</li>
+<li>Due to license restriction, we do not provide a copy of the optional COSMIC database. If you also want to include COSMIC data, you may get a copy at https://cancer.sanger.ac.uk/cosmic</li>
+<li>We provide the region and bait files for two different Exome capturing kits from Agilent:
+<ul>
+<li>SureSelect Human All Exon V6 exome</li>
+<li>SureSelect Human All Exon V7 exome</li>
+</ul>
+</li>
+</ol>
+<p>You may add your own region and bait files by defining an entry in <code>conf/resources.config</code></p>
+<p>Refs:</p>
+<ul>
+<li><a href="https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle">https://gatk.broadinstitute.org/hc/en-us/articles/360036212652-Resource-Bundle</a></li>
+<li><a href="https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/">https://console.cloud.google.com/storage/browser/genomics-public-data/resources/broad/hg38/v0/</a></li>
+<li><a href="ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/">ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/</a></li>
+<li><a href="https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files">https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files</a></li>
+<li><a href="https://www.gencodegenes.org/human/">https://www.gencodegenes.org/human/</a></li>
+</ul>
+<h2 id="2-usage">2. Usage</h2>
+<p>Before running the pipeline, the config files in the <code>conf/</code> directory may need to be edited. In the
+<code>params.config</code> parameters default settings are defined. The <code>process.config</code>
+is a template for the configuration of the single processes, you may check
+the number of CPUs assigned for each process and adjust according to your systems capabilities.</p>
+<p>Most pipeline parameters can be edited in the <code>params.config</code> file or changed on run time with command line options by using <code>--NameOfTheParameter</code> given in the <code>params.config</code>.
+References, databases should be edited in the <code>resources.config</code> file.</p>
+<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --readsTumor &lt;tumorFastq&gt; --readsNormal &lt;normalFastq&gt; | --batchFile &lt;batchFile.csv&gt;&quot; [--single_end] -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+</div></code></pre>
+<p><strong>Profiles:</strong> conda or singularity</p>
+<p>We highly recommend to use either the <code>singularity</code> or <code>conda</code> profile. You can specify one of the two profiles using the option <code>-profile singularity</code> or <code>-profile conda</code>. This way you do not have to care about installing all the required software including all
+its dependencies.</p>
+<p><strong>Profiles:</strong> cluster</p>
+<p>We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
+<p>Please see <code>profiles</code> in <code>conf/profiles.config</code> to adjust the cluster profile to your scheduling system.</p>
+<p><strong>Single-end reads:</strong></p>
+<p><code>--single_end</code> sets parameter to TRUE (default false)</p>
+<p><strong>Mandatory arguments:</strong></p>
+<p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
+<p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>
+<p>or</p>
+<p><code>--batchFile</code> <em>[recommended]</em></p>
+<p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile.csv</code></p>
+<ul>
+<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>tumorSampleName</th>
+<th>readsTumorFWD</th>
+<th>readsTumorREV</th>
+<th>normalSampleName</th>
+<th>readsNormalFWD</th>
+<th>readsNormalREV</th>
+<th>readsRNAseqFWD</th>
+<th>readsRNAseqREV</th>
+<th>HLAfile</th>
+<th>gender</th>
+<th>group</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sample1</td>
+<td>Tumor1_reads_1.fastq</td>
+<td>Tumor1_reads_2.fastq</td>
+<td>normal1</td>
+<td>Normal1_reads_1.fastq</td>
+<td>Normal1_reads_2.fastq</td>
+<td>Tumor1_RNAseq_reads_1.fastq</td>
+<td>Tumor1_RNAseq_reads_2.fastq</td>
+<td>None</td>
+<td>XX</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>Tumor2_reads_1.fastq</td>
+<td>Tumor2_reads_2.fastq</td>
+<td>normal2</td>
+<td>Normal2_reads_1.fastq</td>
+<td>Normal2_reads_2.fastq</td>
+<td>Tumor2_RNAseq_reads_1.fastq</td>
+<td>Tumor2_RNAseq_reads_2.fastq</td>
+<td>None</td>
+<td>XY</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>...</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sampleN</td>
+<td>TumorN_reads_1.fastq</td>
+<td>TumorN_reads_2.fastq</td>
+<td>normalN</td>
+<td>NormalN_reads_1.fastq</td>
+<td>NormalN_reads_2.fastq</td>
+<td>TumorN_RNAseq_reads_1.fastq</td>
+<td>TumorN_RNAseq_reads_2.fastq</td>
+<td>custom_HLAs.txt</td>
+<td>XX</td>
+<td>groupX</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>tumorSampleName</th>
+<th>readsTumorFWD</th>
+<th>readsTumorREV</th>
+<th>normalSampleName</th>
+<th>readsNormalFWD</th>
+<th>readsNormalREV</th>
+<th>readsRNAseqFWD</th>
+<th>readsRNAseqREV</th>
+<th>HLAfile</th>
+<th>gender</th>
+<th>group</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sample1</td>
+<td>Tumor1_reads_1.fastq</td>
+<td>None</td>
+<td>normal1</td>
+<td>Normal1_reads_1.fastq</td>
+<td>None</td>
+<td>Tumor1_RNAseq_reads_1.fastq</td>
+<td>None</td>
+<td>None</td>
+<td>XX</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>Tumor2_reads_1.fastq</td>
+<td>None</td>
+<td>normal2</td>
+<td>Normal2_reads_1.fastq</td>
+<td>None</td>
+<td>Tumor2_RNAseq_reads_1.fastq</td>
+<td>None</td>
+<td>None</td>
+<td>XY</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>...</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sampleN</td>
+<td>TumorN_reads_1.fastq</td>
+<td>None</td>
+<td>normalN</td>
+<td>NormalN_reads_1.fastq</td>
+<td>None</td>
+<td>TumorN_RNAseq_reads_1.fastq</td>
+<td>None</td>
+<td>custom_HLAs.txt</td>
+<td>XX</td>
+<td>groupX</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>tumorSampleName</th>
+<th>readsTumorFWD</th>
+<th>readsTumorREV</th>
+<th>normalSampleName</th>
+<th>readsNormalFWD</th>
+<th>readsNormalREV</th>
+<th>readsRNAseqFWD</th>
+<th>readsRNAseqREV</th>
+<th>HLAfile</th>
+<th>gender</th>
+<th>group</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sample1</td>
+<td>Tumor1_reads_1.fastq</td>
+<td>None</td>
+<td>normal1</td>
+<td>Normal1_reads_1.fastq</td>
+<td>None</td>
+<td>None</td>
+<td>None</td>
+<td>None</td>
+<td>XX</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>Tumor2_reads_1.fastq</td>
+<td>None</td>
+<td>normal2</td>
+<td>Normal2_reads_1.fastq</td>
+<td>None</td>
+<td>None</td>
+<td>None</td>
+<td>None</td>
+<td>XY</td>
+<td>group1</td>
+</tr>
+<tr>
+<td>...</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sampleN</td>
+<td>TumorN_reads_1.fastq</td>
+<td>None</td>
+<td>normalN</td>
+<td>NormalN_reads_1.fastq</td>
+<td>None</td>
+<td>None</td>
+<td>None</td>
+<td>custom_HLAs.txt</td>
+<td>XX</td>
+<td>groupX</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes</strong></p>
+<ul>
+<li>
+<p><em>You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
+DNA reads paired-end and all RNAseq reads single-end or vice-versa.</em></p>
+</li>
+<li>
+<p>in the <code>HLAfile</code> coulumn a user suppiled HLA types file may be specified for a given sample, see also <code>--customHLA</code> option below</p>
+</li>
+<li>
+<p>the <code>gender</code> column can be XX or Female, XY or Male. If not specified or &quot;None&quot; Male is assumed</p>
+</li>
+</ul>
+<p><strong>Example run command with batchfile:</strong></p>
+<pre class="hljs"><code><div>nextflow run nextNEOpi.nf \
+    --batchFile batchfile.csv \
+    -config conf/params.config \
+    --outputDir /data/results/nextNEOpi/myResults \
+    --trim_adapters true \
+    --trim_adapters_RNAseq true \
+    --use_NetChop false \
+    -profile singularity,cluster \
+    -resume
+</div></code></pre>
+<p><strong>Optional argument:</strong></p>
+<p><code>--tumorSampleName</code>       tumor sample name. If not specified samples will be named according to the fastq filenames.</p>
+<p><code>--normalSampleName</code>      normal sample name. If not specified samples will be named according to the fastq filenames.</p>
+<p><code>--trim_adapters</code>         If true adpter sequences are automatically determined and will be trimmed from reads. If
+<code>--adapterSeq</code> (string of atapter sequence) or <code>--adapterSeqFile</code> (fasta file with adapter sequences) is provided then adapters will be used as specified (no automatic detection).
+Default: false</p>
+<p><code>--trim_adapters_RNAseq</code>  If true adpter sequences are automatically determined and will be trimmed from RNAseq reads. If
+<code>--adapterSeqRNAseq</code> (string of atapter sequence) or <code>--adapterSeqFileRNAseq</code> (fasta file with adapter
+sequences) is provided then adapters will be used as specified (no automatic detection).
+Default: false</p>
+<p><code>--adapterSeq</code>            String of atapter sequence (see <code>--trim_adapers</code>)
+<code>--adapterSeqFile</code>        Fasta file with atapter sequence(s) (see <code>--trim_adapers</code>)</p>
+<p><code>--adapterSeqRNAseq</code>      String of atapter sequence (see <code>--trim_adapers_RNAseq</code>)
+<code>--adapterSeqFileRNAseq</code>  Fasta file with atapter sequence(s) (see <code>--trim_adapers_RNAseq</code>)</p>
+<p><code>--mutect2ponFile</code>        Panel of Normals file for Mutect2 (https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON-)
+Default: false</p>
+<p><code>--priorityCaller</code>        Set the variant caller used as base for the hc variants. Only variants that are confirmed by any of the two confirming
+callers (e..g. mutect1, varscan) will be retained. M2 = mutect2, M1 = mutect1, VS = varscan, ST = strelka
+Default: M2</p>
+<p><code>--minAD</code>                 Minimum allelic depth (reads covering a variant)
+Default: 5</p>
+<p><code>--use_NetChop</code>            Use NetChop to generate peptides
+Default: false</p>
+<p><code>--TCR</code>                   Run mixcr for TCR prediction
+Default: true</p>
+<p><code>--customHLA</code>             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)</p>
+<p><code>--gender</code>                Provide the gender of the sample (XX or Female, XY or Male, None)</p>
+<p><strong>Further options:</strong>        There are many more options that can be set in the params.conf file or specified on the commandline
+(see <code>conf/params.config</code>)</p>
+<h2 id="3-output-this-is-not-up-to-date-will-be-changed-when-we-have-the-final-structure">3. Output  (<em>this is not up to date, will be changed when we have the final structure</em>)</h2>
+<p>The Pipeline creates an ouput directory with the following structure:</p>
+<pre class="hljs"><code><div>RESULTS
+├── 00_prepare_Intervals
+│   └── SplitIntervals
+├── CRC01
+│   ├── 01_preprocessing
+│   ├── 02_QC
+│   ├── 03_manta_somatic
+│   ├── 03_mutect1
+│   ├── 03_mutect2
+│   ├── 03_strelka_somatic
+│   ├── 03_varscan
+│   ├── 04_haplotypeCaller
+│   ├── 05_hcVCF
+│   ├── 06_vep
+│   ├── 07_PhasedVCF
+│   ├── 08_OptiType
+│   ├── 09_HLA_HD
+│   ├── 10_NeoFuse
+│   ├── 11_pVACseq
+│   ├── 12_mixMHC2pred
+│   └── 13_TCRs
+├── Documentation
+│   ├── pipeline_report.html
+│   └── pipeline_report.txt
+└── pipeline_info
+    └── icbi
+</div></code></pre>
+
+</body>
+</html>
