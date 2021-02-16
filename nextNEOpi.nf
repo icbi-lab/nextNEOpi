@@ -3952,7 +3952,7 @@ process 'MutationalBurdenCoding' {
         file(vep_somatic_vcf_gz_tbi),
     ) from BaseRecalGATK4_out_MutationalBurden_ch1
         .combine(VEPvcf_out_ch4, by: [0,1])
-    file exons Channel.value(reference.ExonsBED)
+    file (exons) from Channel.value(reference.ExonsBED)
 
 
     output:
