@@ -3952,6 +3952,7 @@ process 'MutationalBurdenCoding' {
         file(vep_somatic_vcf_gz_tbi),
     ) from BaseRecalGATK4_out_MutationalBurden_ch1
         .combine(VEPvcf_out_ch4, by: [0,1])
+    file exons Channel.value(reference.ExonsBED)
 
 
     output:
@@ -3966,7 +3967,7 @@ process 'MutationalBurdenCoding' {
         --vcf ${vep_somatic_vcf_gz} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
-        --bed ./gencode.v33.primary_assembly.annotation.exon_merged.bed \\
+        --bed ${exons} \\
         --variant_type coding \\
         --cpus ${task.cpus} \\
         --output_file ${TumorReplicateId}_${NormalReplicateId}_mutational_burden.txt
