@@ -4807,7 +4807,7 @@ process 'Clonality' {
         """
     else
         """
-        echo "Not avaliable" > ${TumorReplicateId}_CCFest.tsv"
+        echo "Not avaliable" > ${TumorReplicateId}_CCFest.tsv
         """
 }
 
