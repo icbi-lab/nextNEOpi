@@ -18,6 +18,7 @@ From: broadinstitute/gatk
     libssl-dev \
     cmake \
     libncurses-dev \
+    tzdata \
     patch
 
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
