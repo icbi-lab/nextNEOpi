@@ -37,6 +37,8 @@ variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is r
 
 [1] https://github.com/vincentlaboratories/.
 
+![nextNEOpi overview](img/nextNEOpi_small.png)
+
 
 ## 1. Installation
 
