@@ -61,19 +61,24 @@ def sub_csin(c, IC50_cutoff, xp_cutoff, filtered_df):
         sub_csins = []
         for rank in c:
             # Filter dataframe
-            filtered_df = filtered_df[filtered_df["NetMHCpan MT Percentile"] < rank]
-            filtered_df = filtered_df[filtered_df["Best MT Score"] < IC50_cutoff]
-            filtered_df = filtered_df[filtered_df["Gene Expression"] > xp_cutoff]
+            filtered_df_tmp = filtered_df
+            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["NetMHCpan MT Percentile"] < rank]
+            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Best MT Score"] < IC50_cutoff]
+            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Gene Expression"] > xp_cutoff]
             # Get the VAF and mean VAF, then normilize
-            vaf_mean = filtered_df["Tumor DNA VAF"].mean()
-            filtered_df["Normalized_VAF"] = filtered_df["Tumor DNA VAF"].div(vaf_mean)
+            vaf_mean = filtered_df_tmp["Tumor DNA VAF"].mean()
+            filtered_df_tmp["Normalized_VAF"] = filtered_df_tmp["Tumor DNA VAF"].div(vaf_mean)
             # Get the load and mean load, then normilize
-            temp = filtered_df.groupby(["Start"]).size().reset_index(name="vcf_load_count")
+            temp = filtered_df_tmp.groupby(["Chromosome", "Start", "Stop"]).size().reset_index(name="vcf_load_count")
             vcf_load = temp["vcf_load_count"].mean()
-            filtered_df["Normalized_load"] = filtered_df.groupby("Start")["Start"].transform("count").div(vcf_load)
+            filtered_df_tmp["Normalized_load"] = filtered_df_tmp.groupby("Start")["Start"].transform("count").div(vcf_load)
             # Calculate "Sub-CSiN" and multiply by the a (=10) constant
-            mult = filtered_df.Normalized_VAF * filtered_df.Normalized_load
+            mult = filtered_df_tmp.Normalized_VAF * filtered_df_tmp.Normalized_load
             sub_csin = math.log(mult.mean()) * 10
+            if math.isnan(sub_csin):
+                sub_csin = 0.0
+            else:
+                pass
             sub_csins.append(sub_csin)
         return sub_csins
 
