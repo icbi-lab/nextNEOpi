@@ -50,12 +50,12 @@ From: continuumio/miniconda3:4.9.2
     wget -O /opt/iedb/LICENSE https://raw.githubusercontent.com/griffithlab/docker-pvactools/master/LICENSE
 
     cd /opt/iedb
-    wget https://downloads.iedb.org/tools/mhci/3.1.1/IEDB_MHC_I-3.1.1.tar.gz
-    tar -xzvf IEDB_MHC_I-3.1.1.tar.gz
+    wget https://downloads.iedb.org/tools/mhci/3.1.2/IEDB_MHC_I-3.1.2.tar.gz
+    tar -xzvf IEDB_MHC_I-3.1.2.tar.gz
     cd /opt/iedb/mhc_i
     bash -l -c "./configure"
     cd /opt/iedb
-    rm IEDB_MHC_I-3.1.1.tar.gz
+    rm IEDB_MHC_I-3.1.2.tar.gz
 
     wget https://downloads.iedb.org/tools/mhcii/3.1.2/IEDB_MHC_II-3.1.2.tar.gz
     tar -xzvf IEDB_MHC_II-3.1.2.tar.gz
@@ -69,7 +69,7 @@ From: continuumio/miniconda3:4.9.2
     mkdir /data
     pip install --upgrade pip
     pip install tensorflow==2.2.0
-    pip install pvactools==2.0.0
+    pip install pvactools==2.0.1
     mhcflurry-downloads fetch
 
     cd /opt
