@@ -5860,6 +5860,44 @@ process csin {
     """
 }
 
+igs_chck_file = file(workflow.workDir + "/.igs_install_ok.chck")
+igs_target = workflow.workDir + "/IGS"
+if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
+    process install_IGS {
+
+        tag 'install IGS'
+
+        output:
+        file(".igs_install_ok.chck") into igs_chck_ch
+
+        script:
+        """
+        curl -sLk ${params.IGS_script_url} -o ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R && \\
+        curl -sLk ${params.IGS_model_url} -o ${igs_target}/Final_gbm_model.rds && \\
+        patch -p 0 ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R ${baseDir}/assets/NeoAg_immunogenicity_predicition_GBM.patch && \\
+        echo "OK" > .igs_install_ok.chck && \\
+        cp -f .igs_install_ok.chck ${igs_chck_file}
+        """
+    }
+} else if (( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS != "") {
+    process link_IGS {
+
+        tag 'link IGS'
+
+        output:
+        file(".igs_install_ok.chck") into igs_chck_ch
+
+        script:
+        """
+        ln -s ${params.IGS} ${igs_target} && \\
+        echo "OK" > .igs_install_ok.chck && \\
+        cp -f .igs_install_ok.chck ${igs_chck_file}
+        """
+    }
+} else {
+    igs_chck_ch = Channel.fromPath(igs_chck_file)
+}
+
 
 process immunogenicity_scoring {
 
@@ -5892,9 +5930,9 @@ process immunogenicity_scoring {
         --output ./${TumorReplicateId}_epitopes.tsv
     NR_EPI=`wc -l ./${TumorReplicateId}_epitopes.tsv | cut -d" " -f 1`
     if [ \$NR_EPI -gt 1 ]; then
-        NeoAg_immunogenicity_predicition_GBM.R \\
+        ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R \\
             ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv \\
-            ${baseDir}/assets/Final_gbm_model.rds \\
+            ${igs_target}/Final_gbm_model.rds \\
         immuno_score.py \\
             --pvacseq_tsv $pvacseq_file \\
             --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
