@@ -3175,7 +3175,7 @@ if(have_Mutect1) {
     GatherRealignedBamFiles_out_Mutect1scattered_ch0
         .map {  item -> tuple(item[0],
                               item[1],
-                              val("mutect1"),
+                              "mutect1",
                               "NO_FILE",
                               "NO_FILE_IDX") }
         .set { Mutect1_out_ch1 }
