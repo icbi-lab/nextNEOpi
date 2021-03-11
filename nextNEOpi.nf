@@ -5872,9 +5872,11 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
 
         script:
         """
+        mkdir -p ${igs_target} && \\
         curl -sLk ${params.IGS_script_url} -o ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R && \\
         curl -sLk ${params.IGS_model_url} -o ${igs_target}/Final_gbm_model.rds && \\
-        patch -p 0 ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R ${baseDir}/assets/NeoAg_immunogenicity_predicition_GBM.patch && \\
+        patch -p0 ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R ${baseDir}/assets/NeoAg_immunogenicity_predicition_GBM.patch && \\
+        chmod +x ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R  && \\
         echo "OK" > .igs_install_ok.chck && \\
         cp -f .igs_install_ok.chck ${igs_chck_file}
         """
