@@ -5187,6 +5187,10 @@ process get_vhla {
 
     tag "$TumorReplicateId"
 
+    publishDir "$params.outputDir/$TumorReplicateId/10_Final_HLAcalls/",
+    mode: params.publishDirMode
+
+
     input:
     set (
         TumorReplicateId,
