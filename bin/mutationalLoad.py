@@ -174,7 +174,7 @@ if __name__ == "__main__":
 
     usage = __doc__.split("\n\n\n")
     parser = argparse.ArgumentParser(
-        description="Calculat the tumor mutational burden or load"
+        description="Calculate the tumor mutational burden or load"
     )
     parser.add_argument(
         "--normal_bam",
