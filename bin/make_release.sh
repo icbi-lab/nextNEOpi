@@ -16,6 +16,7 @@ mkdir -p ${BUILD_DIR}/{conf,bin,assets,resources}
 cp nextNEOpi.nf example_batchFile.csv README.md README.html ${BUILD_DIR}
 cp assets/Alleles_list.txt ${BUILD_DIR}/assets
 cp assets/Final_gbm_model.rds ${BUILD_DIR}/assets
+cp assets/NeoAg_immunogenicity_predicition_GBM.patch ${BUILD_DIR}/assets
 cp assets/Frameshift.pm ${BUILD_DIR}/assets
 cp assets/Wildtype.pm ${BUILD_DIR}/assets
 cp assets/email_template.html ${BUILD_DIR}/assets
