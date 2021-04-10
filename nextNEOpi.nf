@@ -1271,6 +1271,7 @@ process 'make_uBAM' {
         mkdir -p ${params.tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
             --TMP_DIR ${params.tmpDir} \\
+            --MAX_RECORDS_IN_RAM ${param.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             --READ_GROUP_NAME ${procSampleName} \\
             --SAMPLE_NAME ${procSampleName} \\
@@ -1283,6 +1284,7 @@ process 'make_uBAM' {
         mkdir -p ${params.tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
             --TMP_DIR ${params.tmpDir} \\
+            --MAX_RECORDS_IN_RAM ${param.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             -F2 ${readsREV} \\
             --READ_GROUP_NAME ${procSampleName} \\
