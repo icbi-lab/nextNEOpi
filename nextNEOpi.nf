@@ -2349,6 +2349,8 @@ process 'CNNScoreVariants' {
         -tensor-type read_tensor \\
         --inter-op-threads ${task.cpus} \\
         --intra-op-threads ${task.cpus} \\
+        --transfer-batch-size ${params.transferBatchSize} \\
+        --inference-batch-size ${params.inferenceBatchSize} \\
         -O ${raw_germline_vcf.baseName}_CNNScored.vcf.gz
     """
 }
