@@ -5483,6 +5483,17 @@ process 'pVACseq' {
     NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
     phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz : ""
 
+    filter_set = params.pVACseq_filter_sets[ "standard" ]
+
+    if (params.pVACseq_filter_sets[ params.pVACseq_filter_set ] != null) {
+        filter_set = params.pVACseq_filter_sets[ params.pVACseq_filter_set ]
+    } else {
+        log.warn "WARNING: pVACseq_filter_set must be one of: standard, relaxed, custom\n" +
+            "using standard"
+        filter_set = params.pVACseq_filter_sets[ "standard" ]
+    }
+
+
     if(!have_GATK3) {
 
         log.warn "WARNING: GATK3 not installed! Have no readbacked phased VCF:\n" +
@@ -5502,7 +5513,8 @@ process 'pVACseq' {
         --normal-sample-name ${NormalReplicateId} \\
         ${NetChop} \\
         ${NetMHCstab} \\
-        ${anno_vcf} ${TumorReplicateId} ${hla_type} ${params.baff_tools} ./${TumorReplicateId}_${hla_type}
+        ${filter_set} \\
+        ${anno_vcf} ${TumorReplicateId} ${hla_type} ${params.epitope_prediction_tools} ./${TumorReplicateId}_${hla_type}
     """
 }
 

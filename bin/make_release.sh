@@ -57,12 +57,13 @@ if [ "$ICBI" != "" ]; then
     cp conf/params_icbi.config  ${BUILD_DIR}/conf/params.config
     # cp conf/resources_icbi.config  ${BUILD_DIR}/conf/resources.config
     cp conf/resources.config  ${BUILD_DIR}/conf/resources.config
+    cp conf/process_icbi.config  ${BUILD_DIR}/conf/process.config
 else
     cp conf/params.config  ${BUILD_DIR}/conf
     cp conf/resources.config  ${BUILD_DIR}/conf
+    cp conf/process.config  ${BUILD_DIR}/conf
 fi
 
-cp conf/process.config  ${BUILD_DIR}/conf
 cp conf/profiles.config  ${BUILD_DIR}/conf
 
 cd $BUILD_DIR
