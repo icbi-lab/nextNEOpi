@@ -45,11 +45,13 @@ if __name__ == "__main__":
     # make positions 0 based
     ccf_df["pos"] -= 1
 
-    neoepitope_df = neoepitope_df.merge(
+    neoepitope_df = pd.merge_ordered(
+        neoepitope_df,
         ccf_df[["Chr", "pos", "CCF", "CCF.05", "CCF.95", "pSubclonal", "pClonal"]],
         how="left",
         left_on=["Chromosome", "Start"],
         right_on=["Chr", "pos"],
+        fill_method="ffill",
     ).drop(["Chr", "pos"], axis=1)
 
     neoepitope_df.to_csv(args.outfile, sep="\t", index=False)
