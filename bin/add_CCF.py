@@ -6,7 +6,7 @@ Requirements:
     * Pandas
     * NumPy
 
-Copyright (c) 2020 Dietmar rieder <dietmar.rieder@i-med.ac.at>
+Copyright (c) 2020 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
 MIT License <http://opensource.org/licenses/MIT>
 
 """

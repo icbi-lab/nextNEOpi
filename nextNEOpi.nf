@@ -33,6 +33,15 @@ log.info ""
 log.info "Please check --help for further instruction"
 log.info "-------------------------------------------------------------------------"
 
+// Check if License(s) were accepted
+params.accept_license = false
+
+if (params.accept_license) {
+    acceptLicense()
+} else {
+    checkLicense()
+}
+
 /*
 ________________________________________________________________________________
 
@@ -6325,6 +6334,38 @@ def checkToolAvailable(tool, check, errMode) {
     return checkResult
 }
 
+def showLicense() {
+
+    licenseFile = file(workflow.projectDir + "/LICENSE")
+    log.info licenseFile.text
+
+    log.info ""
+    log.warn "To accept the licence terms, please rerun with '--accept_license'"
+    log.info ""
+
+    exit 1
+}
+
+def acceptLicense() {
+    log.info ""
+    log.warn "I have read and accept the licence terms"
+    log.info ""
+
+    licenseChckFile = file(workflow.projectDir + "/.license_accepted.chck")
+    licenseChckFile.text = "License accepted by " + workflow.userName + " on "  + workflow.start
+
+    return true
+}
+
+def checkLicense() {
+    licenseChckFile = file(workflow.projectDir + "/.license_accepted.chck")
+
+    if(!licenseChckFile.exists()) {
+        showLicense()
+    } else {
+        return true
+    }
+}
 
 def helpMessage() {
     log.info ""
