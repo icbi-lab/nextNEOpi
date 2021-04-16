@@ -276,6 +276,10 @@ nextflow run nextNEOpi.nf \
 
 ```--gender```                Provide the gender of the sample (XX or Female, XY or Male, None)
 
+```--pVACseq_filter_set```   Can be one of [standard, relaxed, custom]. The ```standard``` filter set is using the pVACseq default filters. The ```relaxed``` filter set is filtering only for ic50 < 500 & rank < 2 & expn-val > 2. With filter set ```custom``` users can define a custom set of filters by providing the desired filters (space separated) using the ```--pVACseq_custom_filters``` option. E.g. --pVACseq_filter_set custom --pVACseq_custom_filters "--binding-threshold 250 --percentile-threshold 1". For filter options please see also the pVACseq manual. Default: standard
+
+```--pVACseq_custom_filters``` See ```--pVACseq_filter_set```
+
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
                             (see ```conf/params.config```)
 
