@@ -3834,6 +3834,7 @@ process 'VEPvcf' {
         > ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
 
     tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
+    sync
     """
 }
 
