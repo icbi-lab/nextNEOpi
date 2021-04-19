@@ -183,7 +183,7 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 
 * e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
  | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
  | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX | group1
  sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY | group1
@@ -193,7 +193,7 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
  | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
  | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX | group1
  sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY | group1
@@ -204,7 +204,7 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | gender | group |
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
  | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
  | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX | group1
  sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY | group1
@@ -219,7 +219,7 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa._
 
 - in the ```HLAfile``` coulumn a user suppiled HLA types file may be specified for a given sample, see also ```--customHLA``` option below
 
-- the ```gender``` column can be XX or Female, XY or Male. If not specified or "None" Male is assumed
+- the ```sex``` column can be XX or Female, XY or Male. If not specified or "None" Male is assumed
 
 
 **Example run command with batchfile:**
@@ -274,7 +274,7 @@ nextflow run nextNEOpi.nf \
 
 ```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
 
-```--gender```                Provide the gender of the sample (XX or Female, XY or Male, None)
+```--sex```                Provide the sex of the sample (XX or Female, XY or Male, None)
 
 ```--pVACseq_filter_set```   Can be one of [standard, relaxed, custom]. The ```standard``` filter set is using the pVACseq default filters. The ```relaxed``` filter set is filtering only for ic50 < 500 & rank < 2 & expn-val > 2. With filter set ```custom``` users can define a custom set of filters by providing the desired filters (space separated) using the ```--pVACseq_custom_filters``` option. E.g. ```--pVACseq_filter_set custom --pVACseq_custom_filters "--binding-threshold 250 --percentile-threshold 1"```. For filter options please see also the pVACseq manual. Default: standard
 

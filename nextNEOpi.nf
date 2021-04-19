@@ -91,7 +91,7 @@ if(params.batchFile) summary['Batch file']                 = params.batchFile
 if(params.readsNormal != "NO_FILE") summary['Reads normal fastq files'] = params.readsNormal
 if(params.readsTumor != "NO_FILE") summary['Reads tumor fastq files']   = params.readsTumor
 if(params.customHLA != "NO_FILE") summary['Custom HLA file']   = params.customHLA
-summary['Gender']                        = params.gender
+summary['Sex']                        = params.sex
 summary['Read length']                   = params.readLength
 summary['Exome capture kit']             = params.exomeCaptureKit
 summary['Fasta Ref']                     = params.references.RefFasta
@@ -231,12 +231,12 @@ if (! params.batchFile) {
                 ))
             .set { custom_hlas_ch }
 
-    genderMap = [:]
+    sexMap = [:]
 
-    if (params.gender in ["XX", "XY", "Female", "Male"]) {
-        genderMap[row.tumorSampleName] = params.gender
+    if (params.sex in ["XX", "XY", "Female", "Male"]) {
+        sexMap[row.tumorSampleName] = params.sex
     } else {
-        exit 1, "Gender should be one of: XX, XY, Female, Male, got: " + params.gender
+        exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
     }
 } else {
     // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
@@ -253,18 +253,18 @@ if (! params.batchFile) {
     pe_rna_count = 0
     se_rna_count = 0
 
-    genderMap = [:]
+    sexMap = [:]
 
     for ( row in batchCSV ) {
-        if(row.gender && row.gender != "None") {
-            if (params.gender in ["XX", "XY", "Female", "Male"]) {
-               genderMap[row.tumorSampleName] = (row.gender == "Female" || row.gender == "XX") ? "XX" : "XY"
+        if(row.sex && row.sex != "None") {
+            if (params.sex in ["XX", "XY", "Female", "Male"]) {
+               sexMap[row.tumorSampleName] = (row.sex == "Female" || row.sex == "XX") ? "XX" : "XY"
             } else {
-                exit 1, "Gender should be one of: XX, XY, Female, Male, got: " + params.gender
+                exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
             }
         } else {
-            println("WARNING: gender not specified assuming: XY")
-            genderMap[row.tumorSampleName] = "XY"
+            println("WARNING: sex not specified assuming: XY")
+            sexMap[row.tumorSampleName] = "XY"
         }
 
         if (row.readsTumorREV == "None") {
@@ -4096,10 +4096,10 @@ process ConvertAlleleCounts {
     ) into ConvertAlleleCounts_out_ch
 
     script:
-    gender = genderMap[TumorReplicateId]
+    sex = sexMap[TumorReplicateId]
     """
     Rscript ${workflow.projectDir}/bin/convertAlleleCounts.r \\
-        ${TumorReplicateId} ${alleleCountTumor} ${NormalReplicateId} ${alleleCountNormal} ${gender}
+        ${TumorReplicateId} ${alleleCountTumor} ${NormalReplicateId} ${alleleCountNormal} ${sex}
     """
 }
 
@@ -4138,11 +4138,11 @@ process 'Ascat' {
 
 
     script:
-    gender = genderMap[TumorReplicateId]
+    sex = sexMap[TumorReplicateId]
     """
     # get rid of "chr" string if there is any
     for f in *BAF *LogR; do sed 's/chr//g' \$f > tmpFile; mv tmpFile \$f;done
-    Rscript ${workflow.projectDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${gender}
+    Rscript ${workflow.projectDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${sex}
     """
 }
 
@@ -4283,7 +4283,7 @@ if (params.controlFREEC) {
 
         script:
         config = "${TumorReplicateId}_vs_${NormalReplicateId}.config.txt"
-        gender = genderMap[TumorReplicateId]
+        sex = sexMap[TumorReplicateId]
 
         read_orientation = (single_end) ? "0" : "FR"
         minimalSubclonePresence = (params.WES) ? 30 : 20
@@ -4311,7 +4311,7 @@ if (params.controlFREEC) {
         echo "ploidy = 2,3,4" >> ${config}
         echo "degree = ${degree}" >> ${config}
         echo "noisyData = ${noisyData}" >> ${config}
-        echo "sex = ${gender}" >> ${config}
+        echo "sex = ${sex}" >> ${config}
         echo "window = ${window}" >> ${config}
         echo "breakPointType = ${breakPointType}" >> ${config}
         echo "breakPointThreshold = ${breakPointThreshold}" >> ${config}
@@ -4511,13 +4511,13 @@ process Sequenza {
     file("${TumorReplicateId}_*.{png,pdf,txt}")
 
     script:
-    gender = genderMap[TumorReplicateId]
+    sex = sexMap[TumorReplicateId]
     """
     Rscript \\
         ${workflow.projectDir}/bin/SequenzaScript.R \\
         ${seqz_file} \\
         ${TumorReplicateId} \\
-        ${gender} || \\
+        ${sex} || \\
         touch ${TumorReplicateId}_segments.txt && \\
         touch ${TumorReplicateId}_confints_CP.txt
     """
@@ -4599,8 +4599,8 @@ process CNVkit {
     ) into CNVkit_out_ch0
 
     script:
-    gender = genderMap[TumorReplicateId]
-    maleRef = (gender in ["XY", "Male"]) ? "-y" : ""
+    sex = sexMap[TumorReplicateId]
+    maleRef = (sex in ["XY", "Male"]) ? "-y" : ""
     method = (params.WES) ? "--method hybrid" : "--method wgs"
     targets = (params.WES) ? "--targets ${BaitsBed}" : ""
 
@@ -6391,7 +6391,7 @@ def helpMessage() {
     log.info ""
     log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
     log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1"
     log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1"
     log.info "..."
@@ -6399,7 +6399,7 @@ def helpMessage() {
 
     log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
     log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1"
     log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1"
     log.info "..."
@@ -6407,7 +6407,7 @@ def helpMessage() {
 
     log.info "CSV-file, single-end T/N reads, NO RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,gender,group"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
     log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1"
     log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1"
     log.info "..."
@@ -6419,7 +6419,7 @@ def helpMessage() {
 
     log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below"
 
-    log.info "Note: gender can be XX or Female, XY or Male. If not specified or \"None\" Male is assumed"
+    log.info "Note: sex can be XX or Female, XY or Male. If not specified or \"None\" Male is assumed"
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
