@@ -183,12 +183,22 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
         if chrom_key not in segments:
             continue
 
+        # set defaults
+        seg_found = False
+        ploidy = 2
+        cn_a = 1
+        cn_b = 1
+
         for seg in segments[chrom_key]:
             if rec.POS >= seg["start_pos"] and rec.POS <= seg["end_pos"]:
                 ploidy = seg["n_minor"] + seg["n_major"]
                 cn_a = seg["n_major"]
                 cn_b = seg["n_minor"]
+                seg_found = True
                 break
+
+        if not seg_found:
+            print("WARNING: " + rec.CHROM + ":" + str(rec.POS) + " not within any CN segment: setting cn_minor and cn_major to 1")
 
         rec_out = [pat_id, sample_type, rec.CHROM, rec.POS, norm_cnt, mut_cnt, vaf, ploidy, cn_a, cn_b, purity, coding]
 
