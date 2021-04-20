@@ -103,6 +103,9 @@ def get_segments_seqz(seg_file):
             segments["chr_prefix"] = True if chrom.startswith("chr") else False
             segments[chrom] = []
 
+        if n_major == "NA" or n_minor == "NA":
+            continue
+
         segments[chrom].append(
             {
                 "start_pos": int(float(start_pos)),
