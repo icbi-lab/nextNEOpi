@@ -3911,6 +3911,9 @@ process 'MutationalBurden' {
     publishDir "$params.outputDir/$TumorReplicateId/18_MutationalBurden/",
         mode: params.publishDirMode
 
+    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    maxRetries 5
+
 
     input:
         set(
@@ -3953,6 +3956,10 @@ process 'MutationalBurdenCoding' {
 
     publishDir "$params.outputDir/$TumorReplicateId/18_MutationalBurden/",
         mode: params.publishDirMode
+
+    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    maxRetries 5
+
 
     input:
         set(
