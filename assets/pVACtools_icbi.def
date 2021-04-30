@@ -93,7 +93,7 @@ From: continuumio/miniconda3:4.9.2
     mkdir /data
     pip install --upgrade pip
     pip install tensorflow==2.2.0
-    pip install pvactools==2.0.1
+    pip install pvactools==2.0.2
     mhcflurry-downloads fetch
 
     cd /opt
