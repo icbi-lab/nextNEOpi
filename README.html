@@ -497,7 +497,10 @@ its dependencies.</p>
 <p>We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
 <p>Please see <code>profiles</code> in <code>conf/profiles.config</code> to adjust the cluster profile to your scheduling system.</p>
 <p><strong>Single-end reads:</strong></p>
-<p><code>--single_end</code> sets parameter to TRUE (default false)</p>
+<p><code>--single_end</code> DNA reads are single end: sets parameter to TRUE (default false)</p>
+<p><code>--single_end_RNA</code> RNA reads are single end: sets parameter to TRUE (default false)</p>
+<p><strong>RNA reads are from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
+<p><code>--RNA_tag_seq</code> turns off the &quot;--trna-vaf&quot; and &quot;--trna-cov&quot; filter from pVACseq epitope filtering. 3-prime end sequencing does not cover the entire transcript.</p>
 <p><strong>Mandatory arguments:</strong></p>
 <p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
 <p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>

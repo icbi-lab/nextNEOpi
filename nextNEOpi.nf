@@ -5522,6 +5522,11 @@ process 'pVACseq' {
 
     }
 
+    if (params.RNA_tag_seq) {
+        filter_set = filter_set.replaceAll(/--trna-vaf\s+\d+\.{0,1}\d*/, "--trna-vaf 0.0")
+        filter_set = filter_set.replaceAll(/--trna-cov\s+\d+/, "--trna-cov 0")
+    }
+
     """
     pvacseq run \\
         --iedb-install-directory /opt/iedb \\

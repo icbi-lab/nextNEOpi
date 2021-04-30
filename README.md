@@ -167,7 +167,14 @@ Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster pr
 
 **Single-end reads:**
 
-```--single_end``` sets parameter to TRUE (default false)
+```--single_end``` DNA reads are single end: sets parameter to TRUE (default false)
+
+```--single_end_RNA``` RNA reads are single end: sets parameter to TRUE (default false)
+
+
+**RNA reads are from tag seq library i.e. 3-prime end sequencing protocol**
+
+```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. 3-prime end sequencing does not cover the entire transcript.
 
 **Mandatory arguments:**
 
