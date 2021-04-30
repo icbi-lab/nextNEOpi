@@ -3828,12 +3828,14 @@ process 'VEPvcf' {
     bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
         > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
 
-    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz && \\
+        sleep 2
 
     bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         > ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
 
-    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz && \\
+        sleep 2
     sync
     """
 }
