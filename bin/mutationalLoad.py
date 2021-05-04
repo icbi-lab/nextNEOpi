@@ -302,4 +302,4 @@ if __name__ == "__main__":
     output_file.write("Min depth in T and N:\t" + str(min_c) + "\n")
     output_file.write("Min base call quality considerd:\t" + str(min_q) + "\n")
     output_file.write("Variants of type " + var_type + ":\t" + str(variants) + "\n")
-    output_file.write("Mutational load (variants/Mbps):\t" + str(variants*10**6/coverage) + "\n")
+    output_file.write("Mutational load (variants/Mbps):\t" + str(round(variants*10**6/coverage, 3)) + "\n")
