@@ -77,7 +77,7 @@ If you prefer local installation of the analysis tools please install the follow
 * VARSCAN 		(Version 2.4.3)
 * MUTECT1 		(Version 1.1.7) ---- optional
 * BAMREADCOUNT 	(Version 0.8.0)
-* VEP 			(Version v102)
+* VEP 			(Version v103)
 * BGZIP
 * TABIX
 * BCFTOOLS
