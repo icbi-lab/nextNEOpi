@@ -3846,9 +3846,9 @@ process 'VEPvcf' {
     publishDir "$params.outputDir/analyses/$TumorReplicateId/05_vep/vcf/high_confidence/",
         saveAs: {
             filename ->
-                if (filename.indexOf(".combined_sorted_vep.vcf.gz") > 0 && params.fullOutput) {
+                if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && params.fullOutput) {
                     return "combined/$filename"
-                } else if (filename.indexOf(".combined_sorted_vep.vcf.gz") > 0 && ! params.fullOutput) {
+                } else if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && ! params.fullOutput) {
                     return null
                 } else if (filename.endsWith(".fa")) {
                     return "$params.outputDir/analyses/$TumorReplicateId/06_proteinseq/$filename"
@@ -5515,21 +5515,21 @@ if (have_RNAseq) {
                     if(fileName.indexOf("Arriba") >= 0) {
                         targetFile = "Arriba/" + file(fileName).getName()
                     } else if(fileName.indexOf("Custom_HLAs") >= 0) {
-                        targetFile = params.fullOutput ? "Custom_HLAs/" + file(fileName).getName() : null
+                        targetFile = params.fullOutput ? "Custom_HLAs/" + file(fileName).getName() : ""
                     } else if(fileName.indexOf("LOGS/") >= 0) {
-                        targetFile = params.fullOutput ? "LOGS/" + file(fileName).getName() : null
+                        targetFile = params.fullOutput ? "LOGS/" + file(fileName).getName() : ""
                     } else if(fileName.indexOf("NeoFuse/MHC_I/") >= 0) {
                         targetFile = "NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_I_unsupported.txt")
                     } else if(fileName.indexOf("NeoFuse/MHC_II/") >= 0) {
                         if(fileName.indexOf("_mixMHC2pred_conf.txt") < 0) {
                             targetFile = "NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_II_unsupported.txt")
                         } else {
-                            targetFile = params.fullOutput ? "NeoFuse/" + file(fileName).getName() : null
+                            targetFile = params.fullOutput ? "NeoFuse/" + file(fileName).getName() : ""
                         }
                     } else if(fileName.indexOf("STAR/") >= 0) {
-                        targetFile = params.fullOutput ? "STAR/" + file(fileName).getName() : null
+                        targetFile = params.fullOutput ? "STAR/" + file(fileName).getName() : ""
                     } else if(fileName.indexOf("TPM/") >= 0) {
-                        targetFile = params.fullOutput ? "expression_TPM/" + file(fileName).getName() : null
+                        targetFile = params.fullOutput ? "expression_TPM/" + file(fileName).getName() : ""
                     } else {
                         targetFile = fileName
                     }
@@ -5572,7 +5572,7 @@ if (have_RNAseq) {
             file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam"),
             file("./${TumorReplicateId}/STAR/${TumorReplicateId}.Aligned.sortedByCoord.out.bam.bai")
         ) into star_bam_file
-        path("${TumorReplicateId}/")
+        path("${TumorReplicateId}/**")
 
 
         script:
