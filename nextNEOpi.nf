@@ -3185,6 +3185,15 @@ if(have_Mutect1) {
         tag "$TumorReplicateId"
 
         publishDir "$params.outputDir/analyses/$TumorReplicateId/04_variations/mutect1/",
+            saveAs: {
+                fileName ->
+                    if(fileName.indexOf("_mutect1_raw") >= 0) {
+                        targetFile = "raw/" + fileName
+                    }
+                        targetFile = fileName
+                    }
+                    return targetFile
+            },
             mode: params.publishDirMode
 
         input:
