@@ -4991,7 +4991,7 @@ process 'MutationalBurdenCoding' {
 
     tag "$TumorReplicateId - $NormalReplicateId"
 
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/18_MutationalBurden/",
+    publishDir "$params.outputDir/analyses/$TumorReplicateId/07_MutationalBurden/",
         mode: params.publishDirMode
 
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
