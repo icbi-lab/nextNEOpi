@@ -6496,7 +6496,7 @@ process collectSampleInfo {
         --sample_name ${TumorReplicateId} \\
         --csin ${csin} \\
         --tmb ${tmb} \\
-        --tmb_coding ${tmp_coding} \\
+        --tmb_coding ${tmb_coding} \\
         --out ${TumorReplicateId}_sample_info.tsv
     """
 }
