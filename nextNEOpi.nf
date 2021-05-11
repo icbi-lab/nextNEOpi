@@ -5625,9 +5625,9 @@ if (have_RNAseq) {
         publishDir "$params.outputDir/neoantigens/$TumorReplicateId/",
         saveAs: {
             fileName ->
-                if(fileName.indexOf("MHCI") >= 0) {
+                if(fileName.indexOf("_MHCI_") >= 0) {
                     targetFile = "Class_I/Fusions/" + fileName.replace("${TumorReplicateId}", "${TumorReplicateId}_NeoFuse")
-                } else if(fileName.indexOf("MHCII") >= 0) {
+                } else if(fileName.indexOf("_MHCII_") >= 0) {
                     targetFile = "Class_II/Fusions/" + fileName.replace("${TumorReplicateId}", "${TumorReplicateId}_NeoFuse")
                 } else {
                     targetFile = fileName
