@@ -3189,7 +3189,7 @@ if(have_Mutect1) {
                 fileName ->
                     if(fileName.indexOf("_mutect1_raw") >= 0) {
                         targetFile = "raw/" + fileName
-                    }
+                    } else {
                         targetFile = fileName
                     }
                     return targetFile
