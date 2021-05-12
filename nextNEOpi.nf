@@ -5391,7 +5391,7 @@ process 'run_hla_hd' {
     tag "$TumorReplicateId"
 
     publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/HLA_HD/",
-        saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? fileName : null },
+        saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName() : null },
         mode: params.publishDirMode
 
     input:
