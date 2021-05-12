@@ -4711,7 +4711,7 @@ process CNVkit {
     script:
     sex = sexMap[TumorReplicateId]
     maleRef = (sex in ["XY", "Male"]) ? "-y" : ""
-    gender = (sex in ["XY", "Male"]) ? "Male" : "Femal"
+    gender = (sex in ["XY", "Male"]) ? "Male" : "Female"
     method = (params.WES) ? "--method hybrid" : "--method wgs"
     targets = (params.WES) ? "--targets ${BaitsBed}" : ""
 
