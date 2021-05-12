@@ -1154,6 +1154,7 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
         ) into (
             reads_tumor_neofuse_ch,
             reads_tumor_optitype_ch,
+            reads_tumor_hlahd_RNA_ch,
             reads_tumor_mixcr_RNA_ch,
             fastqc_readsRNAseq_trimmed_ch
         )
@@ -1255,9 +1256,10 @@ if (params.trim_adapters_RNAseq && have_RNAseq) {
     (
         reads_tumor_neofuse_ch,
         reads_tumor_optitype_ch,
+        reads_tumor_hlahd_RNA_ch,
         reads_tumor_mixcr_RNA_ch,
         ch_fastp_RNAseq
-    ) = raw_reads_tumor_neofuse_ch.into(4)
+    ) = raw_reads_tumor_neofuse_ch.into(5)
 
     ch_fastp_RNAseq = ch_fastp_RNAseq
                             .map{ it -> tuple(it[0], it[1], "")}
@@ -5284,8 +5286,8 @@ if (have_RNAseq) {
             readRNAREV
         ) from reads_tumor_optitype_ch
 
-    file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
-    val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+        file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
+        val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
 
         output:
         set (
@@ -5436,6 +5438,59 @@ process 'run_hla_hd' {
         """
 }
 
+if (have_RNAseq) {
+    process 'run_hla_hd_RNA' {
+
+        label 'HLAHD_RNA'
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/HLA_HD/",
+            saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName().replace(".txt", ".RNA.txt") : null },
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            _,
+            file(readsFWD),
+            file(readsREV)
+        ) from reads_tumor_hlahd_RNA_ch
+
+        file frData from Channel.value(reference.HLAHDFreqData)
+        file gSplit from Channel.value(reference.HLAHDGeneSplit)
+        file dict from Channel.value(reference.HLAHDDict)
+
+        output:
+        set (
+            TumorReplicateId,
+            file("**/*_final.result.txt")
+        ) into (
+            hlahd_output_RNA
+        )
+
+        script:
+        hlahd_p = Channel.value(HLAHD_PATH).getVal()
+
+        if (single_end_RNA)
+            """
+            export PATH=\$PATH:$hlahd_p
+            $HLAHD -t ${task.cpus} \\
+                -m 50 \\
+                -f ${frData} ${readsFWD} ${readsFWD} \\
+                ${gSplit} ${dict} $TumorReplicateId .
+            """
+        else
+            """
+            export PATH=\$PATH:$hlahd_p
+            $HLAHD -t ${task.cpus} \\
+                -m 50 \\
+                -f ${frData} ${readsFWD} ${readsREV} \\
+                ${gSplit} ${dict} $TumorReplicateId .
+            """
+    }
+}
+
 /*
 Get the HLA types from OptiType and HLA-HD ouput as a "\n" seperated list.
 To be used as input for pVACseq
@@ -5467,6 +5522,7 @@ process get_vhla {
     ) from optitype_output
         .combine(optitype_RNA_output, by: 0)
         .combine(hlahd_output, by: 0)
+        .combine(hlahd_output_RNA, by: 0)
         .combine(custom_hlas_ch, by: 0)
 
     output:
@@ -5634,7 +5690,7 @@ if (have_RNAseq) {
                 }
                 return targetFile
         },
-        mode: params.publishDirMode
+        mode: "copy"
 
         input:
         set(
