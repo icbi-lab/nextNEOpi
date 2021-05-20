@@ -108,9 +108,7 @@ def get_coverage(tumor_bam, normal_bam, regions, mode, min_q, min_c, fasta_file)
     return coverage
 
 
-def get_coding_regions_from_bed(bed_file, chrom):
-    coding_regions = list()
-
+def mk_bgz_bed(bed_file):
     if not bed_file.endswith(".gz") and not os.path.exists(bed_file + ".gz"):
         try:
             bgz_bed = pysam.tabix_index(
@@ -130,6 +128,12 @@ def get_coding_regions_from_bed(bed_file, chrom):
             raise
     else:
         bgz_bed = bed_file + ".gz"
+
+    return bgz_bed
+
+
+def get_coding_regions_from_bed(bgz_bed, chrom):
+    coding_regions = list()
 
     bed = pysam.TabixFile(bgz_bed, parser=pysam.asBed())
     for row in bed.fetch(chrom):
@@ -359,6 +363,10 @@ if __name__ == "__main__":
     if ccf_file is not None:
         ccf_data = get_ccf_from_tsv(ccf_file, ccf_clonal_thresh, p_clonal_thresh)
 
+    bgz_bed_file = None
+    if bed_file is not "":
+        bgz_bed_file = mk_bgz_bed(bed_file)
+
     variants = get_variants_from_vcf(vcf_file, var_type, ccf_data)
 
     bam = pysam.AlignmentFile(tumor_bam, "rb", threads=2)
@@ -375,7 +383,7 @@ if __name__ == "__main__":
         if bam.get_reference_length(chrom) > 40000000:
             pool_result[chrom] = None
             if bed_file is not "":
-                coding_regions[chrom] = get_coding_regions_from_bed(bed_file, chrom)
+                coding_regions[chrom] = get_coding_regions_from_bed(bgz_bed_file, chrom)
                 mode = "truncate"
 
     for chrom in pool_result.keys():

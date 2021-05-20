@@ -348,7 +348,7 @@ if (! params.batchFile) {
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     file("NO_FILE")) }
-                .set { optitype_RNA_output }
+                .set { optitype_RNA_output; hlahd_output_RNA }
     }
 
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
@@ -371,11 +371,14 @@ MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
 // check HLAHD
+have_HLAHD = false
 HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
 if (checkToolAvailable(HLAHD, "exists", "warn")) {
     HLAHD_PATH = HLAHD_DIR + "/bin"
+    have_HLAHD = true
 } else {
-    exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
+    // exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
+    log.warn "WARNING: HLAHD not available - can not predict Class II neoepitopes"
 }
 
 // check if all tools are installed when not running conda or singularity
@@ -5386,59 +5389,68 @@ if (have_RNAseq) {
 *********************************************
 */
 
-process 'run_hla_hd' {
+if (have_HLAHD) {
+    process 'run_hla_hd' {
 
-    label 'HLAHD'
+        label 'HLAHD'
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/HLA_HD/",
-        saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName() : null },
-        mode: params.publishDirMode
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/HLA_HD/",
+            saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName() : null },
+            mode: params.publishDirMode
 
-    input:
-    set(
-        TumorReplicateId,
-        _,
-        file(readsFWD),
-        file(readsREV)
-    ) from reads_tumor_hlaHD_ch
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(readsFWD),
+            file(readsREV)
+        ) from reads_tumor_hlaHD_ch
 
-    file frData from Channel.value(reference.HLAHDFreqData)
-    file gSplit from Channel.value(reference.HLAHDGeneSplit)
-    file dict from Channel.value(reference.HLAHDDict)
+        file frData from Channel.value(reference.HLAHDFreqData)
+        file gSplit from Channel.value(reference.HLAHDGeneSplit)
+        file dict from Channel.value(reference.HLAHDDict)
 
-    output:
-    set (
-        TumorReplicateId,
-        file("**/*_final.result.txt")
-    ) into (
-        hlahd_output,
-        hlahd_mixMHC2_pred_ch0
-    )
+        output:
+        set (
+            TumorReplicateId,
+            file("**/*_final.result.txt")
+        ) into (
+            hlahd_output,
+            hlahd_mixMHC2_pred_ch0
+        )
 
-    script:
-    hlahd_p = Channel.value(HLAHD_PATH).getVal()
+        script:
+        hlahd_p = Channel.value(HLAHD_PATH).getVal()
 
-    if (single_end)
-        """
-        export PATH=\$PATH:$hlahd_p
-        $HLAHD -t ${task.cpus} \\
-            -m 50 \\
-            -f ${frData} ${readsFWD} ${readsFWD} \\
-            ${gSplit} ${dict} $TumorReplicateId .
-        """
-    else
-        """
-        export PATH=\$PATH:$hlahd_p
-        $HLAHD -t ${task.cpus} \\
-            -m 50 \\
-            -f ${frData} ${readsFWD} ${readsREV} \\
-            ${gSplit} ${dict} $TumorReplicateId .
-        """
+        if (single_end)
+            """
+            export PATH=\$PATH:$hlahd_p
+            $HLAHD -t ${task.cpus} \\
+                -m 50 \\
+                -f ${frData} ${readsFWD} ${readsFWD} \\
+                ${gSplit} ${dict} $TumorReplicateId .
+            """
+        else
+            """
+            export PATH=\$PATH:$hlahd_p
+            $HLAHD -t ${task.cpus} \\
+                -m 50 \\
+                -f ${frData} ${readsFWD} ${readsREV} \\
+                ${gSplit} ${dict} $TumorReplicateId .
+            """
+    }
+} else {
+    // fill channels
+    hlahd_output = reads_tumor_hlaHD_ch
+                        .map{ it -> tuple(it[0], file("NO_FILE"))}
+
+    (hlahd_mixMHC2_pred_ch0, hlahd_output) = hlahd_output.into(2)
+
 }
 
-if (have_RNAseq) {
+if (have_RNAseq && have_HLAHD) {
     process 'run_hla_hd_RNA' {
 
         label 'HLAHD_RNA'
@@ -5452,7 +5464,7 @@ if (have_RNAseq) {
         input:
         set(
             TumorReplicateId,
-            _,
+            NormalReplicateId,
             file(readsFWD),
             file(readsREV)
         ) from reads_tumor_hlahd_RNA_ch
@@ -5489,6 +5501,11 @@ if (have_RNAseq) {
                 ${gSplit} ${dict} $TumorReplicateId .
             """
     }
+} else if (have_RNAseq && ! have_HLAHD) {
+
+    hlahd_output_RNA = reads_tumor_hlahd_RNA_ch
+                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+
 }
 
 /*
@@ -5518,6 +5535,7 @@ process get_vhla {
         opti_out,
         opti_out_rna,
         hlahd_out,
+        hlahd_out_rna,
         custom_hlas
     ) from optitype_output
         .combine(optitype_RNA_output, by: 0)
@@ -5533,14 +5551,29 @@ process get_vhla {
 
     script:
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna" : ''
+    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna --hlahd_out_RNA $hlahd_out_rna" : ''
+    def force_seq_type = ""
+
+    def force_RNA = params.HLA_force_DNA ? false : params.HLA_force_RNA
+
+    if(force_RNA && ! have_RNAseq) {
+        log.warn "WARNING: Can not force RNA data for HLA typing: no RNAseq data provided!"
+    } else if (force_RNA && have_RNAseq) {
+        force_seq_type = "--force_RNA"
+    } else if (params.HLA_force_DNA) {
+        force_seq_type = "--force_DNA"
+    }
+
+    def hlahd_opt = have_HLAHD ? "--hlahd_out ${hlahd_out}" : ""
+
     """
-    # mergeing script
+    # merging script
     HLA_parser.py \\
         --opti_out ${opti_out} \\
-        --hlahd_out ${hlahd_out} \\
+        ${hlahd_opt} \\
         ${rna_hlas} \\
         ${user_hlas} \\
+        ${force_seq_type} \\
         --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
         > ./${TumorReplicateId}_hlas.txt
     """
@@ -6067,133 +6100,135 @@ process 'pVACtools_generate_protein_seq' {
     """
 }
 
-process 'pepare_mixMHC2_seq' {
+if(have_HLAHD) {
+    process 'pepare_mixMHC2_seq' {
 
-    label 'nextNEOpiENV'
+        label 'nextNEOpiENV'
 
-    tag "$TumorReplicateId"
+        tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/$TumorReplicateId/13_mixMHC2pred/processing/",
-         mode: params.publishDirMode,
-         enabled: params.fullOutput
+        publishDir "$params.outputDir/$TumorReplicateId/13_mixMHC2pred/processing/",
+            mode: params.publishDirMode,
+            enabled: params.fullOutput
 
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        long_peptideSeq_fasta,
-        hlahd_allel_file
-    ) from pVACtools_generate_protein_seq
-        .combine(hlahd_mixMHC2_pred_ch0, by:0)
-
-    output:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file("${TumorReplicateId}_peptides.fasta")
-    ) optional true into pepare_mixMHC2_seq_out_ch0
-    file("${TumorReplicateId}_mixMHC2pred.txt") optional true into pepare_mixMHC2_seq_out_ch1
-    file("${TumorReplicateId}_unsupported.txt") optional true
-    file("${TumorReplicateId}_mixMHC2pred_conf.txt") optional true
-
-    script:
-    """
-    pepChopper.py \\
-        --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
-        --fasta_in ${long_peptideSeq_fasta} \\
-        --fasta_out ${TumorReplicateId}_peptides.fasta
-    HLAHD2mixMHC2pred.py \\
-        --hlahd_list ${hlahd_allel_file} \\
-        --supported_list ${baseDir}/assets/hlaii_supported.txt \\
-        --model_list ${baseDir}/assets/hlaii_models.txt \\
-        --output_dir ./ \\
-        --sample_name ${TumorReplicateId}
-    """
-}
-
-mixmhc2pred_chck_file = file(workflow.workDir + "/.mixmhc2pred_install_ok.chck")
-mixmhc2pred_target = workflow.workDir + "/MixMHC2pred"
-if(( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED == "") {
-    process install_mixMHC2pred {
-
-        tag 'install mixMHC2pred'
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            long_peptideSeq_fasta,
+            hlahd_allel_file
+        ) from pVACtools_generate_protein_seq
+            .combine(hlahd_mixMHC2_pred_ch0, by:0)
 
         output:
-        file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_peptides.fasta")
+        ) optional true into pepare_mixMHC2_seq_out_ch0
+        file("${TumorReplicateId}_mixMHC2pred.txt") optional true into pepare_mixMHC2_seq_out_ch1
+        file("${TumorReplicateId}_unsupported.txt") optional true
+        file("${TumorReplicateId}_mixMHC2pred_conf.txt") optional true
 
         script:
         """
-        curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
-        unzip mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
-        echo "OK" > .mixmhc2pred_install_ok.chck && \\
-        cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
+        pepChopper.py \\
+            --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
+            --fasta_in ${long_peptideSeq_fasta} \\
+            --fasta_out ${TumorReplicateId}_peptides.fasta
+        HLAHD2mixMHC2pred.py \\
+            --hlahd_list ${hlahd_allel_file} \\
+            --supported_list ${baseDir}/assets/hlaii_supported.txt \\
+            --model_list ${baseDir}/assets/hlaii_models.txt \\
+            --output_dir ./ \\
+            --sample_name ${TumorReplicateId}
         """
     }
-} else if (( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED != "") {
-    process link_mixMHC2pred {
 
-        tag 'link mixMHC2pred'
+    mixmhc2pred_chck_file = file(workflow.workDir + "/.mixmhc2pred_install_ok.chck")
+    mixmhc2pred_target = workflow.workDir + "/MixMHC2pred"
+    if(( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED == "") {
+        process install_mixMHC2pred {
+
+            tag 'install mixMHC2pred'
+
+            output:
+            file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
+
+            script:
+            """
+            curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
+            unzip mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
+            echo "OK" > .mixmhc2pred_install_ok.chck && \\
+            cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
+            """
+        }
+    } else if (( ! mixmhc2pred_chck_file.exists() || mixmhc2pred_chck_file.isEmpty()) && params.MiXMHC2PRED != "") {
+        process link_mixMHC2pred {
+
+            tag 'link mixMHC2pred'
+
+            output:
+            file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
+
+            script:
+            """
+            ln -s ${params.MiXMHC2PRED} ${mixmhc2pred_target} && \\
+            echo "OK" > .mixmhc2pred_install_ok.chck && \\
+            cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
+            """
+        }
+    } else {
+        mixmhc2pred_chck_ch = Channel.fromPath(mixmhc2pred_chck_file)
+    }
+
+    process mixMHC2pred {
+
+        label 'nextNEOpiENV'
+
+        tag "$TumorReplicateId"
+
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/13_mixMHC2pred",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            mut_peps,
+            vep_somatic_gx_vcf_gz,
+            vep_somatic_gx_vcf_gz_tbi,
+            file(mixmhc2pred_chck_file)
+        ) from pepare_mixMHC2_seq_out_ch0
+            .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
+            .combine(mixmhc2pred_chck_ch)
+        val allelesFile from pepare_mixMHC2_seq_out_ch1
 
         output:
-        file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
+        file("${TumorReplicateId}_mixMHC2pred_all.tsv")
+        file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
 
         script:
+        alleles = file(allelesFile).readLines().join(" ")
         """
-        ln -s ${params.MiXMHC2PRED} ${mixmhc2pred_target} && \\
-        echo "OK" > .mixmhc2pred_install_ok.chck && \\
-        cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
+        ${mixmhc2pred_target}/MixMHC2pred_unix \\
+            -i ${mut_peps} \\
+            -o ${TumorReplicateId}_mixMHC2pred.tsv \\
+            -a ${alleles}
+        parse_mixMHC2pred.py \\
+            --vep_vcf ${vep_somatic_gx_vcf_gz} \\
+            --pep_fasta ${mut_peps} \\
+            --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
+            --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
+            --sample_name ${TumorReplicateId} \\
+            --normal_name ${NormalReplicateId}
+        awk \\
+            '{
+                if (\$0 ~ /\\#/) { print }
+                else { if (\$18 <= 2) { print } }
+            }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
         """
     }
-} else {
-    mixmhc2pred_chck_ch = Channel.fromPath(mixmhc2pred_chck_file)
-}
-
-process mixMHC2pred {
-
-    label 'nextNEOpiENV'
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/13_mixMHC2pred",
-        mode: params.publishDirMode
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        mut_peps,
-        vep_somatic_gx_vcf_gz,
-        vep_somatic_gx_vcf_gz_tbi,
-        file(mixmhc2pred_chck_file)
-    ) from pepare_mixMHC2_seq_out_ch0
-        .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
-        .combine(mixmhc2pred_chck_ch)
-    val allelesFile from pepare_mixMHC2_seq_out_ch1
-
-    output:
-    file("${TumorReplicateId}_mixMHC2pred_all.tsv")
-    file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
-
-    script:
-    alleles = file(allelesFile).readLines().join(" ")
-    """
-    ${mixmhc2pred_target}/MixMHC2pred_unix \\
-        -i ${mut_peps} \\
-        -o ${TumorReplicateId}_mixMHC2pred.tsv \\
-        -a ${alleles}
-    parse_mixMHC2pred.py \\
-        --vep_vcf ${vep_somatic_gx_vcf_gz} \\
-        --pep_fasta ${mut_peps} \\
-        --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
-        --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
-        --sample_name ${TumorReplicateId} \\
-        --normal_name ${NormalReplicateId}
-    awk \\
-        '{
-            if (\$0 ~ /\\#/) { print }
-            else { if (\$18 <= 2) { print } }
-        }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
-    """
 }
 
 // add CCF clonality to neoepitopes result files
@@ -6260,7 +6295,7 @@ process csin {
 
     tag "$TumorReplicateId"
 
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/13_CSiN/",
+    publishDir "$params.outputDir/analyses/$TumorReplicateId/14_CSiN/",
         mode: params.publishDirMode
 
     input:
@@ -6338,7 +6373,7 @@ process immunogenicity_scoring {
     // TODO: check why sometimes this fails: workaround ignore errors
     errorStrategy 'ignore'
 
-    publishDir "$params.outputDir/$TumorReplicateId/11_pVACseq/MHC_Class_I/",
+    publishDir "$params.outputDir/analyses/$TumorReplicateId/14_IGS/",
         mode: params.publishDirMode
 
     input:
@@ -6350,7 +6385,7 @@ process immunogenicity_scoring {
     // file pvacseq_file from MHCI_final_immunogenicity
 
     output:
-    file("${TumorReplicateId}_immunogenicity.tsv") optional true
+    file("${TumorReplicateId}_Class_I_immunogenicity.tsv")
 
     script:
     """
@@ -6366,7 +6401,7 @@ process immunogenicity_scoring {
         immuno_score.py \\
             --pvacseq_tsv $pvacseq_file \\
             --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
-            --output ${TumorReplicateId}_immunogenicity.tsv
+            --output ${TumorReplicateId}_Class_I_immunogenicity.tsv
     fi
     """
 }
@@ -6430,7 +6465,7 @@ if(params.TCR) {
 
         tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/analyses/$TumorReplicateId/14_BCR_TCR",
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/15_BCR_TCR",
             mode: params.publishDirMode
 
         input:
@@ -6469,7 +6504,7 @@ if(params.TCR) {
 
         tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/analyses/$TumorReplicateId/14_BCR_TCR",
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/15_BCR_TCR",
             mode: params.publishDirMode
 
         input:
@@ -6509,7 +6544,7 @@ if(params.TCR) {
 
             tag "$TumorReplicateId"
 
-            publishDir "$params.outputDir/analyses/$TumorReplicateId/14_BCR_TCR",
+            publishDir "$params.outputDir/analyses/$TumorReplicateId/15_BCR_TCR",
                 mode: params.publishDirMode
 
             input:
