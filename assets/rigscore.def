@@ -20,3 +20,4 @@ From: continuumio/miniconda
     conda install r-peptides
     conda install r-doparallel
     conda install r-gbm
+    conda install pandas

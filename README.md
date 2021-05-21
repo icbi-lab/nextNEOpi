@@ -40,6 +40,7 @@ variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is r
 ![nextNEOpi overview](img/nextNEOpi_small.png)
 
 
+
 ## 1. Installation
 
 ### 1.1 Nextflow
@@ -60,7 +61,8 @@ The pipeline will install almost all required tools via conda environments or Si
 The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Conda**,
 **Singularity**.
 
-Further, due to license restrictions you also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```.
+**Optional but recommended:**
+Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
 
 _**[Manual installaton: Not recommended]:**_
 
@@ -127,6 +129,7 @@ The structure should look as shown blow:
 3. We provide the region and bait files for two different Exome capturing kits from Agilent:
    - SureSelect Human All Exon V6 exome
    - SureSelect Human All Exon V7 exome
+   - Twist Human comprehensive exome
 
 You may add your own region and bait files by defining an entry in ```conf/resources.config```
 
@@ -160,7 +163,7 @@ its dependencies.
 
 **Profiles:** cluster
 
-We recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
+We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
 Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster profile to your scheduling system.
 
@@ -174,7 +177,7 @@ Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster pr
 
 **RNA reads are from tag seq library i.e. 3-prime end sequencing protocol**
 
-```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. 3-prime end sequencing does not cover the entire transcript.
+```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.
 
 **Mandatory arguments:**
 
@@ -280,6 +283,12 @@ nextflow run nextNEOpi.nf \
                             Default: true
 
 ```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
+
+```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
+
+
+```--HLA_force_DNA``` Use only WES/WGS for HLA typing. Default: false
+
 
 ```--sex```                Provide the sex of the sample (XX or Female, XY or Male, None)
 

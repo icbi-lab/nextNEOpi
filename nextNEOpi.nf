@@ -63,6 +63,9 @@ single_end_RNA = params.single_end_RNA
 // initialize RNAseq presence
 have_RNAseq = false
 
+// initialize RNA tag seq
+have_RNA_tag_seq = params.RNA_tag_seq
+
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
 
@@ -4175,7 +4178,7 @@ process 'Ascat' {
 
 
     script:
-    sex = sexMap[TumorReplicateId]
+    def sex = sexMap[TumorReplicateId]
     """
     # get rid of "chr" string if there is any
     for f in *BAF *LogR; do sed 's/chr//g' \$f > tmpFile; mv tmpFile \$f;done
@@ -4541,7 +4544,6 @@ process Sequenza {
         TumorReplicateId,
         NormalReplicateId,
         file(seqz_file),
-
     ) from gatherSequenzaInput_out_ch0
 
     output:
@@ -5270,7 +5272,7 @@ process 'OptiType' {
     """
 }
 
-if (have_RNAseq) {
+if (have_RNAseq && ! have_RNA_tag_seq) {
     process 'pre_map_hla_RNA' {
 
         label 'nextNEOpiENV'
@@ -5380,7 +5382,15 @@ if (have_RNAseq) {
             """
     }
 
+} else if (have_RNAseq && have_RNA_tag_seq) {
+
+    log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+
+    optitype_RNA_output = reads_tumor_optitype_ch
+                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+
 }
+
 
 
 /*
@@ -5450,7 +5460,7 @@ if (have_HLAHD) {
 
 }
 
-if (have_RNAseq && have_HLAHD) {
+if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) {
     process 'run_hla_hd_RNA' {
 
         label 'HLAHD_RNA'
@@ -5501,7 +5511,11 @@ if (have_RNAseq && have_HLAHD) {
                 ${gSplit} ${dict} $TumorReplicateId .
             """
     }
-} else if (have_RNAseq && ! have_HLAHD) {
+} else if ((have_RNAseq && ! have_HLAHD) || (have_RNAseq && have_RNA_tag_seq)) {
+
+    if(have_RNA_tag_seq) {
+        log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+    }
 
     hlahd_output_RNA = reads_tumor_hlahd_RNA_ch
                             .map{ it -> tuple(it[0], file("NO_FILE"))}
@@ -5551,10 +5565,11 @@ process get_vhla {
 
     script:
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = have_RNAseq ? "--opti_out_RNA $opti_out_rna --hlahd_out_RNA $hlahd_out_rna" : ''
+    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq) ? "--opti_out_RNA $opti_out_rna" : ''
+    rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
-    def force_RNA = params.HLA_force_DNA ? false : params.HLA_force_RNA
+    def force_RNA = (params.HLA_force_DNA || have_RNA_tag_seq) ? false : params.HLA_force_RNA
 
     if(force_RNA && ! have_RNAseq) {
         log.warn "WARNING: Can not force RNA data for HLA typing: no RNAseq data provided!"
@@ -5564,7 +5579,7 @@ process get_vhla {
         force_seq_type = "--force_DNA"
     }
 
-    def hlahd_opt = have_HLAHD ? "--hlahd_out ${hlahd_out}" : ""
+    hlahd_opt = (have_HLAHD) ? "--hlahd_out ${hlahd_out}" : ""
 
     """
     # merging script
@@ -5796,11 +5811,12 @@ if (have_RNAseq) {
             .combine(final_file, by: 0)
             .combine(star_bam_file, by: 0)
         set(
-        file(RefFasta),
-        file(RefIdx),
+            file(RefFasta),
+            file(RefIdx),
         ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx ])
+            [ reference.RefFasta,
+            reference.RefIdx ]
+        )
 
         output:
         set(
@@ -5924,7 +5940,7 @@ process 'pVACseq' {
 
     }
 
-    if (params.RNA_tag_seq) {
+    if (have_RNA_tag_seq) {
         filter_set = filter_set.replaceAll(/--trna-vaf\s+\d+\.{0,1}\d*/, "--trna-vaf 0.0")
         filter_set = filter_set.replaceAll(/--trna-cov\s+\d+/, "--trna-cov 0")
     }
@@ -6397,7 +6413,7 @@ process immunogenicity_scoring {
     if [ \$NR_EPI -gt 1 ]; then
         ${igs_target}/NeoAg_immunogenicity_predicition_GBM.R \\
             ./${TumorReplicateId}_epitopes.tsv ./${TumorReplicateId}_temp_immunogenicity.tsv \\
-            ${igs_target}/Final_gbm_model.rds \\
+            ${igs_target}/Final_gbm_model.rds
         immuno_score.py \\
             --pvacseq_tsv $pvacseq_file \\
             --score_tsv ${TumorReplicateId}_temp_immunogenicity.tsv \\
