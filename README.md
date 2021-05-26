@@ -33,9 +33,10 @@ netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class I
 neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
 A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
-variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict TCRs.
+variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
+TCR and BCR repertoire.
 
-[1] https://github.com/vincentlaboratories/.
+[1] https://github.com/vincentlaboratories/neoag/.
 
 ![nextNEOpi overview](img/nextNEOpi_small.png)
 
