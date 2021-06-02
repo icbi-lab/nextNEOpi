@@ -400,8 +400,9 @@ netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class I
 neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
 A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
-variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict TCRs.</p>
-<p>[1] https://github.com/vincentlaboratories/.</p>
+variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
+TCR and BCR repertoire.</p>
+<p>[1] https://github.com/vincentlaboratories/neoag/.</p>
 <p><img src="img/nextNEOpi_small.png" alt="nextNEOpi overview"></p>
 <h2 id="1-installation">1. Installation</h2>
 <h3 id="11-nextflow">1.1 Nextflow</h3>
@@ -504,9 +505,6 @@ its dependencies.</p>
 <p><strong>RNA reads are from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
 <p><code>--RNA_tag_seq</code> turns off the &quot;--trna-vaf&quot; and &quot;--trna-cov&quot; filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.</p>
 <p><strong>Mandatory arguments:</strong></p>
-<p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
-<p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>
-<p>or</p>
 <p><code>--batchFile</code> <em>[recommended]</em></p>
 <p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile.csv</code></p>
 <ul>
@@ -731,6 +729,9 @@ its dependencies.</p>
 </tr>
 </tbody>
 </table>
+<p>or</p>
+<p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
+<p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>
 <p><strong>Notes</strong></p>
 <ul>
 <li>
@@ -788,34 +789,53 @@ Default: true</p>
 <p><code>--pVACseq_custom_filters</code> See <code>--pVACseq_filter_set</code></p>
 <p><strong>Further options:</strong>        There are many more options that can be set in the params.conf file or specified on the commandline
 (see <code>conf/params.config</code>)</p>
-<h2 id="3-output-this-is-not-up-to-date-will-be-changed-when-we-have-the-final-structure">3. Output  (<em>this is not up to date, will be changed when we have the final structure</em>)</h2>
-<p>The Pipeline creates an ouput directory with the following structure:</p>
+<h2 id="3-output">3. Output</h2>
+<p>The Pipeline stores its ouput in the following structure:</p>
 <pre class="hljs"><code><div>RESULTS
-├── 00_prepare_Intervals
-│   └── SplitIntervals
-├── CRC01
-│   ├── 01_preprocessing
-│   ├── 02_QC
-│   ├── 03_manta_somatic
-│   ├── 03_mutect1
-│   ├── 03_mutect2
-│   ├── 03_strelka_somatic
-│   ├── 03_varscan
-│   ├── 04_haplotypeCaller
-│   ├── 05_hcVCF
-│   ├── 06_vep
-│   ├── 07_PhasedVCF
-│   ├── 08_OptiType
-│   ├── 09_HLA_HD
-│   ├── 10_NeoFuse
-│   ├── 11_pVACseq
-│   ├── 12_mixMHC2pred
-│   └── 13_TCRs
+├── analyses
+│   ├── Subject_01
+│   │   ├── 01_preprocessing
+│   │   ├── 02_alignments
+│   │   ├── 03_baserecalibration
+│   │   ├── 03_realignment
+│   │   ├── 04_expression
+│   │   ├── 04_variations
+│   │   ├── 05_vep
+│   │   ├── 06_proteinseq
+│   │   ├── 07_MutationalBurden
+│   │   ├── 08_CNVs
+│   │   ├── 09_CCF
+│   │   ├── 10_HLA_typing
+│   │   ├── 11_Fusions
+│   │   ├── 12_pVACseq
+│   │   ├── 13_mixMHC2pred
+│   │   ├── 14_CSiN
+│   │   ├── 14_IGS
+│   │   ├── 15_BCR_TCR
+│   │   └── QC
+│   ├── Subject_02
+│   │   ├── [...]
+│   ├── [...]
+│   │   ├── [...]
+│   ├── Subject_n
+│   │   ├── [...]
 ├── Documentation
-│   ├── pipeline_report.html
-│   └── pipeline_report.txt
-└── pipeline_info
-    └── icbi
+├── neoantigens
+│   ├── Subject_ID
+│   │   ├── Class_I
+│   │   ├── Class_II
+│   │   └── Final_HLAcalls
+│   ├── Subject_02
+│   │   ├── [...]
+│   ├── [...]
+│   │   ├── [...]
+│   ├── Subject_n
+│   │   ├── [...]
+├── pipeline_info
+│   └── icbi
+└── supplemental
+    ├── 00_prepare_Intervals
+    └── 01_prepare_CNVkit
 </div></code></pre>
 
 </body>
