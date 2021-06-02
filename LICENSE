@@ -30,9 +30,11 @@ WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
 Licenses for Tools used by nextNEOpi:
 -------------------------------------
 nextNEOpi uses a variety of other tools which each have their own license restrictions.
+The user is aware that nextNEOpi will install and use conda environments and/or Singularity
+images that are automatically downloaded from public accessible software repositories.
 By using nextNEOpi, either standalone or using its Singularity image, the user implicitly
 accepts the license terms of the underlying tools used.
-By using the standalone IEDB software installed in the nextNEOpi Docker images, the user also
+By using the standalone IEDB software installed in the nextNEOpi Singularity images, the user also
 implicitly accepts the IEDB license terms.
 
 

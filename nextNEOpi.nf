@@ -184,21 +184,16 @@ if (! params.batchFile) {
         if (params.readsRNAseq) {
             Channel
                     .fromFilePairs(params.readsRNAseq)
-                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
+                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1]) }
                     .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
             have_RNAseq = true
         } else {
             Channel
-                .empty()
-                .set { raw_reads_tumor_neofuse_ch }
-
-            Channel
                     .of(tuple(row.tumorSampleName,
                                         row.normalSampleName,
                                         file("NO_FILE_RNA_FWD"),
-                                        file("NO_FILE_RNA_REV"),
-                                        "None"))
-                    .set { fastqc_readsRNAseq_ch }
+                                        file("NO_FILE_RNA_REV")))
+                    .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 
             Channel
                 .of(tuple(
@@ -334,17 +329,13 @@ if (! params.batchFile) {
                 .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
     } else {
         Channel
-            .empty()
-            .set { raw_reads_tumor_neofuse_ch }
-
-        Channel
                 .fromPath(params.batchFile)
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     row.normalSampleName,
                                     file("NO_FILE_RNA_FWD"),
                                     file("NO_FILE_RNA_REV")) }
-                .set { fastqc_readsRNAseq_ch }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
 
         Channel
                 .fromPath(params.batchFile)
@@ -4100,7 +4091,13 @@ AlleleCounter_out_ch0
         alleleCountOutTumor, alleleCountOutNormal
     ) { it[2] == "T" ? 0 : 1 }
 
-AlleleCounter_out_ch0 = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0,1])
+AlleleCounter_out_ch = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0,1])
+
+AlleleCounter_out_ch = AlleleCounter_out_ch
+    .map{ TumorReplicateId, NormalReplicateId, sampleTypeT, alleleCountTumor, sampleTypeN, alleleCountNormal -> tuple(
+            TumorReplicateId, NormalReplicateId, alleleCountTumor, alleleCountNormal
+        )}
+
 
 
 // R script from Malin Larssons bitbucket repo:
@@ -4119,11 +4116,9 @@ process ConvertAlleleCounts {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        _,
         file(alleleCountTumor),
-        _,
         file(alleleCountNormal),
-    ) from AlleleCounter_out_ch0
+    ) from AlleleCounter_out_ch
 
 
     output:
@@ -4139,7 +4134,7 @@ process ConvertAlleleCounts {
     script:
     sex = sexMap[TumorReplicateId]
     """
-    Rscript ${workflow.projectDir}/bin/convertAlleleCounts.r \\
+    Rscript ${baseDir}/bin/convertAlleleCounts.r \\
         ${TumorReplicateId} ${alleleCountTumor} ${NormalReplicateId} ${alleleCountNormal} ${sex}
     """
 }
@@ -4182,7 +4177,7 @@ process 'Ascat' {
     """
     # get rid of "chr" string if there is any
     for f in *BAF *LogR; do sed 's/chr//g' \$f > tmpFile; mv tmpFile \$f;done
-    Rscript ${workflow.projectDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${sex}
+    Rscript ${baseDir}/bin/run_ascat.r ${bafTumor} ${logrTumor} ${bafNormal} ${logrNormal} ${TumorReplicateId} ${baseDir} ${acLociGC} ${sex}
     """
 }
 
@@ -4412,10 +4407,10 @@ if (params.controlFREEC) {
 
         script:
         """
-        cat ${workflow.projectDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
-        cat ${workflow.projectDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
-        perl ${workflow.projectDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
-        perl ${workflow.projectDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
+        cat ${baseDir}/bin/assess_significance.R | R --slave --args ${cnvTumor} ${ratioTumor}
+        cat ${baseDir}/bin/makeGraph.R | R --slave --args 2 ${ratioTumor} ${bafTumor}
+        perl ${baseDir}/bin/freec2bed.pl -f ${ratioTumor} > ${TumorReplicateId}.bed
+        perl ${baseDir}/bin/freec2circos.pl -f ${ratioTumor} > ${TumorReplicateId}.circos
         """
     }
 }
@@ -4559,7 +4554,7 @@ process Sequenza {
     sex = sexMap[TumorReplicateId]
     """
     Rscript \\
-        ${workflow.projectDir}/bin/SequenzaScript.R \\
+        ${baseDir}/bin/SequenzaScript.R \\
         ${seqz_file} \\
         ${TumorReplicateId} \\
         ${sex} || \\
@@ -4929,7 +4924,7 @@ process 'Clonality' {
             --min_vaf 0.01 \\
             --result_table ${TumorReplicateId}_segments_CCF_input.txt
         Rscript \\
-            ${workflow.projectDir}/bin/CCF.R \\
+            ${baseDir}/bin/CCF.R \\
             ${TumorReplicateId}_segments_CCF_input.txt \\
             ${TumorReplicateId}_CCFest.tsv \\
         """
@@ -5613,29 +5608,31 @@ if (have_RNAseq) {
 
         tag "$TumorReplicateId"
 
-        publishDir "$params.outputDir/analyses/$TumorReplicateId/11_Fusions/",
+        publishDir "$params.outputDir/analyses/$TumorReplicateId/",
             saveAs: {
                 fileName ->
                     if(fileName.indexOf("Arriba") >= 0) {
-                        targetFile = "Arriba/" + file(fileName).getName()
+                        targetFile = "11_Fusions/Arriba/" + file(fileName).getName()
                     } else if(fileName.indexOf("Custom_HLAs") >= 0) {
-                        targetFile = params.fullOutput ? "Custom_HLAs/" + file(fileName).getName() : ""
+                        targetFile = params.fullOutput ? "11_Fusions/Custom_HLAs/" + file(fileName).getName() : ""
                     } else if(fileName.indexOf("LOGS/") >= 0) {
-                        targetFile = params.fullOutput ? "LOGS/" + file(fileName).getName() : ""
+                        targetFile = params.fullOutput ? "11_Fusions/LOGS/" + file(fileName).getName() : ""
                     } else if(fileName.indexOf("NeoFuse/MHC_I/") >= 0) {
-                        targetFile = "NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_I_unsupported.txt")
+                        targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_I_unsupported.txt")
                     } else if(fileName.indexOf("NeoFuse/MHC_II/") >= 0) {
                         if(fileName.indexOf("_mixMHC2pred_conf.txt") < 0) {
-                            targetFile = "NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_II_unsupported.txt")
+                            targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_II_unsupported.txt")
                         } else {
-                            targetFile = params.fullOutput ? "NeoFuse/" + file(fileName).getName() : ""
+                            targetFile = params.fullOutput ? "11_Fusions/NeoFuse/" + file(fileName).getName() : ""
                         }
                     } else if(fileName.indexOf("STAR/") >= 0) {
-                        targetFile = params.fullOutput ? "STAR/" + file(fileName).getName() : ""
+                        if(fileName.indexOf("Aligned.sortedByCoord.out.bam") >= 0) {
+                            targetFile = "02_alignments/" + file(fileName).getName().replace(".Aligned.sortedByCoord.out", "_RNA.Aligned.sortedByCoord.out")
+                        }
                     } else if(fileName.indexOf("TPM/") >= 0) {
-                        targetFile = params.fullOutput ? "expression_TPM/" + file(fileName).getName() : ""
+                        targetFile = "04_expression/" + file(fileName).getName()
                     } else {
-                        targetFile = fileName
+                        targetFile = "11_Fusions/" + fileName
                     }
                     return "$targetFile"
             },
@@ -6424,8 +6421,8 @@ process immunogenicity_scoring {
 
 if(params.TCR) {
 
-    mixcr_chck_file = file(workflow.projectDir + "/bin/.mixcr_install_ok.chck")
-    mixcr_target = workflow.projectDir + "/bin/"
+    mixcr_chck_file = file(baseDir + "/bin/.mixcr_install_ok.chck")
+    mixcr_target = baseDir + "/bin/"
     if(!mixcr_chck_file.exists() && params.MIXCR == "") {
         process install_mixcr {
 
@@ -6818,7 +6815,7 @@ def checkToolAvailable(tool, check, errMode) {
 
 def showLicense() {
 
-    licenseFile = file(workflow.projectDir + "/LICENSE")
+    licenseFile = file(baseDir + "/LICENSE")
     log.info licenseFile.text
 
     log.info ""
@@ -6833,14 +6830,14 @@ def acceptLicense() {
     log.warn "I have read and accept the licence terms"
     log.info ""
 
-    licenseChckFile = file(workflow.projectDir + "/.license_accepted.chck")
+    licenseChckFile = file(baseDir + "/.license_accepted.chck")
     licenseChckFile.text = "License accepted by " + workflow.userName + " on "  + workflow.start
 
     return true
 }
 
 def checkLicense() {
-    licenseChckFile = file(workflow.projectDir + "/.license_accepted.chck")
+    licenseChckFile = file(baseDir + "/.license_accepted.chck")
 
     if(!licenseChckFile.exists()) {
         showLicense()
@@ -6852,10 +6849,10 @@ def checkLicense() {
 def helpMessage() {
     log.info ""
     log.info "----------------------------"
-    log.info "--        U S A G E       NOT UP TO DATE PLEASE FIX --"
+    log.info "--        U S A G E       "
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run nextNEOpi.nf ["--readsTumor" "--readsNormal"] | ["--batchFile"] "-profile [conda|singularity],[cluster]" ["-resume"]'
+    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal"] | ["--batchFile"] "-profile [conda|singularity],[cluster]" ["-resume"]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
@@ -6865,10 +6862,10 @@ def helpMessage() {
     log.info ""
     log.info " Mandatory arguments:"
     log.info " --------------------"
+    log.info "--batchFile  (RECOMMENDED)"
+    log.info "   or"
     log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
     log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
-    log.info "   or"
-    log.info "--batchFile"
     log.info ""
     log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
 
@@ -6904,28 +6901,12 @@ def helpMessage() {
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
-    log.info "--RegionsBed \t\t regions.bed \t\t\t regions.bed file for Exon targets"
-    log.info "--BaitsBed \t\t baits.bed \t\t\t baits.bed file for Exon baits"
     log.info ""
-    log.info " Optional argument:"
-    log.info " ------------------"
-    log.info "--tumorSampleName \t\t  tumor sample name. If not specified samples will be named according to the fastq filenames."
-    log.info "--normalSampleName \t\t  normal sample name. If not specified samples will be named according to the fastq filenames."
-    log.info "--trim_adapters \t\t  If true adpter sequences are automatically determined and will be trimmed from reads. If"
-    log.info "          --adapterSeq (string of atapter sequence) or --adapterSeqFile (fasta file with adapter sequences) is provided"
-    log.info "          then adapters will be used as specified (no automatic detection). Default: false"
-    log.info "--adapterSeq \t\t  String of atapter sequence (see --trim_adapers)."
-    log.info "--adapterSeqFile \t\t  Fasta file with atapter sequences (see --trim_adapers)."
-    log.info "--trim_adapters_RNAseq \t\t  If true adpter sequences are automatically determined and will be trimmed from reads. If"
-    log.info "          --adapterSeqRNAseq (string of atapter sequence) or --adapterSeqFileRNAseq (fasta file with adapter sequences)"
-    log.info "           is provided then adapters will be used as specified (no automatic detection). Default: false"
-    log.info "--adapterSeqRNAseq \t\t  String of atapter sequence (see --trim_adapers_RNAseq)."
-    log.info "--adapterSeqFileRNAseq \t\t  Fasta file with atapter sequences (see --trim_adapers_RNAseq)."
     log.info ""
     log.info " All references, databases, software should be edited in the resources.config file"
     log.info ""
-    log.info " For further options see the README.md and the params.config files"
-    log.info "-------------------------------------------------------------------------"
+    log.info " For further options see the README.md, the params.config and process.config files"
+    log.info "----------------------------------------------------------------------------------"
 }
 
 // workflow complete

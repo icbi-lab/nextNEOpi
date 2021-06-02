@@ -182,12 +182,6 @@ Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster pr
 
 **Mandatory arguments:**
 
-```--readsTumor``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)
-
-```--readsNormal``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)
-
-or
-
 ```--batchFile``` _[recommended]_
 
 Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also `example_batchFile.csv`
@@ -222,6 +216,14 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
  |... |
  sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX | groupX
 
+
+
+or
+
+
+```--readsTumor``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)
+
+```--readsNormal``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)
 
 
 **Notes**
@@ -300,33 +302,52 @@ nextflow run nextNEOpi.nf \
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
                             (see ```conf/params.config```)
 
-## 3. Output  (_this is not up to date, will be changed when we have the final structure_)
-The Pipeline creates an ouput directory with the following structure:
+## 3. Output
+The Pipeline stores its ouput in the following structure:
 ```
 RESULTS
-├── 00_prepare_Intervals
-│   └── SplitIntervals
-├── CRC01
-│   ├── 01_preprocessing
-│   ├── 02_QC
-│   ├── 03_manta_somatic
-│   ├── 03_mutect1
-│   ├── 03_mutect2
-│   ├── 03_strelka_somatic
-│   ├── 03_varscan
-│   ├── 04_haplotypeCaller
-│   ├── 05_hcVCF
-│   ├── 06_vep
-│   ├── 07_PhasedVCF
-│   ├── 08_OptiType
-│   ├── 09_HLA_HD
-│   ├── 10_NeoFuse
-│   ├── 11_pVACseq
-│   ├── 12_mixMHC2pred
-│   └── 13_TCRs
+├── analyses
+│   ├── Subject_01
+│   │   ├── 01_preprocessing
+│   │   ├── 02_alignments
+│   │   ├── 03_baserecalibration
+│   │   ├── 03_realignment
+│   │   ├── 04_expression
+│   │   ├── 04_variations
+│   │   ├── 05_vep
+│   │   ├── 06_proteinseq
+│   │   ├── 07_MutationalBurden
+│   │   ├── 08_CNVs
+│   │   ├── 09_CCF
+│   │   ├── 10_HLA_typing
+│   │   ├── 11_Fusions
+│   │   ├── 12_pVACseq
+│   │   ├── 13_mixMHC2pred
+│   │   ├── 14_CSiN
+│   │   ├── 14_IGS
+│   │   ├── 15_BCR_TCR
+│   │   └── QC
+│   ├── Subject_02
+│   │   ├── [...]
+│   ├── [...]
+│   │   ├── [...]
+│   ├── Subject_n
+│   │   ├── [...]
 ├── Documentation
-│   ├── pipeline_report.html
-│   └── pipeline_report.txt
-└── pipeline_info
-    └── icbi
+├── neoantigens
+│   ├── Subject_ID
+│   │   ├── Class_I
+│   │   ├── Class_II
+│   │   └── Final_HLAcalls
+│   ├── Subject_02
+│   │   ├── [...]
+│   ├── [...]
+│   │   ├── [...]
+│   ├── Subject_n
+│   │   ├── [...]
+├── pipeline_info
+│   └── icbi
+└── supplemental
+    ├── 00_prepare_Intervals
+    └── 01_prepare_CNVkit
 ```
