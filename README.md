@@ -1,3 +1,4 @@
+![nextNEOpi overview](img/nextNEOpi_noBG.png)
 # NeoEpitope predictions Nextflow Pipeline
 Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
 to predict neoepitopes.
