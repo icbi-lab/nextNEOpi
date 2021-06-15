@@ -1,0 +1,305 @@
+The Clear BSD License (BSD 3-Clause Clear License)
+
+Copyright (c) 2020-2021 Medical University of Innsbruck
+contributors: Dietmar Rieder, Giorgios Fotakis, Francesca Finotello
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted
+(subject to the limitations in the disclaimer below) provided that the following conditions
+are met:
+
+Redistributions of source code must retain the above copyright notice, this list of conditions
+and the following disclaimer. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the documentation and/or other
+materials provided with the distribution. Neither the name of Medical University of Innsbruck
+nor the names of its contributors may be used to endorse or promote products derived from this
+software without specific prior written permission.
+
+NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+
+Licenses for Tools used by nextNEOpi:
+-------------------------------------
+nextNEOpi uses a variety of other tools which each have their own license restrictions.
+The user is aware that nextNEOpi will install and use conda environments and/or Singularity
+images that are automatically downloaded from public accessible software repositories.
+By using nextNEOpi, either standalone or using its Singularity image, the user implicitly
+accepts the license terms of the underlying tools used.
+By using the standalone IEDB software installed in the nextNEOpi Singularity images, the user also
+implicitly accepts the IEDB license terms.
+
+
+
+IEDB (Immune Epitope Database)
+Website: https://www.iedb.org
+
+Citation: Vita R, Mahajan S, Overton JA, Dhanda SK, Martini S, Cantrell JR, Wheeler DK, Sette A,
+          Peters B. The Immune Epitope Database (IEDB): 2018 update. Nucleic Acids Res. 2018 Oct 24.
+          doi: 10.1093/nar/gky1006. [Epub ahead of print] PubMed PMID: 30357391.
+
+License: Non-Profit OSL 3.0
+By using the IEDB software, you are consenting to be bound by and become a “Licensee” for the use
+of IEDB tools and are consenting to the terms and conditions of the Non-Profit Open Software License
+(“Non-Profit OSL”) version 3.0.
+
+Please read these two license agreements here [1] before proceeding. If you do not agree to all of the
+terms of these two agreements, you must not install or use the product. Companies (for-profit entities)
+interested in downloading the command-line versions of the IEDB tools or running the entire analysis
+resource locally, should contact IEDB (license@iedb.org) for details on licensing options.
+
+[1]: http://tools.iedb.org/mhci/download/
+
+MHCflurry
+Website: http://openvax.github.io/mhcflurry/
+
+GitHub: https://github.com/openvax/mhcflurry
+
+Citation: T. J. O’Donnell, A. Rubinsteyn, M. Bonsack, A. B. Riemer, U. Laserson, and J. Hammerbacher,
+          “MHCflurry: Open-Source Class I MHC Binding Affinity Prediction,” Cell Systems, 2018.
+          doi: https://doi.org/10.1016/j.cels.2018.05.014. PubMed PMID: 29960884.
+
+License: Apache License 2.0
+
+
+MHCnuggets
+Website: https://karchinlab.org/apps/appMHCnuggets.html
+
+GitHub: https://github.com/KarchinLab/mhcnuggets-2.0
+
+Citation: Bhattacharya R, Sivakumar A, Tokheim C, Beleva Guthrie V, Anagnostou V, Velculescu VE,
+          Karchin R (2017)
+          Evaluation of machine learning methods to predict peptide binding to MHC Class I proteins.
+          Submitted [bioRxiv preprint].
+
+License: Apache License 2.0
+
+
+NetChop
+Website: http://www.cbs.dtu.dk/services/NetChop/
+
+Citation: The role of the proteasome in generating cytotoxic T cell epitopes: Insights obtained
+          from improved predictions of proteasomal cleavage. M. Nielsen, C. Lundegaard, O. Lund,
+          and C. Kesmir. Immunogenetics., 57(1-2):33-41, 2005. PubMed PMID: 11983929.
+
+License: Academic License
+
+
+NetMHCstabpan
+Website: http://www.cbs.dtu.dk/services/NetMHCstabpan/
+
+Citation: Pan-specific prediction of peptide-MHC-I complex stability; a correlate of T cell
+          immunogenicity. Michael Rasmussen, Emilio Fenoy, Mikkel Harndahl, Anne Bregnballe
+          Kristensen, Ida Kallehauge Nielsen, Morten Nielsen, Soren Buus.
+          J Immunol. 2016 Aug 15;197(4):1517-24.
+          doi: https://doi.org/10.4049/jimmunol.1600582. PubMed PMID: 27402703.
+
+License: Academic License
+
+Vaxrank
+Website: https://github.com/openvax/vaxrank
+
+Citation: Rubinsteyn, A., Hodes, I., Kodysh, J., & Hammerbacher, J. (2017).
+          Vaxrank: a computational tool for designing personalized cancer vaccines.
+          bioRxiv, 142919.
+
+License: Apache License 2.0
+
+
+GATK
+Website: https://github.com/broadinstitute/gatk, https://gatk.broadinstitute.org/
+
+Citation: Van der Auwera GA & O'Connor BD. (2020). Genomics in the Cloud: Using Docker,
+          GATK, and WDL in Terra (1st Edition). O'Reilly Media.
+
+License: Apache License 2.0
+
+
+VarScan2
+Website: https://dkoboldt.github.io/varscan/
+
+Citation: VarScan 2: Koboldt, D., Zhang, Q., Larson, D., Shen, D., McLellan, M., Lin,
+          L., Miller, C., Mardis, E., Ding, L., & Wilson, R. (2012).
+          VarScan 2: Somatic mutation and copy number alteration discovery in cancer
+          by exome sequencing Genome Research DOI: 10.1101/gr.129684.111
+
+
+Strekla2
+Website: https://github.com/Illumina/strelka
+
+Citation: Kim, S., Scheffler, K. et al. (2018) Strelka2: fast and accurate calling
+          of germline and somatic variants. Nature Methods, 15, 591-594.
+          doi:10.1038/s41592-018-0051-x
+
+License: GPLv3
+
+
+Manta
+Website: https://github.com/Illumina/manta
+
+Citation: Chen, X. et al. (2016) Manta: rapid detection of structural variants
+          and indels for germline and cancer sequencing applications.
+          Bioinformatics, 32, 1220-1222. doi:10.1093/bioinformatics/btv710
+
+License: GPLv3
+
+
+CNVkit
+Website: https://github.com/etal/cnvkit
+
+Citation: Talevich E, Shain AH, Botton T, Bastian BC. CNVkit: Genome-Wide
+          Copy Number Detection and Visualization from Targeted DNA Sequencing.
+          PLoS Comput Biol. 2016 Apr 21;12(4):e1004873.
+          doi: 10.1371/journal.pcbi.1004873. PMID: 27100738; PMCID: PMC4839673.
+
+License: Apache License 2.0
+
+
+Fastqc
+Website: https://www.bioinformatics.babraham.ac.uk/projects/fastqc/
+
+License: GPLv3
+
+
+Fastp
+Website: https://github.com/OpenGene/fastp
+
+Citation: Shifu Chen, Yanqing Zhou, Yaru Chen, Jia Gu; fastp: an ultra-fast
+          all-in-one FASTQ preprocessor, Bioinformatics, Volume 34, Issue 17,
+          1 September 2018, Pages i884–i890,
+          https://doi.org/10.1093/bioinformatics/bty560
+
+License: MIT License
+
+
+BWA
+Website: http://bio-bwa.sourceforge.net/
+
+Citation: Li H. and Durbin R. (2009) Fast and accurate short read alignment
+          with Burrows-Wheeler transform. Bioinformatics, 25, 1754-1760.
+          [PMID: 19451168]
+
+License: GPLv3
+
+
+samtools/htslib
+Website: http://www.htslib.org/
+
+Citation: Twelve years of SAMtools and BCFtools Petr Danecek, James K Bonfield,
+          Jennifer Liddle, John Marshall, Valeriu Ohan, Martin O Pollard, Andrew Whitwham,
+          Thomas Keane, Shane A McCarthy, Robert M Davies, Heng Li GigaScience, Volume 10,
+          Issue 2, February 2021, giab008, https://doi.org/10.1093/gigascience/giab008
+
+License: The MIT/Expat License
+
+
+sambamba
+Website: https://lomereiter.github.io/sambamba/
+
+Citation: Tarasov A, Vilella AJ, Cuppen E, Nijman IJ, Prins P. Sambamba: fast processing
+          of NGS alignment formats. Bioinformatics. 2015 Jun 15;31(12):2032-4.
+          doi: 10.1093/bioinformatics/btv098. Epub 2015 Feb 19. PMID: 25697820;
+          PMCID: PMC4765878.
+
+License: GPLv2+
+
+
+bam-readcount
+Website: https://www.crick.ac.uk/research/labs/peter-van-loo/software
+
+License: MIT License
+
+
+VEP
+Website: https://www.ensembl.org/info/docs/tools/vep/index.html
+
+Citation: McLaren W, Gil L, Hunt SE, Riat HS, Ritchie GR, Thormann A, Flicek P, Cunningham F.
+          The Ensembl Variant Effect Predictor. Genome Biology Jun 6;17(1):122. (2016)
+          doi:10.1186/s13059-016-0974-4
+
+License: Apache License 2.0
+
+
+OptiType:
+Website: https://github.com/FRED-2/OptiType
+
+Citation: Szolek, A, Schubert, B, Mohr, C, Sturm, M, Feldhahn, M, and Kohlbacher, O (2014).
+          OptiType: precision HLA typing from next-generation sequencing data
+          Bioinformatics, 30(23):3310-6.
+
+License: BSD 3-Clause "New" or "Revised" License
+
+
+Sequenza
+Website: https://sequenzatools.bitbucket.io/
+
+Citation: F. Favero, T. Joshi,A. M. Marquard, N. J. Birkbak, M. Krzystanek, Q. Li, Z. Szallasi,
+          and A. C. Eklund. “Sequenza: allele-specific copy number and mutation profiles from
+          tumor sequencing data”. Annals of Oncology, 2015, vol. 26, issue 1, 64-70.
+
+License: GPLv3
+
+
+alleleCount
+Website: https://github.com/cancerit/alleleCount
+
+License: GNU Affero General Public License
+
+
+GBM
+Website: https://github.com/vincentlaboratories/neoag/
+
+Citation: Smith CC, Chai S, Washington AR, Lee SJ, Landoni E, Field K, Garness J, Bixby LM,
+          Selitsky SR, Parker JS, Savoldo B, Serody JS, Vincent BG. Machine-Learning
+          Prediction of Tumor Antigen Immunogenicity in the Selection of Therapeutic Epitopes.
+          Cancer Immunol Res. 2019 Oct;7(10):1591-1604. doi: 10.1158/2326-6066.CIR-19-0155.
+          Epub 2019 Sep 12. PMID: 31515258; PMCID: PMC6774822.
+
+License: https://github.com/vincentlaboratories/neoag/raw/master/LICENSE.txt
+
+
+ASCAT
+Website: https://www.crick.ac.uk/research/labs/peter-van-loo/software
+
+Citation: Ross EM, Haase K, Van Loo P, Markowetz F. Allele-specific multi-sample copy number
+          segmentation in ASCAT. Bioinformatics. 2020 May 25:btaa538.
+          doi: 10.1093/bioinformatics/btaa538. Epub ahead of print. PMID: 32449758.
+
+
+mixcr
+Website: https://github.com/milaboratory/mixcr/
+
+Citation: Dmitriy A. Bolotin, Stanislav Poslavsky, Igor Mitrophanov, Mikhail Shugay, Ilgar
+          Z. Mamedov, Ekaterina V. Putintseva, and Dmitriy M. Chudakov. "MiXCR: software
+          for comprehensive adaptive immunity profiling."
+          Nature methods 12, no. 5 (2015): 380-381.
+
+License: https://github.com/milaboratory/mixcr/blob/develop/LICENSE
+
+
+MixMHC2pred
+Website: https://github.com/GfellerLab/MixMHC2pred
+
+Citation: Racle, J., et al. Robust prediction of HLA class II epitopes by deep motif
+          deconvolution of immunopeptidomes. Nat. Biotechnol. 37, 1283–1286 (2019).
+
+License: Academic (https://github.com/GfellerLab/MixMHC2pred/blob/master/License.pdf)
+
+
+Yara
+Website: https://github.com/seqan/seqan/tree/master/apps/yara
+
+Citation: Siragusa, E., Weese D., and Reinert, K. (2013). Fast and accurate read mapping with
+          approximate seeds and multiple backtracking. Nucleic Acids Research, 2013, 1–8.
+
+License: BSD 3-Clause License
+
+

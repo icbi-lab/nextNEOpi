@@ -1,0 +1,52 @@
+Bootstrap: docker
+From: broadinstitute/gatk
+
+
+%post
+ apt-get update && apt-get install -y \
+    bash \
+    gcc \
+    build-essential \
+    zlib1g-dev \
+    gawk \
+    git \
+    git-core \
+    pandoc \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    liblzma-dev \
+    libssl-dev \
+    cmake \
+    libncurses-dev \
+    tzdata \
+    patch
+
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/miniconda/bin:$PATH
+
+    conda config --add channels defaults
+    conda config --add channels bioconda
+    conda config --add channels conda-forge
+
+
+    conda install --name gatk htslib
+    conda install --name gatk bwa
+    conda install --name gatk samtools
+    conda install --name gatk fastp
+    conda install --name gatk fastqc
+    conda install --name gatk multiqc
+    conda install --name gatk sambamba
+    conda install --name gatk bcftools
+    conda install --name gatk varscan
+    conda install --name gatk bam-readcount
+    conda install --name gatk yara
+    conda install --name gatk optitype
+
+    conda install --name gatk r-sequenza
+    . /opt/miniconda/bin/activate gatk
+    pip install sequenza-utils
+    . /opt/miniconda/bin/deactivate
+
+%startscript
+    echo "switching env...."
+    . /opt/miniconda/bin/activate gatk

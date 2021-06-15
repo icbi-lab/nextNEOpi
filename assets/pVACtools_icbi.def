@@ -1,0 +1,135 @@
+# License Agreements
+#
+# pVACtools is licensed under the BSD 3-Clause Clear License.
+# Copyright (c) 2018-2021 Washington University in St. Louis All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted (subject to the limitations in the disclaimer below) provided that
+# the following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this list
+# of conditions and the following disclaimer.
+# Redistributions in binary form must reproduce the above copyright notice, this
+# list of conditions and the following disclaimer in the documentation and/or other
+# materials provided with the distribution.
+#
+# Neither the name of [Owner Organization] nor the names of its contributors may be
+# used to endorse or promote products derived from this software without specific
+# prior written permission.
+#
+# NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY’S PATENT RIGHTS ARE GRANTED BY THIS
+# LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Licenses for Tools used by pVACtools
+# pVACtools uses a variety of other tools [1] which each have their own license
+# restrictions. By using pVACtools, either standalone or using its Docker image,
+# the user implicitly accepts the license terms of the underlying tools used. By
+# using the standalone IEDB software installed in the pVACtools Docker/singularity
+# images, the user also implicitly accepts the IEDB licene terms.
+#
+# [1] https://pvactools.readthedocs.io/en/latest/tools.html#tools
+#
+
+Bootstrap: docker
+From: continuumio/miniconda3:4.9.2
+
+
+%post
+ apt-get update && apt-get install -y \
+    tcsh \
+    gcc \
+    build-essential \
+    zlib1g-dev \
+    gawk \
+    git \
+    git-core \
+    pandoc \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    liblzma-dev \
+    libssl-dev \
+    cmake \
+    libncurses-dev \
+    patch
+
+
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/conda/bin:$PATH
+
+    conda config --add channels defaults
+    conda config --add channels bioconda
+    conda config --add channels conda-forge
+
+    mkdir -p /opt/iedb
+
+    wget -O /opt/iedb/LICENSE https://raw.githubusercontent.com/griffithlab/docker-pvactools/master/LICENSE
+
+    cd /opt/iedb
+    wget https://downloads.iedb.org/tools/mhci/3.1.2/IEDB_MHC_I-3.1.2.tar.gz
+    tar -xzvf IEDB_MHC_I-3.1.2.tar.gz
+    cd /opt/iedb/mhc_i
+    bash -l -c "./configure"
+    cd /opt/iedb
+    rm IEDB_MHC_I-3.1.2.tar.gz
+
+    wget https://downloads.iedb.org/tools/mhcii/3.1.2/IEDB_MHC_II-3.1.2.tar.gz
+    tar -xzvf IEDB_MHC_II-3.1.2.tar.gz
+    cd /opt/iedb/mhc_ii
+    bash -l -c "python ./configure.py"
+    cd /opt/iedb
+    rm IEDB_MHC_II-3.1.2.tar.gz
+
+    mkdir /opt/mhcflurry_data
+    export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
+    mkdir /data
+    pip install --upgrade pip
+    pip install tensorflow==2.2.0
+    pip install pvactools==2.0.2
+    mhcflurry-downloads fetch
+
+    cd /opt
+    mkdir tmp_src
+    cd tmp_src
+
+    git clone https://github.com/atks/vt.git
+    cd vt
+    # work around current version 20210210 is not building (https://github.com/atks/vt/issues/113)
+    git checkout 0.577
+    make
+    cp vt /usr/local/bin
+    chmod 755 /usr/local/bin/vt
+    cd /opt/tmp_src
+    rm -rf vt
+
+    pip install cyvcf2
+    pip install vatools
+    wget -O /usr/local/bin/bam_readcount_helper.py https://raw.githubusercontent.com/genome/docker-bam_readcount_helper-cwl/master/bam_readcount_helper.py
+    chmod 755 /usr/local/bin/bam_readcount_helper.py
+
+    cd /opt/tmp_src
+    git clone https://github.com/genome/bam-readcount.git
+    cd bam-readcount
+    cmake .
+    make
+    cp bin/bam-readcount /usr/bin
+    chmod 755 /usr/bin/bam-readcount
+    cd /opt/tmp_src
+    rm -rf bam-readcount
+
+    conda install tabix
+    conda install bcftools
+
+
+%environment
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/conda/bin:$PATH
+    export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
