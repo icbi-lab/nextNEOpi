@@ -200,7 +200,7 @@ if (! params.batchFile) {
                     tumorSampleName,
                     "NO_FILE"
                 ))
-                .set { optitype_RNA_output }
+                .into { optitype_RNA_output; hlahd_output_RNA }
 
             have_RNAseq = false
         }
@@ -342,7 +342,7 @@ if (! params.batchFile) {
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     file("NO_FILE")) }
-                .set { optitype_RNA_output; hlahd_output_RNA }
+                .into { optitype_RNA_output; hlahd_output_RNA }
     }
 
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
