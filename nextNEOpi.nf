@@ -3845,9 +3845,9 @@ process 'VEPvcf' {
     publishDir "$params.outputDir/analyses/$TumorReplicateId/05_vep/vcf/high_confidence/",
         saveAs: {
             filename ->
-                if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && params.fullOutput) {
+                if (filename.indexOf("_vep_pick.vcf.gz") > 0 && params.fullOutput) {
                     return "combined/$filename"
-                } else if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && ! params.fullOutput) {
+                } else if (filename.indexOf("_vep_pick.vcf.gz") > 0 && ! params.fullOutput) {
                     return null
                 } else if (filename.endsWith(".fa")) {
                     return "$params.outputDir/analyses/$TumorReplicateId/06_proteinseq/$filename"
@@ -3877,8 +3877,8 @@ process 'VEPvcf' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz.tbi"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz.tbi"),
     ) into (
         VEPvcf_out_ch0
     )
@@ -3886,13 +3886,18 @@ process 'VEPvcf' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz.tbi")
+    ) into (
+        VEPvcf_out_ch2,
+    )
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
         VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
-        VEPvcf_out_ch2,
-        VEPvcf_out_ch3,
-        VEPvcf_out_ch4
     )
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
@@ -3903,10 +3908,11 @@ process 'VEPvcf' {
     """
     mkdir -p ${params.tmpDir}
 
+    # pVACSeq
     vep -i ${combinedVCF} \\
-        -o ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
+        -o ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf \\
         --fork ${task.cpus} \\
-        --stats_file ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_summary.html \\
+        --stats_file ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_summary_pick.html \\
         --species ${params.vep_species} \\
         --assembly ${params.vep_assembly} \\
         --offline \\
@@ -3921,6 +3927,25 @@ process 'VEPvcf' {
         --format vcf \\
         --vcf 2> vep_errors_0.txt
 
+    # pVACSeq
+    vep -i ${tumorVCF} \\
+        -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf \\
+        --fork ${task.cpus} \\
+        --stats_file ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_summary_pick.html \\
+        --species ${params.vep_species} \\
+        --assembly ${params.vep_assembly} \\
+        --offline \\
+        --cache \\
+        --cache_version ${params.vep_cache_version} \\
+        --dir ${params.databases.vep_cache} \\
+        --dir_cache ${params.databases.vep_cache} \\
+        --hgvs \\
+        --fasta ${params.references.VepFasta} \\
+        --pick --plugin Frameshift --plugin Wildtype \\
+        --symbol --terms SO --transcript_version --tsl \\
+        --vcf 2>> vep_errors_1.txt
+
+    # All variants
     vep -i ${tumorVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         --fork ${task.cpus} \\
@@ -3934,15 +3959,21 @@ process 'VEPvcf' {
         --dir_cache ${params.databases.vep_cache} \\
         --hgvs \\
         --fasta ${params.references.VepFasta} \\
-        --pick --plugin Frameshift --plugin Wildtype \\
         --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf 2> vep_errors_1.txt
+        --vcf 2>> vep_errors_1.txt
 
-    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
-        > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
 
-    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz && \\
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf \\
+        > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz
+
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz && \\
+        sleep 2
+
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf \\
+        > ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz
+
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz && \\
         sleep 2
 
     bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
@@ -3950,6 +3981,7 @@ process 'VEPvcf' {
 
     tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz && \\
         sleep 2
+
     sync
     """
 }
