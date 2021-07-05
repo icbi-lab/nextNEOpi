@@ -184,13 +184,20 @@ def get_variants_from_vcf(vcf_file, var_type, ccf_data):
 
         if var_type == "coding":
             INFO = parse_vcf_info(rec)
-            CSQ = INFO["CSQ"].split("|")
-            variant_type = CSQ[1]
+            for CSQ in INFO["CSQ"].split(","):
+                CSQ_fields = CSQ.split("|")
+                variant_type = CSQ_fields[1]
 
-            if is_coding(variant_type):
-                variants["all"] += 1
-                if ccf_data is not None and is_clonal(ccf_data, var_id):
-                    variants["clonal"] += 1
+                coding_var = 0
+                clonal_var = 0
+
+                if is_coding(variant_type):
+                    coding_var = 1
+                    if ccf_data is not None and is_clonal(ccf_data, var_id):
+                        clonal_var = 1
+
+            variants["all"] += coding_var
+            variants["clonal"] += clonal_var
         else:
             variants["all"] += 1
             if ccf_data is not None and is_clonal(ccf_data, var_id):
