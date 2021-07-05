@@ -3898,6 +3898,8 @@ process 'VEPvcf' {
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
         VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
+        VEPvcf_out_ch3,
+        VEPvcf_out_ch4
     )
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa")
     file("${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa")
