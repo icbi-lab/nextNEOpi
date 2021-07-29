@@ -5489,7 +5489,7 @@ if (have_HLAHD) {
 
 }
 
-if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) {
+if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
     process 'run_hla_hd_RNA' {
 
         label 'HLAHD_RNA'
@@ -5540,7 +5540,7 @@ if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) {
                 ${gSplit} ${dict} $TumorReplicateId .
             """
     }
-} else if ((have_RNAseq && ! have_HLAHD) || (have_RNAseq && have_RNA_tag_seq)) {
+} else if ((have_RNAseq && ! have_HLAHD) || (have_RNAseq && have_RNA_tag_seq) || (! params.run_HLAHD_RNA)) {
 
     if(have_RNA_tag_seq) {
         log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
@@ -5595,7 +5595,7 @@ process get_vhla {
     script:
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
     def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq) ? "--opti_out_RNA $opti_out_rna" : ''
-    rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
+    rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
     def force_RNA = (params.HLA_force_DNA || have_RNA_tag_seq) ? false : params.HLA_force_RNA
