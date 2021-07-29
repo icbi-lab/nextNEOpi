@@ -290,9 +290,10 @@ nextflow run nextNEOpi.nf \
 
 ```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
 
-
 ```--HLA_force_DNA``` Use only WES/WGS for HLA typing. Default: false
 
+```--run_HLAHD_RNA``` Run HLAHD also on RNAseq. Highly accurate but can be very slow
+                      on larger fastq files. Default: false
 
 ```--sex```                Provide the sex of the sample (XX or Female, XY or Male, None)
 
