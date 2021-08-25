@@ -4655,9 +4655,9 @@ purity_estimate = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
             if(sequenzaOK) {
                 sample_purity = purity
-                log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
+                log.warn "WARNING (" + TumorReplicateId + "): changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
             } else {
-                log.warn "WARNING: neither ASCAT nor Sequenza produced results, using purity of 1.0"
+                log.warn "WARNING (" + TumorReplicateId + "): neither ASCAT nor Sequenza produced results, using purity of 1.0"
             }
         }
 
