@@ -6252,29 +6252,35 @@ if(have_HLAHD) {
         val allelesFile from pepare_mixMHC2_seq_out_ch1
 
         output:
-        file("${TumorReplicateId}_mixMHC2pred_all.tsv")
-        file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
+        file("${TumorReplicateId}_mixMHC2pred_all.tsv") optional true
+        file("${TumorReplicateId}_mixMHC2pred_filtered.tsv") optional true
 
         script:
         alleles = file(allelesFile).readLines().join(" ")
-        """
-        ${mixmhc2pred_target}/MixMHC2pred_unix \\
-            -i ${mut_peps} \\
-            -o ${TumorReplicateId}_mixMHC2pred.tsv \\
-            -a ${alleles}
-        parse_mixMHC2pred.py \\
-            --vep_vcf ${vep_somatic_gx_vcf_gz} \\
-            --pep_fasta ${mut_peps} \\
-            --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
-            --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
-            --sample_name ${TumorReplicateId} \\
-            --normal_name ${NormalReplicateId}
-        awk \\
-            '{
-                if (\$0 ~ /\\#/) { print }
-                else { if (\$18 <= 2) { print } }
-            }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
-        """
+
+        if(alleles.length() > 0)
+            """
+            ${mixmhc2pred_target}/MixMHC2pred_unix \\
+                -i ${mut_peps} \\
+                -o ${TumorReplicateId}_mixMHC2pred.tsv \\
+                -a ${alleles}
+            parse_mixMHC2pred.py \\
+                --vep_vcf ${vep_somatic_gx_vcf_gz} \\
+                --pep_fasta ${mut_peps} \\
+                --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
+                --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
+                --sample_name ${TumorReplicateId} \\
+                --normal_name ${NormalReplicateId}
+            awk \\
+                '{
+                    if (\$0 ~ /\\#/) { print }
+                    else { if (\$18 <= 2) { print } }
+                }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
+            """
+        else
+            """
+            true
+            """
     }
 }
 
