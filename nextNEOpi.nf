@@ -237,7 +237,7 @@ if (! params.batchFile) {
         exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
     }
 } else {
-    // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
+    // batchfile ()= csv with sampleId and T/N reads was provided
     // create channel with all sampleId/reads file sets from the batch file
     // check if reverse reads are specified, if not set up single end processing
     // check if Normal reads are specified, if not set up exit with error
@@ -303,8 +303,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsTumorFWD),
-                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV),
-                                row.group) }
+                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV) }
             .into { raw_reads_tumor_ch;
                     fastqc_reads_tumor_ch }
 
@@ -314,8 +313,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsNormalFWD),
-                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV),
-                                row.group) }
+                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
     if (have_RNAseq) {
@@ -731,10 +729,8 @@ process FastQC {
         NormalReplicateId,
         file(tumor_readsFWD),
         file(tumor_readsREV),
-        sampleGroup,      // unused so far
         file(normal_readsFWD),
         file(normal_readsREV),
-        sampleGroup,      // unused so far
         file(readsRNAseq_FWD),
         file(readsRNAseq_REV)
     ) from fastqc_reads_tumor_ch
@@ -884,8 +880,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
+            file(tumor_readsREV)
         ) from raw_reads_tumor_ch
 
         output:
@@ -893,8 +888,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file("${TumorReplicateId}_trimmed_R1.fastq.gz"),
-            file("${trimmedReads_2}"),
-            sampleGroup
+            file("${trimmedReads_2}")
         ) into (
             reads_tumor_ch,
             reads_tumor_uBAM_ch,
@@ -974,8 +968,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
+            file(normal_readsREV)
         ) from raw_reads_normal_ch
 
         output:
@@ -983,8 +976,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file("${NormalReplicateId}_trimmed_R1.fastq.gz"),
-            file("${trimmedReads_2}"),
-            sampleGroup
+            file("${trimmedReads_2}")
         ) into (
             reads_normal_ch,
             reads_normal_uBAM_ch,
@@ -1064,10 +1056,8 @@ if (params.trim_adapters) {
             NormalReplicateId,
             file(tumor_readsFWD),
             file(tumor_readsREV),
-            sampleGroup,      // unused so far
             file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
+            file(normal_readsREV)
         ) from fastqc_reads_tumor_trimmed_ch
             .combine(fastqc_reads_normal_trimmed_ch, by: [0,1])
 
@@ -1294,7 +1284,6 @@ process 'make_uBAM' {
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
-        sampleGroup,      // unused so far
         sampleType
     ) from reads_uBAM_ch
 
@@ -1366,7 +1355,6 @@ process 'Bwa' {
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
-        sampleGroup,      // unused so far
         sampleType
     ) from reads_ch
     set(
@@ -6909,27 +6897,27 @@ def helpMessage() {
     log.info ""
     log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX"
 
     log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None"
 
     log.info "CSV-file, single-end T/N reads, NO RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX"
 
 
     log.info "Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all"
