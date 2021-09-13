@@ -189,33 +189,33 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 
 * e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX
+ sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | TumorN_reads_2.fastq | normalN | NormalN_reads_1.fastq | NormalN_reads_2.fastq | TumorN_RNAseq_reads_1.fastq | TumorN_RNAseq_reads_2.fastq | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | TumorN_reads_2.fastq | normalN | NormalN_reads_1.fastq | NormalN_reads_2.fastq | TumorN_RNAseq_reads_1.fastq | TumorN_RNAseq_reads_2.fastq | custom_HLAs.txt | XX
 
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | TumorN_RNAseq_reads_1.fastq | None | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | TumorN_RNAseq_reads_1.fastq | None | custom_HLAs.txt | XX
 
 
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX
 
 
 
