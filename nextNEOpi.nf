@@ -255,10 +255,10 @@ if (! params.batchFile) {
 
     for ( row in batchCSV ) {
         if(row.sex && row.sex != "None") {
-            if (params.sex in ["XX", "XY", "Female", "Male"]) {
+            if (row.sex in ["XX", "XY", "Female", "Male"]) {
                sexMap[row.tumorSampleName] = (row.sex == "Female" || row.sex == "XX") ? "XX" : "XY"
             } else {
-                exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
+                exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + row.sex
             }
         } else {
             println("WARNING: sex not specified assuming: XY")
