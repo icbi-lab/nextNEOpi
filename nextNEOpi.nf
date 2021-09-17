@@ -57,12 +57,60 @@ params.RUNTHIS = false
 params.batchFile = false
 
 // default is not to get bams as input data
-params.bam = false
-bamInput = params.bam
+bamInput = false
+
+// we got bam input on cmd line
+if (! params.batchFile) {
+    if(params.bamTumor != "NO_FILE" && readsTumor == "NO_FILE") {
+        bamInput = true
+    } else if(params.bamTumor == "NO_FILE" && readsTumor != "NO_FILE") {
+        bamInput = false
+    } else if(params.bamTumor != "NO_FILE" &&
+              (readsTumor != "NO_FILE" ||
+               readsNormal != "NO_FILE" ||
+               readsRNAseq != "NO_FILE")) {
+        exit 1, "Please do not provide tumor data as BAM and FASTQ"
+    }
+} else {
+    batchCSV = file(params.batchFile).splitCsv(header:true)
+
+    validFQfields = ["tumorSampleName",
+                     "readsTumorFWD",
+                     "readsTumorREV",
+                     "normalSampleName",
+                     "readsNormalFWD",
+                     "readsNormalREV",
+                     "readsRNAseqFWD",
+                     "readsRNAseqREV",
+                     "HLAfile",
+                     "sex"]
+
+    validBAMfields = ["tumorSampleName",
+                      "bamTumor",
+                      "normalSampleName",
+                      "bamNormal",
+                      "bamRNAseq",
+                      "HLAfile",
+                      "sex"]
+
+    if (batchCSV.size() > 0) {
+
+        if (batchCSV[0].keySet().sort() == validFQfields.sort()) {
+            bamInput = false
+        } else if (batchCSV[0].keySet().sort() == validBAMfields.sort()) {
+            bamInput = true
+        } else {
+            exit 1, "Error: Incorrect fields in patch file, please check your batchFile"
+        }
+    } else {
+        exit 1, "Error: No samples found, please check your batchFile"
+    }
+
+}
 
 // set single_end variable to supplied param
-single_end = params.single_end
-single_end_RNA = params.single_end_RNA
+single_end = false
+single_end_RNA = false
 
 // initialize RNAseq presence
 have_RNAseq = false
@@ -150,10 +198,10 @@ def create_workflow_summary(summary) {
 
     def yaml_file = workDir.resolve('workflow_summary_mqc.yaml')
     yaml_file.text  = """
-    id: 'icbi-wes-summary'
+    id: 'nextNEOpi-summary'
     description: " - this information is collected when the pipeline is started."
-    section_name: 'icbi/wes Workflow Summary'
-    section_href: 'https://gitlab.i-med.ac.at/icbi-lab/pipelines/wes-nf'
+    section_name: 'nextNEOpi Workflow Summary'
+    section_href: 'https://github.com/icbi-lab/nextNEOpi'
     plot_type: 'html'
     data: |
         <dl class=\"dl-horizontal\">
@@ -170,7 +218,7 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
 dna_count = 0
 rna_count = 0
 
-// did not get a CSV batch file: just run a single sample
+// did not get a CSV batch file and input is not BAM: just run a single sample
 if (! params.batchFile && ! bamInput) {
     // create channel with tumorSampleName/reads file set
     if (params.readsTumor != "NO_FILE") {
@@ -178,7 +226,8 @@ if (! params.batchFile && ! bamInput) {
         // Sample name to use, if not given uses fastq file simpleName
         params.tumorSampleName  = "undefined"
         params.normalSampleName = "undefined"
-        if(!params.single_end) {
+        single_end = (file(params.readsTumor) instanceof LinkedList) ? false : true
+        if(! single_end) {
             tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor)[0].simpleName
         } else {
             tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
@@ -197,7 +246,11 @@ if (! params.batchFile && ! bamInput) {
     }
 
     if (params.readsNormal != "NO_FILE") {
-        if(!params.single_end) {
+        normal_libType = (file(params.readsNormal) instanceof LinkedList) ? "PE" : "SE"
+        if ((normal_libType == "PE" && single_end) || (normal_libType == "SE" && ! single_end)) {
+            exit 1, "Please do not mix pe and se for tumor/normal pairs: " + tumorSampleName + " - Not supported"
+        }
+        if(! single_end) {
             normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal)[0].simpleName
         } else {
             normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
@@ -214,6 +267,7 @@ if (! params.batchFile && ! bamInput) {
     }
 
     if (params.readsRNAseq) {
+        single_end_RNA = (file(params.readsRNAseq) instanceof LinkedList) ? false : true
         Channel
                 .fromFilePairs(params.readsRNAseq, size: -1)
                 .map { reads -> tuple(tumorSampleName,
@@ -336,16 +390,16 @@ if (! params.batchFile && ! bamInput) {
             .set { custom_hlas_ch }
 } else if (bamInput && ! params.batchFile) {
     // bam files provided on cmd line
-    if (params.tumorBam != "NO_FILE") {
+    if (params.bamTumor != "NO_FILE") {
         params.tumorSampleName  = "undefined"
-        tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.tumorBam).simpleName
+        tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.bamTumor).simpleName
 
     } else {
         exit 1, "No tumor sample defined"
     }
-    if (params.normalBam != "NO_FILE") {
+    if (params.bamNormal != "NO_FILE") {
         params.normalSampleName = "undefined"
-        normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.normalBam).simpleName
+        normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.bamNormal).simpleName
     } else {
         exit 1, "No normal sample defined"
     }
@@ -353,15 +407,15 @@ if (! params.batchFile && ! bamInput) {
     Channel
             .of(tuple(tumorSampleName,
                     normalSampleName,
-                    file(params.tumorBam),
-                    file(params.normalBam)))
+                    file(params.bamTumor),
+                    file(params.bamNormal)))
             .set { dna_bam_files }
 
-    if (params.rnaBam) {
+    if (params.bamRNAseq) {
         Channel
                 .of(tuple(tumorSampleName,
                           normalSampleName,
-                          file(params.rnaBam)))
+                          file(params.bamRNAseq)))
                 .set { rna_bam_files }
         have_RNAseq = true
     }
@@ -387,15 +441,15 @@ if (! params.batchFile && ! bamInput) {
             sexMap[row.tumorSampleName] = "XY"
         }
 
-        if (! row.tumorBam || row.tumorBam == "" || row.tumorBam == "None") {
+        if (! row.bamTumor || row.bamTumor == "" || row.bamTumor == "None") {
             exit 1, "No tumor sample defined for " + row.tumorSampleName
         }
 
-        if (! row.normalBam || row.normalBam == "" || row.normalBam == "None") {
-            exit 1, "No normal sample defined for " + row.tumorBam
+        if (! row.bamNormal || row.bamNormal == "" || row.bamNormal == "None") {
+            exit 1, "No normal sample defined for " + row.bamTumor
         }
 
-        if (! row.rnaBam || row.rnaBam == "" || row.rnaBam == "None") {
+        if (! row.bamRNAseq || row.bamRNAseq == "" || row.bamRNAseq == "None") {
             have_RNAseq = false
         } else {
             have_RNAseq = true
@@ -411,8 +465,8 @@ if (! params.batchFile && ! bamInput) {
             .splitCsv(header:true)
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
-                                file(row.tumorBam),
-                                file(row.normalBam)) }
+                                file(row.bamTumor),
+                                file(row.bamNormal)) }
             .set { dna_bam_files }
 
     if (have_RNAseq) {
@@ -421,7 +475,7 @@ if (! params.batchFile && ! bamInput) {
                 .splitCsv(header:true)
                 .map { row -> tuple(row.tumorSampleName,
                                     row.normalSampleName,
-                                    file(row.rnaBam)) }
+                                    file(row.bamRNAseq)) }
                 .set { rna_bam_files }
     }
 
@@ -585,23 +639,23 @@ if(bamInput) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            file(tumorBam),
-            file(normalBam)
+            file(bamTumor),
+            file(bamNormal)
         ) from dna_bam_files
 
         output:
         set(
             TumorReplicateId,
             NormalReplicateId,
-            file(tumorBam),
-            file(normalBam),
+            file(bamTumor),
+            file(bamNormal),
             stdout
         ) into check_DNA_seqLib_ch
 
 
         script:
         """
-        check_pe.py $tumorBam $normalBam
+        check_pe.py $bamTumor $bamNormal
         """
     }
     (bam_DNA_ch, check_DNA_seqLib_ch) = check_DNA_seqLib_ch.into(2)
@@ -618,21 +672,21 @@ if(bamInput) {
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                file(rnaBam),
+                file(bamRNAseq),
             ) from rna_bam_files
 
             output:
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                file(rnaBam),
+                file(bamRNAseq),
                 stdout
             ) into check_RNA_seqLib_ch
 
 
             script:
             """
-            check_pe.py $rnaBam
+            check_pe.py $bamRNAseq
             """
         }
         (bam_RNA_ch, check_RNA_seqLib_ch) = check_RNA_seqLib_ch.into(2)
@@ -652,8 +706,8 @@ if(bamInput) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            file(tumorBam),
-            file(normalBam),
+            file(bamTumor),
+            file(bamNormal),
             libType
         ) from bam_DNA_ch
 
@@ -692,7 +746,7 @@ if(bamInput) {
 
         if (libType == "PE")
             """
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${tumorBam} | \\
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamTumor} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -701,7 +755,7 @@ if(bamInput) {
                 -0 /dev/null -s /dev/null \\
                 -n
 
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${normalBam} | \\
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamNormal} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -715,13 +769,13 @@ if(bamInput) {
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -n \\
-                ${tumorBam} | \\
+                ${bamTumor} | \\
                 pigz -p ${task.cpus} > ${TumorReplicateId}_FWD.fastq.gz
 
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -n \\
-                ${normalBam} | \\
+                ${bamNormal} | \\
                 pigz -p ${task.cpus} > ${TumorReplicateId}_FWD.fastq.gz
 
             touch None
@@ -741,7 +795,7 @@ if(bamInput) {
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                file(rnaBam),
+                file(bamRNAseq),
                 libType
             ) from bam_RNA_ch
 
@@ -768,7 +822,7 @@ if(bamInput) {
 
             if (libType == "PE")
                 """
-                samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${rnaBam} | \\
+                samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamRNAseq} | \\
                 samtools fastq \\
                     -@ ${task.cpus} \\
                     -c 5 \\
@@ -782,7 +836,7 @@ if(bamInput) {
                 samtools fastq \\
                     -@ ${task.cpus} \\
                     -n \\
-                    ${rnaBam} | \\
+                    ${bamRNAseq} | \\
                     pigz -p ${task.cpus} > ${TumorReplicateId}_RNA_FWD.fastq.gz
 
                 touch None
@@ -7264,13 +7318,10 @@ def helpMessage() {
     log.info "--        U S A G E       "
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal"] | ["--batchFile"] "-profile [conda|singularity],[cluster]" ["-resume"]'
+    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal" | "--bamTumor" "--bamNormal"] | ["--batchFile"] ["--bam"] "-profile [conda|singularity],[cluster]" ["-resume"]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
-    log.info "Single-end reads:"
-    log.info "---------------------------"
-    log.info "--single_end \t\t sets parameter to TRUE (default false)"
     log.info ""
     log.info " Mandatory arguments:"
     log.info " --------------------"
@@ -7278,6 +7329,9 @@ def helpMessage() {
     log.info "   or"
     log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
     log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
+    log.info "   or"
+    log.info "--bamTumor \t\t tumor_1.bam \t\t ; tumor BAM file"
+    log.info "--bamNormal \t\t normal_1.bam \t\t ; normal BAM file"
     log.info ""
     log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
 
@@ -7285,7 +7339,7 @@ def helpMessage() {
     log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX"
     log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX"
+    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,None,XX"
 
     log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
 
@@ -7309,7 +7363,7 @@ def helpMessage() {
 
     log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below"
 
-    log.info "Note: sex can be XX or Female, XY or Male. If not specified or \"None\" Male is assumed"
+    log.info "Note: sex can be XX, female or Female, XY, male or Male. If not specified or \"None\" Male is assumed"
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""

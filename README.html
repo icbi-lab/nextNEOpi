@@ -492,7 +492,7 @@ is a template for the configuration of the single processes, you may check
 the number of CPUs assigned for each process and adjust according to your systems capabilities.</p>
 <p>Most pipeline parameters can be edited in the <code>params.config</code> file or changed on run time with command line options by using <code>--NameOfTheParameter</code> given in the <code>params.config</code>.
 References, databases should be edited in the <code>resources.config</code> file.</p>
-<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --readsTumor &lt;tumorFastq&gt; --readsNormal &lt;normalFastq&gt; | --batchFile &lt;batchFile.csv&gt;&quot; [--single_end] -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --readsTumor &lt;tumorFastq&gt; --readsNormal &lt;normalFastq&gt; [--reads_RNAseq] | --batchFile &lt;batchFile_FASTQ.csv | batchFile_BAM.csv&gt; -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 </div></code></pre>
 <p><strong>Profiles:</strong> conda or singularity</p>
 <p>We highly recommend to use either the <code>singularity</code> or <code>conda</code> profile. You can specify one of the two profiles using the option <code>-profile singularity</code> or <code>-profile conda</code>. This way you do not have to care about installing all the required software including all
@@ -500,14 +500,14 @@ its dependencies.</p>
 <p><strong>Profiles:</strong> cluster</p>
 <p>We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
 <p>Please see <code>profiles</code> in <code>conf/profiles.config</code> to adjust the cluster profile to your scheduling system.</p>
-<p><strong>Single-end reads:</strong></p>
-<p><code>--single_end</code> DNA reads are single end: sets parameter to TRUE (default false)</p>
-<p><code>--single_end_RNA</code> RNA reads are single end: sets parameter to TRUE (default false)</p>
-<p><strong>RNA reads are from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
+<p><strong>Sequencing data input:</strong></p>
+<p>Besides raw reads in <strong>FASTQ</strong> fromated files, input data may also be provided in <strong>BAM</strong> format.</p>
+<p><strong>RNA reads from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
 <p><code>--RNA_tag_seq</code> turns off the &quot;--trna-vaf&quot; and &quot;--trna-cov&quot; filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.</p>
 <p><strong>Mandatory arguments:</strong></p>
 <p><code>--batchFile</code> <em>[recommended]</em></p>
-<p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile.csv</code></p>
+<p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile_FASTQ.csv</code> or <code>example_batchFile_BAM.csv</code></p>
+<p><strong>FASTQ raw reads</strong></p>
 <ul>
 <li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:</li>
 </ul>
@@ -718,6 +718,123 @@ its dependencies.</p>
 <p>or</p>
 <p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
 <p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>
+<p>(<em>optional but recommended</em>:
+<code>--readsRNAseq</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped))</p>
+<p><strong>BAM files</strong></p>
+<p>If bam files are used in a batch CSV file the option <code>--bam</code> needs to be specified together with <code>--batchFile</code></p>
+<ul>
+<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq data:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>tumorSampleName</th>
+<th>bamTumor</th>
+<th>normalSampleName</th>
+<th>bamNormal</th>
+<th>bamRNAseq</th>
+<th>HLAfile</th>
+<th>sex</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sample1</td>
+<td>Tumor1.bam</td>
+<td>normal1</td>
+<td>Normal1.bam</td>
+<td>Tumor1_RNAseq.bam</td>
+<td>None</td>
+<td>XX</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>Tumor2.bam</td>
+<td>normal2</td>
+<td>Normal2.bam</td>
+<td>Tumor2_RNAseq.bam</td>
+<td>None</td>
+<td>XY</td>
+</tr>
+<tr>
+<td>...</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sampleN</td>
+<td>TumorN.bam</td>
+<td>normalN</td>
+<td>NormalN.bam</td>
+<td>TumorN_RNAseq.bam</td>
+<td>None</td>
+<td>XX</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq data:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>tumorSampleName</th>
+<th>bamTumor</th>
+<th>normalSampleName</th>
+<th>bamNormal</th>
+<th>bamRNAseq</th>
+<th>HLAfile</th>
+<th>sex</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sample1</td>
+<td>Tumor1.bam</td>
+<td>normal1</td>
+<td>Normal1.bam</td>
+<td>None</td>
+<td>None</td>
+<td>XX</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>Tumor2.bam</td>
+<td>normal2</td>
+<td>Normal2.bam</td>
+<td>None</td>
+<td>None</td>
+<td>XY</td>
+</tr>
+<tr>
+<td>...</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>sampleN</td>
+<td>TumorN.bam</td>
+<td>normalN</td>
+<td>NormalN.bam</td>
+<td>None</td>
+<td>None</td>
+<td>XX</td>
+</tr>
+</tbody>
+</table>
+<p>or</p>
+<p><code>--tumorBam</code> tumor_1.bam</p>
+<p><code>--normalBam</code> normal_1.bam</p>
+<p>(<em>optional but recommended</em>:
+<code>--rnaBam</code> tumor_1_RNAseq.bam</p>
 <p><strong>Notes</strong></p>
 <ul>
 <li>
@@ -728,7 +845,10 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa.</em></p>
 <p>in the <code>HLAfile</code> coulumn a user suppiled HLA types file may be specified for a given sample, see also <code>--customHLA</code> option below</p>
 </li>
 <li>
-<p>the <code>sex</code> column can be XX or Female, XY or Male. If not specified or &quot;None&quot; Male is assumed</p>
+<p>the <code>sex</code> column can be &quot;XX&quot;, &quot;female&quot; or &quot;Female&quot;, &quot;XY&quot;, &quot;male&quot; or &quot;Male&quot;. If not specified or &quot;None&quot; Male is assumed</p>
+</li>
+<li>
+<p>when providing paired end fastq files via commandline options (<code>--readsTumor, --readsNormal, --readsRNA</code>), please make sure you put the filename pattern into qoutes: e.g. <code>--readsTumor &quot;reads_{1,2}.fastq.gz&quot;</code></p>
 </li>
 </ul>
 <p><strong>Example run command with batchfile:</strong></p>
