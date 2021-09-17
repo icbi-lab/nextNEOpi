@@ -357,7 +357,7 @@ if (! params.batchFile && ! bamInput) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsTumorFWD),
-                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV) }
+                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV)) }
             .into { raw_reads_tumor_ch;
                     fastqc_reads_tumor_ch }
 
@@ -367,7 +367,7 @@ if (! params.batchFile && ! bamInput) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsNormalFWD),
-                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV) }
+                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV)) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
     if (have_RNAseq) {
@@ -553,17 +553,20 @@ pon_file = file(params.mutect2ponFile)
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
-HLAHD_DIR		  = file(params.HLAHD_DIR)
 MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
 // check HLAHD
 have_HLAHD = false
-HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
-if (checkToolAvailable(HLAHD, "exists", "warn")) {
-    HLAHD_PATH = HLAHD_DIR + "/bin"
-    have_HLAHD = true
-} else {
+if (params.HLAHD_DIR != "") {
+    HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
+    if (checkToolAvailable(HLAHD, "exists", "warn")) {
+        HLAHD_DIR  = file(params.HLAHD_DIR)
+        HLAHD_PATH = HLAHD_DIR + "/bin"
+        have_HLAHD = true
+    }
+}
+if (! have_HLAHD) {
     // exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
     log.warn "WARNING: HLAHD not available - can not predict Class II neoepitopes"
 }
@@ -588,7 +591,7 @@ if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singula
 
 // check if we have mutect1 installed
 have_Mutect1 = false
-if (file(params.MUTECT1) && file(params.JAVA7)) {
+if (params.MUTECT1 != "" && file(params.MUTECT1) && file(params.JAVA7)) {
     if(checkToolAvailable(params.JAVA7, "inPath", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
         JAVA7 = file(params.JAVA7)
         MUTECT1 = file(params.MUTECT1)
@@ -6930,7 +6933,6 @@ if(params.TCR) {
             NormalReplicateId,
             readFWD,
             readREV,
-            _,
             file(mixcr_chck_file)
         ) from reads_tumor_mixcr_DNA_ch
             .combine(mixcr_chck_ch0)
@@ -6969,7 +6971,6 @@ if(params.TCR) {
             NormalReplicateId,
             readFWD,
             readREV,
-            _,
             file(mixcr_chck_file)
         ) from reads_normal_mixcr_DNA_ch
             .combine(mixcr_chck_ch1)
