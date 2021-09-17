@@ -4029,7 +4029,8 @@ if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
         output:
         file("${vep_cache_chck_file_name}") into (
             vep_cache_ch0,
-            vep_cache_ch1
+            vep_cache_ch1,
+            vep_cache_ch2
         )
 
         script:
@@ -4056,7 +4057,7 @@ if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
 } else {
 
     vep_cache_ch = Channel.fromPath(vep_cache_chck_file)
-    (vep_cache_ch0, vep_cache_ch1) = vep_cache_ch.into(2)
+    (vep_cache_ch0, vep_cache_ch1, vep_cache_ch2) = vep_cache_ch.into(3)
 
 }
 
@@ -4074,6 +4075,9 @@ if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
 
         // do not cache
         cache false
+
+        input:
+        file(vep_cache_chck_file) from vep_cache_ch2
 
         output:
         file("${vep_plugins_chck_file_name}") into (
