@@ -4023,6 +4023,9 @@ if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
 
         tag 'installVEPcache'
 
+        // do not cache
+        cache false
+
         output:
         file("${vep_cache_chck_file_name}") into (
             vep_cache_ch0,
@@ -4068,6 +4071,9 @@ if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
         label 'VEP'
 
         tag 'installVEPplugins'
+
+        // do not cache
+        cache false
 
         output:
         file("${vep_plugins_chck_file_name}") into (
