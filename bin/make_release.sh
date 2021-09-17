@@ -13,7 +13,7 @@ else
 fi
 mkdir -p ${BUILD_DIR}/{conf,bin,assets,resources}
 
-cp nextNEOpi.nf example_batchFile.csv README.md README.html LICENSE ${BUILD_DIR}
+cp nextNEOpi.nf example_batchFile_FASTQ.csv example_batchFile_BAM.csv README.md README.html LICENSE ${BUILD_DIR}
 cp assets/Alleles_list.txt ${BUILD_DIR}/assets
 cp assets/Final_gbm_model.rds ${BUILD_DIR}/assets
 cp assets/NeoAg_immunogenicity_predicition_GBM.patch ${BUILD_DIR}/assets
@@ -40,6 +40,7 @@ cp bin/SequenzaScript.R ${BUILD_DIR}/bin
 cp bin/add_CCF.py ${BUILD_DIR}/bin
 cp bin/ascat.R ${BUILD_DIR}/bin
 cp bin/assess_significance.R ${BUILD_DIR}/bin
+cp bin/check_pe.py ${BUILD_DIR}/bin
 cp bin/convertAlleleCounts.r ${BUILD_DIR}/bin
 cp bin/freec2bed.pl ${BUILD_DIR}/bin
 cp bin/freec2circos.pl ${BUILD_DIR}/bin
