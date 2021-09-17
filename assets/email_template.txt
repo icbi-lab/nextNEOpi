@@ -48,4 +48,4 @@ Pipeline Configuration:
 
 --
 icbi/nextNEOpi
-https://gitlab.i-med.ac.at/icbi-lab/pipelines/nextNEOpi/
+https://github.com/icbi-lab/nextNEOpi
