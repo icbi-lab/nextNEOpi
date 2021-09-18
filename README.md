@@ -230,7 +230,8 @@ or
 
 **BAM files**
 
-If bam files are used in a batch CSV file the option ```--bam``` needs to be specified together with ```--batchFile```
+**Note:** If BAM files are used it is very much recommended that they also include also the unmapped and multimapping reads. These reads can be
+helpful for HLA-typing.
 
 * e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq data:
 
