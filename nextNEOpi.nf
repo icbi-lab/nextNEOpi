@@ -100,7 +100,7 @@ if (! params.batchFile) {
         } else if (batchCSV[0].keySet().sort() == validBAMfields.sort()) {
             bamInput = true
         } else {
-            exit 1, "Error: Incorrect fields in patch file, please check your batchFile"
+            exit 1, "Error: Incorrect fields in batch file, please check your batchFile"
         }
     } else {
         exit 1, "Error: No samples found, please check your batchFile"
