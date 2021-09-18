@@ -756,7 +756,8 @@ if(bamInput) {
                 -1 ${TumorReplicateId}_FWD.fastq.gz \\
                 -2 ${TumorReplicateId}_REV.fastq.gz \\
                 -0 /dev/null -s /dev/null \\
-                -n
+                -n \\
+                /dev/stdin
 
             samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamNormal} | \\
             samtools fastq \\
@@ -765,7 +766,8 @@ if(bamInput) {
                 -1 ${NormalReplicateId}_FWD.fastq.gz \\
                 -2 ${NormalReplicateId}_REV.fastq.gz \\
                 -0 /dev/null -s /dev/null \\
-                -n
+                -n \\
+                /dev/stdin
             """
         else if (libType == "SE")
             """
@@ -832,7 +834,8 @@ if(bamInput) {
                     -1 ${TumorReplicateId}_RNA_FWD.fastq.gz \\
                     -2 ${TumorReplicateId}_RNA_REV.fastq.gz \\
                     -0 /dev/null -s /dev/null \\
-                    -n
+                    -n \\
+                /dev/stdin
                 """
             else if (libType == "SE")
                 """
