@@ -749,7 +749,7 @@ if(bamInput) {
 
         if (libType == "PE")
             """
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamTumor} | \\
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamTumor} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -758,7 +758,7 @@ if(bamInput) {
                 -0 /dev/null -s /dev/null \\
                 -n
 
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamNormal} | \\
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamNormal} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -825,7 +825,7 @@ if(bamInput) {
 
             if (libType == "PE")
                 """
-                samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -u -n ${bamRNAseq} | \\
+                samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamRNAseq} | \\
                 samtools fastq \\
                     -@ ${task.cpus} \\
                     -c 5 \\
