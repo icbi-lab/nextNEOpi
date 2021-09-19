@@ -61,14 +61,14 @@ bamInput = false
 
 // we got bam input on cmd line
 if (! params.batchFile) {
-    if(params.bamTumor != "NO_FILE" && readsTumor == "NO_FILE") {
+    if(params.bamTumor != "NO_FILE" && params.readsTumor == "NO_FILE") {
         bamInput = true
-    } else if(params.bamTumor == "NO_FILE" && readsTumor != "NO_FILE") {
+    } else if(params.bamTumor == "NO_FILE" && params.readsTumor != "NO_FILE") {
         bamInput = false
     } else if(params.bamTumor != "NO_FILE" &&
-              (readsTumor != "NO_FILE" ||
-               readsNormal != "NO_FILE" ||
-               readsRNAseq != "NO_FILE")) {
+              (params.readsTumor != "NO_FILE" ||
+               params.readsNormal != "NO_FILE" ||
+               params.readsRNAseq != "NO_FILE")) {
         exit 1, "Please do not provide tumor data as BAM and FASTQ"
     }
 } else {
