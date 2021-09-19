@@ -591,7 +591,7 @@ if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singula
 
 // check if we have mutect1 installed
 have_Mutect1 = false
-if (params.MUTECT1 != "" && file(params.MUTECT1) && file(params.JAVA7)) {
+if (params.MUTECT1 != "" && file(params.MUTECT1) && params.JAVA7 != "" && file(params.JAVA7)) {
     if(checkToolAvailable(params.JAVA7, "inPath", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
         JAVA7 = file(params.JAVA7)
         MUTECT1 = file(params.MUTECT1)
