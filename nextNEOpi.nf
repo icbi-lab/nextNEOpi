@@ -232,15 +232,6 @@ if (! params.batchFile && ! bamInput) {
         } else {
             tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
         }
-
-        Channel
-                .fromFilePairs(params.readsTumor, size: -1)
-                .map { reads -> tuple(tumorSampleName,
-                                      normalSampleName,
-                                      reads[1][0],
-                                      (reads[1][1]) ? reads[1][1] : "NO_FILE_REV_T") }
-                .into { raw_reads_tumor_ch;
-                        fastqc_reads_tumor_ch }
     } else  {
         exit 1, "No tumor sample defined"
     }
@@ -255,6 +246,16 @@ if (! params.batchFile && ! bamInput) {
         } else {
             normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
         }
+
+        Channel
+                .fromFilePairs(params.readsTumor, size: -1)
+                .map { reads -> tuple(tumorSampleName,
+                                      normalSampleName,
+                                      reads[1][0],
+                                      (reads[1][1]) ? reads[1][1] : "NO_FILE_REV_T") }
+                .into { raw_reads_tumor_ch;
+                        fastqc_reads_tumor_ch }
+
         Channel
                 .fromFilePairs(params.readsNormal, size: -1)
                 .map { reads -> tuple(tumorSampleName,
