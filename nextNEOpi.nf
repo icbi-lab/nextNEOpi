@@ -118,6 +118,9 @@ have_RNAseq = false
 // initialize RNA tag seq
 have_RNA_tag_seq = params.RNA_tag_seq
 
+// initialize custom HLA types presence
+use_custom_hlas = false
+
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
 
@@ -338,6 +341,10 @@ if (! params.batchFile && ! bamInput) {
             }
             rna_count++
         }
+
+        if (row.HLAfile != "None" || row.HLAfile != "") {
+            use_custom_hlas = true
+        }
     }
 
     if ((dna_count != rna_count) && (rna_count != 0)) {
@@ -457,6 +464,10 @@ if (! params.batchFile && ! bamInput) {
             rna_count++
         }
 
+        if (row.HLAfile != "None" || row.HLAfile != "") {
+            use_custom_hlas = true
+        }
+
         dna_count++
     }
 
@@ -492,6 +503,10 @@ if (! params.batchFile && ! bamInput) {
 // set cutom HLA channel and sex channel if no batchFile was passed
 if (! params.batchFile) {
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
+    if (params.customHLA != "NO_FILE") {
+        use_custom_hlas = true
+    }
+
     Channel
             .of(tuple(
                     tumorSampleName,
@@ -557,8 +572,10 @@ padding = params.readLength + 100
 MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
-// check HLAHD
+// check HLAHD & OptiType
 have_HLAHD = false
+run_OptiType = (params.disable_OptiType) ? false : true
+
 if (params.HLAHD_DIR != "") {
     HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
     if (checkToolAvailable(HLAHD, "exists", "warn")) {
@@ -567,9 +584,12 @@ if (params.HLAHD_DIR != "") {
         have_HLAHD = true
     }
 }
-if (! have_HLAHD) {
-    // exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
+if (! have_HLAHD && run_OptiType) {
     log.warn "WARNING: HLAHD not available - can not predict Class II neoepitopes"
+} else if (! have_HLAHD && ! run_OptiType && use_custom_hlas) {
+    log.warn "WARNING: HLAHD not available and OptiType disabled - using only user supplied HLA types"
+} else if (! have_HLAHD && ! run_OptiType && ! use_custom_hlas) {
+    exit 1, "ERROR: HLAHD not available and OptiType disabled - can not predict HLA types"
 }
 
 // check if all tools are installed when not running conda or singularity
@@ -5625,104 +5645,9 @@ process 'mhc_extract' {
  *
  */
 
-process 'pre_map_hla' {
+if (run_OptiType) {
 
-    label 'nextNEOpiENV'
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/processing/",
-        mode: params.publishDirMode,
-        enabled: params.fullOutput
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(readsFWD),
-        file(readsREV),
-    ) from reads_tumor_hla_ch
-
-    file yaraIdx_files from Channel.value(reference.YaraIndexDNA)
-    val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
-
-    output:
-    set (
-        TumorReplicateId,
-        file("dna_mapped_{1,2}.bam")
-    ) into fished_reads
-
-    script:
-    if(single_end) {
-        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
-        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
-    } else {
-        yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
-        samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
-    }
-
-    if (single_end)
-        """
-        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
-            samtools view -@ $samtools_cpus -h -F 4 -b1 -o dna_mapped_1.bam
-        """
-    else
-        """
-        rm -f R1 R2
-        mkfifo R1 R2
-        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
-            samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
-            tee R1 R2 > /dev/null &
-            samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > dna_mapped_1.bam &
-            samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > dna_mapped_2.bam &
-        wait
-        rm -f R1 R2
-        """
-}
-
-/*
- * STEP 2 - Run Optitype
- *
- * This is the major process, that formulates the IP and calls the selected
- * IP solver.
- *
- * Ouput formats: <still to enter>
- */
-
-process 'OptiType' {
-
-    label 'nextNEOpiENV'
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/",
-        mode: params.publishDirMode
-
-    input:
-    set (
-        TumorReplicateId,
-        file(reads)
-    ) from fished_reads
-
-    output:
-    set (
-        TumorReplicateId,
-        file("${TumorReplicateId}_optitype_result.tsv")
-    ) into optitype_output
-    file("${TumorReplicateId}_optitype_coverage_plot.pdf")
-
-    script:
-    """
-    OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
-    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
-    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
-    rm -rf ./tmp/
-    """
-}
-
-if (have_RNAseq && ! have_RNA_tag_seq) {
-    process 'pre_map_hla_RNA' {
+    process 'pre_map_hla' {
 
         label 'nextNEOpiENV'
 
@@ -5736,18 +5661,18 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readRNAFWD,
-            readRNAREV
-        ) from reads_tumor_optitype_ch
+            file(readsFWD),
+            file(readsREV),
+        ) from reads_tumor_hla_ch
 
-        file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
-        val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+        file yaraIdx_files from Channel.value(reference.YaraIndexDNA)
+        val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
 
         output:
         set (
             TumorReplicateId,
-            file("rna_mapped_{1,2}.bam")
-        ) into fished_reads_RNA
+            file("dna_mapped_{1,2}.bam")
+        ) into fished_reads
 
         script:
         if(single_end) {
@@ -5758,26 +5683,35 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
             samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
         }
 
-        if (single_end_RNA)
+        if (single_end)
             """
-            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
-                samtools view -@ $samtools_cpus -h -F 4 -b1 -o rna_mapped_1.bam
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
+                samtools view -@ $samtools_cpus -h -F 4 -b1 -o dna_mapped_1.bam
             """
         else
             """
             rm -f R1 R2
             mkfifo R1 R2
-            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
                 samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
                 tee R1 R2 > /dev/null &
-                samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > rna_mapped_1.bam &
-                samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > rna_mapped_2.bam &
+                samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > dna_mapped_1.bam &
+                samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > dna_mapped_2.bam &
             wait
             rm -f R1 R2
             """
     }
 
-    process 'OptiType_RNA' {
+    /*
+    * STEP 2 - Run Optitype
+    *
+    * This is the major process, that formulates the IP and calls the selected
+    * IP solver.
+    *
+    * Ouput formats: <still to enter>
+    */
+
+    process 'OptiType' {
 
         label 'nextNEOpiENV'
 
@@ -5790,57 +5724,154 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
         set (
             TumorReplicateId,
             file(reads)
-        ) from fished_reads_RNA
+        ) from fished_reads
 
         output:
         set (
             TumorReplicateId,
-            file("${TumorReplicateId}_optitype_RNA_result.tsv")
-        ) into optitype_RNA_output
-        file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
+            file("${TumorReplicateId}_optitype_result.tsv")
+        ) into optitype_output
+        file("${TumorReplicateId}_optitype_coverage_plot.pdf")
 
         script:
-        if (single_end_RNA)
-            """
-            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-            MHC_MAPPED=`samtools view -c ${reads}`
-            if [ "\$MHC_MAPPED" != "0" ]; then
-                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
-                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
-                rm -rf ./tmp/
-            else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv
-                echo "No result" >  ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
-            fi
-            """
-        else
-            """
-            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-            MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
-            MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
-            if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
-                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
-                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
-                rm -rf ./tmp/
-            else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv
-                echo "No result" > ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
-            fi
-            """
+        """
+        OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+        \$OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+        mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
+        mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
+        rm -rf ./tmp/
+        """
     }
 
-} else if (have_RNAseq && have_RNA_tag_seq) {
+    if (have_RNAseq && ! have_RNA_tag_seq) {
+        process 'pre_map_hla_RNA' {
 
-    log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+            label 'nextNEOpiENV'
 
-    optitype_RNA_output = reads_tumor_optitype_ch
+            tag "$TumorReplicateId"
+
+            publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/processing/",
+                mode: params.publishDirMode,
+                enabled: params.fullOutput
+
+            input:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                readRNAFWD,
+                readRNAREV
+            ) from reads_tumor_optitype_ch
+
+            file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
+            val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+
+            output:
+            set (
+                TumorReplicateId,
+                file("rna_mapped_{1,2}.bam")
+            ) into fished_reads_RNA
+
+            script:
+            if(single_end) {
+                yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+                samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+            } else {
+                yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
+                samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
+            }
+
+            if (single_end_RNA)
+                """
+                yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
+                    samtools view -@ $samtools_cpus -h -F 4 -b1 -o rna_mapped_1.bam
+                """
+            else
+                """
+                rm -f R1 R2
+                mkfifo R1 R2
+                yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
+                    samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
+                    tee R1 R2 > /dev/null &
+                    samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > rna_mapped_1.bam &
+                    samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > rna_mapped_2.bam &
+                wait
+                rm -f R1 R2
+                """
+        }
+
+        process 'OptiType_RNA' {
+
+            label 'nextNEOpiENV'
+
+            tag "$TumorReplicateId"
+
+            publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/",
+                mode: params.publishDirMode
+
+            input:
+            set (
+                TumorReplicateId,
+                file(reads)
+            ) from fished_reads_RNA
+
+            output:
+            set (
+                TumorReplicateId,
+                file("${TumorReplicateId}_optitype_RNA_result.tsv")
+            ) into optitype_RNA_output
+            file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
+
+            script:
+            if (single_end_RNA)
+                """
+                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+                MHC_MAPPED=`samtools view -c ${reads}`
+                if [ "\$MHC_MAPPED" != "0" ]; then
+                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                    rm -rf ./tmp/
+                else
+                    touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                    echo "No result" >  ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
+                fi
+                """
+            else
+                """
+                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+                MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
+                MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
+                if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
+                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                    rm -rf ./tmp/
+                else
+                    touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                    echo "No result" > ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
+                fi
+                """
+        }
+
+    } else if (have_RNAseq && have_RNA_tag_seq) {
+
+        log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+
+        optitype_RNA_output = reads_tumor_optitype_ch
+                                .map{ it -> tuple(it[0], file("NO_FILE"))}
+
+    }
+}  else { // End if run_OptiType
+    log.info "INFO: will not run HLA typing with OptiType"
+
+    optitype_output = reads_tumor_hla_ch
                             .map{ it -> tuple(it[0], file("NO_FILE"))}
 
+    if (have_RNAseq) {
+        optitype_RNA_output = reads_tumor_optitype_ch
+                                .map{ it -> tuple(it[0], file("NO_FILE"))}
+    }
 }
-
-
 
 /*
 *********************************************
@@ -6013,6 +6044,7 @@ process get_vhla {
     ) into (hlas, hlas_neoFuse)
 
     script:
+    def optitype_hlas = (opti_out.name != NO_FILE) ? "--opti_out $opti_out" : ''
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
     def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq) ? "--opti_out_RNA $opti_out_rna" : ''
     rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
@@ -6033,7 +6065,7 @@ process get_vhla {
     """
     # merging script
     HLA_parser.py \\
-        --opti_out ${opti_out} \\
+        ${optitype_hlas} \\
         ${hlahd_opt} \\
         ${rna_hlas} \\
         ${user_hlas} \\
