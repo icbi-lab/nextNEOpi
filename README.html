@@ -498,8 +498,8 @@ References, databases should be edited in the <code>resources.config</code> file
 <p>We highly recommend to use either the <code>singularity</code> or <code>conda</code> profile. You can specify one of the two profiles using the option <code>-profile singularity</code> or <code>-profile conda</code>. This way you do not have to care about installing all the required software including all
 its dependencies.</p>
 <p><strong>Profiles:</strong> cluster</p>
-<p>We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
-<p>Please see <code>profiles</code> in <code>conf/profiles.config</code> to adjust the cluster profile to your scheduling system.</p>
+<p>We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. <strong>cluster</strong> and the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
+<p>For an example SGE cluster profile, please see <code>profiles</code> in <code>conf/profiles.config</code>. You may uncomment and adjust the cluster profile to your scheduling system.</p>
 <p><strong>Sequencing data input:</strong></p>
 <p>Besides raw reads in <strong>FASTQ</strong> fromated files, input data may also be provided in <strong>BAM</strong> format.</p>
 <p><strong>RNA reads from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
@@ -721,7 +721,8 @@ its dependencies.</p>
 <p>(<em>optional but recommended</em>:
 <code>--readsRNAseq</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped))</p>
 <p><strong>BAM files</strong></p>
-<p>If bam files are used in a batch CSV file the option <code>--bam</code> needs to be specified together with <code>--batchFile</code></p>
+<p><strong>Note:</strong> If BAM files are used it is very much recommended that they also include also the unmapped and multimapping reads. These reads can be
+helpful for HLA-typing.</p>
 <ul>
 <li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq data:</li>
 </ul>

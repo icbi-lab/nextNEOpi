@@ -165,9 +165,9 @@ its dependencies.
 
 **Profiles:** cluster
 
-We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
+We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. **cluster** and the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
-Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster profile to your scheduling system.
+For an example SGE cluster profile, please see ```profiles``` in ```conf/profiles.config```. You may uncomment and adjust the cluster profile to your scheduling system.
 
 
 **Sequencing data input:**
