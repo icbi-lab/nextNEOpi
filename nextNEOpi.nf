@@ -6046,7 +6046,7 @@ process get_vhla {
     script:
     def optitype_hlas = (opti_out.name != 'NO_FILE') ? "--opti_out $opti_out" : ''
     def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq) ? "--opti_out_RNA $opti_out_rna" : ''
+    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq && (opti_out_rna.name != 'NO_FILE')) ? "--opti_out_RNA $opti_out_rna" : ''
     rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
