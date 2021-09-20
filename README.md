@@ -12,7 +12,7 @@ The pipeline uses the following tools:
 * ASCAT
 * CNVkit
 * OptiType
-* HLAHD
+* HLA-HD
 * pVACseq (netMHCpan, netMHCIIpan, mhcflurry)
 * NeoFuse
 * mixMHC2pred
@@ -28,7 +28,7 @@ is estimated by ASCAT and Sequenza and is used to derive the clonality measure f
 the predicted neoantigens. Tumor mutational burden (TMB) is calculated for all
 variants over the entire read covered genome and for coding variants on read covered
 exons.
-HLA class I and class II alleles are predicted with OptiType and HLAHD.
+HLA class I and class II alleles are predicted with OptiType and HLA-HD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
 neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
@@ -93,7 +93,7 @@ If you prefer local installation of the analysis tools please install the follow
 * PERL
 * CONDA
 * YARA
-* HLAHD
+* HLA-HD
 * ALLELECOUNT
 * RSCRIPT (R > 3.6.1)
 * SEQUENZA (3.0)
@@ -165,9 +165,9 @@ its dependencies.
 
 **Profiles:** cluster
 
-We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
+We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. **cluster** and the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
-Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster profile to your scheduling system.
+For an example SGE cluster profile, please see ```profiles``` in ```conf/profiles.config```. You may uncomment and adjust the cluster profile to your scheduling system.
 
 
 **Sequencing data input:**
@@ -328,12 +328,16 @@ nextflow run nextNEOpi.nf \
 
 ```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
 
+```--HLAHD_DIR``` Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.
+
 ```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
 
 ```--HLA_force_DNA``` Use only WES/WGS for HLA typing. Default: false
 
-```--run_HLAHD_RNA``` Run HLAHD also on RNAseq. Highly accurate but can be very slow
+```--run_HLAHD_RNA``` Run HLA-HD also on RNAseq. Highly accurate but can be very slow
                       on larger fastq files. Default: false
+
+```--disable_OptiType``` Disable OptiType for HLA typing. If set, **HLA-HD** or a user supplied **custom HLA file** must be available (see ```--HLAHD_DIR``` and/or ```--customHLA```)
 
 ```--sex```                Provide the sex of the sample (XX or Female, XY or Male, None)
 
