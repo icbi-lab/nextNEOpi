@@ -796,13 +796,13 @@ if(bamInput) {
                 -@ ${task.cpus} \\
                 -n \\
                 ${bamTumor} | \\
-                pigz -p ${task.cpus} > ${TumorReplicateId}_FWD.fastq.gz
+                bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_FWD.fastq.gz
 
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -n \\
                 ${bamNormal} | \\
-                pigz -p ${task.cpus} > ${TumorReplicateId}_FWD.fastq.gz
+                bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_FWD.fastq.gz
 
             touch None
             """
@@ -864,7 +864,7 @@ if(bamInput) {
                     -@ ${task.cpus} \\
                     -n \\
                     ${bamRNAseq} | \\
-                    pigz -p ${task.cpus} > ${TumorReplicateId}_RNA_FWD.fastq.gz
+                    bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_RNA_FWD.fastq.gz
 
                 touch None
                 """
