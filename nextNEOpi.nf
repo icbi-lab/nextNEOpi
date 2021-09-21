@@ -6180,7 +6180,6 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -H ${params.HLAHD_DIR} \\
                 ${sv_options} \\
                 -k true
             """
@@ -6200,7 +6199,6 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -H ${params.HLAHD_DIR} \\
                 ${sv_options} \\
                 -k true
             """
