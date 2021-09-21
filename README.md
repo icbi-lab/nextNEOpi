@@ -275,7 +275,7 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa._
 
 - when providing paired end fastq files via commandline options (```--readsTumor, --readsNormal, --readsRNA```), please make sure you put the filename pattern into qoutes: e.g. ```--readsTumor "reads_{1,2}.fastq.gz"```
 
-- Please make sure your **```/tmp``` (or the directory set as ```$TMPDIR```) has a lot of free space (> )**. You may change the tmp dir used by nextNEOpi by setting the parameter ```tmpDir``` in ```params.config``` or on the command line ```--tmpDir``` to a directory of your choice.
+- Please make sure your **```/tmp``` (or the directory set as ```$TMPDIR```) has a lot of free space (> 50GB, depending on input data size)**. You may change the tmp dir used by nextNEOpi by setting the parameter ```tmpDir``` in ```params.config``` or on the command line ```--tmpDir``` to a directory of your choice.
 
 **Example run command with batchfile:**
 ```
