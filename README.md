@@ -275,6 +275,7 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa._
 
 - when providing paired end fastq files via commandline options (```--readsTumor, --readsNormal, --readsRNA```), please make sure you put the filename pattern into qoutes: e.g. ```--readsTumor "reads_{1,2}.fastq.gz"```
 
+- Please make sure your **```/tmp``` (or the directory set as ```$TMPDIR```) has a lot of free space (> )**. You may change the tmp dir used by nextNEOpi by setting the parameter ```tmpDir``` in ```params.config``` or on the command line ```--tmpDir``` to a directory of your choice.
 
 **Example run command with batchfile:**
 ```
@@ -326,7 +327,7 @@ nextflow run nextNEOpi.nf \
 ```--TCR```                   Run mixcr for TCR prediction
                             Default: true
 
-```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
+```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01)
 
 ```--HLAHD_DIR``` Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.
 
