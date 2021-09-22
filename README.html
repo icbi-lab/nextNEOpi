@@ -367,14 +367,14 @@ code {
   </script>
 <p><img src="img/nextNEOpi_noBG.png" alt="nextNEOpi overview"></p>
 <h1 id="neoepitope-predictions-nextflow-pipeline">NeoEpitope predictions Nextflow Pipeline</h1>
-<p>Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
+<p>Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from Tumor
 to predict neoepitopes.</p>
 <p>The pipeline uses the following tools:</p>
 <ul>
 <li>MuTect2</li>
 <li>MuTect1</li>
 <li>VarScan2</li>
-<li>Strekla2/Manta</li>
+<li>Strelka2/Manta</li>
 <li>Sequenza</li>
 <li>ASCAT</li>
 <li>CNVkit</li>
@@ -385,10 +385,10 @@ to predict neoepitopes.</p>
 <li>mixMHC2pred</li>
 <li>mixcr</li>
 </ul>
-<p>It outputs a vcf files with the annotated and filtered SNPs and Indels, which
+<p>It outputs a vcf file with the annotated and filtered SNPs and Indels, which
 where called with each of the callers and a high confidence vcf file (hc) in
 which only variants that were called by a minimum of 2 of the callers are listed.
-All vcf files are annotatd with VEP. In addition the germline variants are called
+All vcf files are annotated with VEP. In addition the germline variants are called
 using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
 Copy number variations are analyzed using CNVkit, ASCAT, and sequenza. Tumor purity
 is estimated by ASCAT and Sequenza and is used to derive the clonality measure for
@@ -398,9 +398,9 @@ exons.
 HLA class I and class II alleles are predicted with OptiType and HLA-HD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
-neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
+neoepitope predictor. Fusion neoantigens are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
-A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
+A GBM model [1] is used to predict immunogenicity scores for MHC class I single nucleotide
 variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
 TCR and BCR repertoire.</p>
 <p>[1] https://github.com/vincentlaboratories/neoag/.</p>
@@ -852,7 +852,7 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa.</em></p>
 <p>when providing paired end fastq files via commandline options (<code>--readsTumor, --readsNormal, --readsRNA</code>), please make sure you put the filename pattern into qoutes: e.g. <code>--readsTumor &quot;reads_{1,2}.fastq.gz&quot;</code></p>
 </li>
 <li>
-<p>Please make sure your <strong><code>/tmp</code> (or the directory set as <code>$TMPDIR</code>) has a lot of free space (&gt; )</strong>. You may change the tmp dir used by nextNEOpi by setting the parameter <code>tmpDir</code> in <code>params.config</code> or on the command line <code>--tmpDir</code> to a directory of your choice.</p>
+<p>Please make sure your <strong><code>/tmp</code> (or the directory set as <code>$TMPDIR</code>) has a lot of free space (&gt; 50GB, depending on input data size)</strong>. You may change the tmp dir used by nextNEOpi by setting the parameter <code>tmpDir</code> in <code>params.config</code> or on the command line <code>--tmpDir</code> to a directory of your choice.</p>
 </li>
 </ul>
 <p><strong>Example run command with batchfile:</strong></p>
