@@ -1,13 +1,13 @@
 ![nextNEOpi overview](img/nextNEOpi_noBG.png)
 # NeoEpitope predictions Nextflow Pipeline
-Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
+Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from Tumor
 to predict neoepitopes.
 
 The pipeline uses the following tools:
 * MuTect2
 * MuTect1
 * VarScan2
-* Strekla2/Manta
+* Strelka2/Manta
 * Sequenza
 * ASCAT
 * CNVkit
@@ -18,10 +18,10 @@ The pipeline uses the following tools:
 * mixMHC2pred
 * mixcr
 
-It outputs a vcf files with the annotated and filtered SNPs and Indels, which
+It outputs a vcf file with the annotated and filtered SNPs and Indels, which
 where called with each of the callers and a high confidence vcf file (hc) in
 which only variants that were called by a minimum of 2 of the callers are listed.
-All vcf files are annotatd with VEP. In addition the germline variants are called
+All vcf files are annotated with VEP. In addition the germline variants are called
 using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
 Copy number variations are analyzed using CNVkit, ASCAT, and sequenza. Tumor purity
 is estimated by ASCAT and Sequenza and is used to derive the clonality measure for
@@ -31,9 +31,9 @@ exons.
 HLA class I and class II alleles are predicted with OptiType and HLA-HD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
-neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
+neoepitope predictor. Fusion neoantigens are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
-A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
+A GBM model [1] is used to predict immunogenicity scores for MHC class I single nucleotide
 variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
 TCR and BCR repertoire.
 
