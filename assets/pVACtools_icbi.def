@@ -111,7 +111,7 @@ From: continuumio/miniconda3:4.9.2
     cd /opt/tmp_src
     rm -rf vt
 
-    pip install cyvcf2
+    pip install cyvcf2==0.30.4
     pip install vatools
     wget -O /usr/local/bin/bam_readcount_helper.py https://raw.githubusercontent.com/genome/docker-bam_readcount_helper-cwl/master/bam_readcount_helper.py
     chmod 755 /usr/local/bin/bam_readcount_helper.py
