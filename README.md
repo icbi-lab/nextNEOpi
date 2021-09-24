@@ -42,6 +42,10 @@ TCR and BCR repertoire.
 ![nextNEOpi overview](img/nextNEOpi_small.png)
 
 
+## Hardware recommendations
+
+nextNEOpi is designed to run on high memory multi-core servers (recommended > 16 cores, min. 64GB RAM, > 5 TB of free disk space). For analysis of larger cohorts we strongly recommend running nextNEOpi on a HPC cluster with multiple compute nodes that meet these specifications.
+However, by tuning the memory and CPU parameters in ```params.config``` and ```process.config``` it should also be possible to run nextNEOpi on systems with lower CPU and memory resources.
 
 ## 1. Installation
 
