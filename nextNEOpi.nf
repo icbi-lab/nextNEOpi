@@ -394,7 +394,7 @@ if (! params.batchFile && ! bamInput) {
             .fromPath(params.batchFile)
             .splitCsv(header:true)
             .map { row -> tuple(row.tumorSampleName,
-                                file((row.HLAfile == "None") ? "NO_FILE" : row.HLAfile)) }
+                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
             .set { custom_hlas_ch }
 } else if (bamInput && ! params.batchFile) {
     // bam files provided on cmd line
@@ -495,7 +495,7 @@ if (! params.batchFile && ! bamInput) {
             .fromPath(params.batchFile)
             .splitCsv(header:true)
             .map { row -> tuple(row.tumorSampleName,
-                                file((row.HLAfile == "None") ? "NO_FILE" : row.HLAfile)) }
+                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
             .set { custom_hlas_ch }
 
 }
@@ -503,7 +503,7 @@ if (! params.batchFile && ! bamInput) {
 // set cutom HLA channel and sex channel if no batchFile was passed
 if (! params.batchFile) {
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
-    if (params.customHLA != "NO_FILE") {
+    if (params.customHLA != "NO_FILE_HLA") {
         use_custom_hlas = true
     }
 
@@ -545,8 +545,16 @@ if (! have_RNAseq && params.batchFile) {
             .fromPath(params.batchFile)
             .splitCsv(header:true)
             .map { row -> tuple(row.tumorSampleName,
-                                file("NO_FILE")) }
-            .into { optitype_RNA_output; hlahd_output_RNA }
+                                file("NO_FILE_OPTI_RNA")) }
+            .set { optitype_RNA_output }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                file("NO_FILE_HLAHD_RNA")) }
+            .set { hlahd_output_RNA }
+
 } else if (! have_RNAseq && ! params.batchFile ){
     Channel
             .of(tuple(tumorSampleName,
@@ -558,9 +566,16 @@ if (! have_RNAseq && params.batchFile) {
     Channel
         .of(tuple(
             tumorSampleName,
-            "NO_FILE"
+            "NO_FILE_OPTI_RNA"
         ))
-        .into { optitype_RNA_output; hlahd_output_RNA }
+        .set { optitype_RNA_output }
+
+    Channel
+        .of(tuple(
+            tumorSampleName,
+            "NO_FILE_HLAHD_RNA"
+        ))
+        .into { hlahd_output_RNA }
 }
 
 // optional panel of normals file
@@ -5858,18 +5873,18 @@ if (run_OptiType) {
         log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
 
         optitype_RNA_output = reads_tumor_optitype_ch
-                                .map{ it -> tuple(it[0], file("NO_FILE"))}
+                                .map{ it -> tuple(it[0], file("NO_FILE_OPTI_RNA"))}
 
     }
 }  else { // End if run_OptiType
     log.info "INFO: will not run HLA typing with OptiType"
 
     optitype_output = reads_tumor_hla_ch
-                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+                            .map{ it -> tuple(it[0], file("NO_FILE_OPTI_DNA"))}
 
     if (have_RNAseq) {
         optitype_RNA_output = reads_tumor_optitype_ch
-                                .map{ it -> tuple(it[0], file("NO_FILE"))}
+                                .map{ it -> tuple(it[0], file("NO_FILE_OPTI_RNA"))}
     }
 }
 
@@ -5934,7 +5949,7 @@ if (have_HLAHD) {
 } else {
     // fill channels
     hlahd_output = reads_tumor_hlaHD_ch
-                        .map{ it -> tuple(it[0], file("NO_FILE"))}
+                        .map{ it -> tuple(it[0], file("NO_FILE_HLAHD_DNA"))}
 
     (hlahd_mixMHC2_pred_ch0, hlahd_output) = hlahd_output.into(2)
 
@@ -5998,7 +6013,7 @@ if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
     }
 
     hlahd_output_RNA = reads_tumor_hlahd_RNA_ch
-                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+                            .map{ it -> tuple(it[0], file("NO_FILE_HLAHD_RNA"))}
 
 }
 
@@ -6026,11 +6041,11 @@ process get_vhla {
     input:
     set (
         TumorReplicateId,
-        opti_out,
-        opti_out_rna,
-        hlahd_out,
-        hlahd_out_rna,
-        custom_hlas
+        file(opti_out),
+        file(opti_out_rna),
+        file(hlahd_out),
+        file(hlahd_out_rna),
+        file(custom_hlas)
     ) from optitype_output
         .combine(optitype_RNA_output, by: 0)
         .combine(hlahd_output, by: 0)
@@ -6044,9 +6059,9 @@ process get_vhla {
     ) into (hlas, hlas_neoFuse)
 
     script:
-    def optitype_hlas = (opti_out.name != 'NO_FILE') ? "--opti_out $opti_out" : ''
-    def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq && (opti_out_rna.name != 'NO_FILE')) ? "--opti_out_RNA $opti_out_rna" : ''
+    def optitype_hlas = (opti_out.name != 'NO_FILE_OPTI_DNA') ? "--opti_out $opti_out" : ''
+    def user_hlas = custom_hlas.name != 'NO_FILE_HLA' ? "--custom $custom_hlas" : ''
+    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq && (opti_out_rna.name != 'NO_FILE_OPTI_RNA')) ? "--opti_out_RNA $opti_out_rna" : ''
     rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
@@ -6060,8 +6075,10 @@ process get_vhla {
         force_seq_type = "--force_DNA"
     }
 
-    hlahd_opt = (have_HLAHD) ? "--hlahd_out ${hlahd_out}" : ""
+    hlahd_opt = (have_HLAHD && (hlahd_out.name != 'NO_FILE_HLAHD_DNA')) ? "--hlahd_out ${hlahd_out}" : ""
 
+    script:
+    pVACseqAlleles = baseDir.toRealPath()  + "/assets/pVACseqAlleles.txt"
     """
     # merging script
     HLA_parser.py \\
@@ -6070,7 +6087,7 @@ process get_vhla {
         ${rna_hlas} \\
         ${user_hlas} \\
         ${force_seq_type} \\
-        --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
+        --ref_hlas ${pVACseqAlleles} \\
         > ./${TumorReplicateId}_hlas.txt
     """
 }
@@ -6628,6 +6645,8 @@ if(have_HLAHD) {
         file("${TumorReplicateId}_mixMHC2pred_conf.txt") optional true
 
         script:
+        supported_list = baseDir.toRealPath() + "/assets/hlaii_supported.txt"
+        model_list     = baseDir.toRealPath() + "/assets/hlaii_models.txt"
         """
         pepChopper.py \\
             --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
@@ -6635,8 +6654,8 @@ if(have_HLAHD) {
             --fasta_out ${TumorReplicateId}_peptides.fasta
         HLAHD2mixMHC2pred.py \\
             --hlahd_list ${hlahd_allel_file} \\
-            --supported_list ${baseDir}/assets/hlaii_supported.txt \\
-            --model_list ${baseDir}/assets/hlaii_models.txt \\
+            --supported_list ${supported_list} \\
+            --model_list ${model_list} \\
             --output_dir ./ \\
             --sample_name ${TumorReplicateId}
         """
