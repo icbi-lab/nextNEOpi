@@ -3493,8 +3493,8 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        VarScanSNP_VCF,
-        VarScanINDEL_VCF
+        file(VarScanSNP_VCF),
+        file(VarScanINDEL_VCF)
     ) from FilterVarscanSnp_out_ch0
         .combine(FilterVarscanIndel_out_ch0, by: [0, 1])
 
@@ -3994,17 +3994,17 @@ process 'mkHCsomaticVCF' {
         TumorReplicateId,
         NormalReplicateId,
         _,
-        Mutect2_VCF,
-        Mutect2_Idx,
+        file(Mutect2_VCF),
+        file(Mutect2_Idx),
         _,
-        Mutect1_VCF,
-        Mutect1_Idx,
+        file(Mutect1_VCF),
+        file(Mutect1_Idx),
         _,
-        VarScan_VCF,
-        VarScan_Idx,
+        file(VarScan_VCF),
+        file(VarScan_Idx),
         _,
-        Strelka_VCF,
-        Strelka_IDX
+        file(Strelka_VCF),
+        file(Strelka_IDX)
     ) from FilterMutect2_out_ch1
         .combine(Mutect1_out_ch1, by: [0, 1])
         .combine(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0, 1])
@@ -5119,8 +5119,6 @@ purity_estimate = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
         return [ TumorReplicateId, NormalReplicateId, sample_purity ]
     }
 
-
-
 // CNVkit
 
 process make_CNVkit_access_file {
@@ -5173,7 +5171,7 @@ process CNVkit {
         file(tumorBAI),
         file(normalBAM),
         file(normalBAI),
-        sample_purity
+        val(sample_purity)
     ) from MarkDuplicates_out_CNVkit_ch0
         .combine(purity_estimate, by: [0,1])
 
@@ -5356,6 +5354,8 @@ process 'Clonality' {
     publishDir "$params.outputDir/analyses/$TumorReplicateId/09_CCF/",
         mode: params.publishDirMode
 
+    cache 'lenient'
+
     input:
     set(
         TumorReplicateId,
@@ -5366,8 +5366,8 @@ process 'Clonality' {
         file(ascat_purity),
         file(seqz_CNVs),
         file(seqz_purity),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) from VEPvcf_out_ch1 // mkPhasedVCF_out_Clonality_ch0
         .combine(clonality_input, by: [0,1])
 
@@ -5376,13 +5376,15 @@ process 'Clonality' {
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_CCFest.tsv"),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) into Clonality_out_ch0
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_CCFest.tsv")
+        file("${TumorReplicateId}_CCFest.tsv"),
+        val(ascatOK),
+        val(sequenzaOK)
     ) into (
         ccf_ch0,
         ccf_ch1
@@ -5411,7 +5413,7 @@ process 'Clonality' {
             ${seg_opt} \\
             ${purity_opt} \\
             --min_vaf 0.01 \\
-            --result_table ${TumorReplicateId}_segments_CCF_input.txt
+            --result_table ${TumorReplicateId}_segments_CCF_input.txt && \\
         Rscript \\
             ${baseDir}/bin/CCF.R \\
             ${TumorReplicateId}_segments_CCF_input.txt \\
@@ -5436,6 +5438,7 @@ process 'MutationalBurden' {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 5
 
+    cache 'lenient'
 
     input:
     set(
@@ -5447,7 +5450,9 @@ process 'MutationalBurden' {
         file(Normalbai),
         file(vep_somatic_vcf_gz),
         file(vep_somatic_vcf_gz_tbi),
-        ccf_file,
+        file(ccf_file),
+        val(ascatOK),
+        val(sequenzaOK)
     ) from BaseRecalGATK4_out_MutationalBurden_ch0
         .combine(VEPvcf_out_ch3, by: [0,1])
         .combine(ccf_ch0, by: [0,1])
@@ -5463,12 +5468,7 @@ process 'MutationalBurden' {
     script:
     ccf_opts = ""
 
-    def ccf_fh = ccf_file.newReader()
-    String line
-    line = ccf_fh.readLine()
-    ccf_fh.close()
-
-    if(line.indexOf("Not avaliable") == -1) {
+    if (ascatOK || sequenzaOK) {
         ccf_opts =  "--ccf ${ccf_file} --ccf_clonal_thresh ${params.CCFthreshold} --p_clonal_thresh ${params.pClonal}"
     }
     """
@@ -5497,6 +5497,7 @@ process 'MutationalBurdenCoding' {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 5
 
+    cache 'lenient'
 
     input:
     set(
@@ -5508,7 +5509,9 @@ process 'MutationalBurdenCoding' {
         file(Normalbai),
         file(vep_somatic_vcf_gz),
         file(vep_somatic_vcf_gz_tbi),
-        ccf_file,
+        file(ccf_file),
+        val(ascatOK),
+        val(sequenzaOK)
     ) from BaseRecalGATK4_out_MutationalBurden_ch1
         .combine(VEPvcf_out_ch4, by: [0,1])
         .combine(ccf_ch1, by: [0,1])
@@ -5522,15 +5525,10 @@ process 'MutationalBurdenCoding' {
     ) into sample_info_tmb_coding
 
 
-
     script:
     ccf_opts = ""
-    def ccf_fh = ccf_file.newReader()
-    String line
-    line = ccf_fh.readLine()
-    ccf_fh.close()
 
-    if(line.indexOf("Not avaliable") == -1) {
+    if (ascatOK || sequenzaOK) {
         ccf_opts =  "--ccf ${ccf_file} --ccf_clonal_thresh ${params.CCFthreshold} --p_clonal_thresh ${params.pClonal}"
     }
     """
@@ -5773,8 +5771,8 @@ if (run_OptiType) {
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                readRNAFWD,
-                readRNAREV
+                file(readRNAFWD),
+                file(readRNAREV)
             ) from reads_tumor_optitype_ch
 
             file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
@@ -6145,9 +6143,9 @@ if (have_RNAseq) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readRNAFWD,
-            readRNAREV,
-            hla_types,
+            file(readRNAFWD),
+            file(readRNAREV),
+            file(hla_types),
             _,
             file(SVvcf),
             file(SVvcfIdx)
@@ -6271,7 +6269,7 @@ if (have_RNAseq) {
         input:
         set (
             TumorReplicateId,
-            tpm
+            file(tpm)
         ) from tpm_file
         // file tpm from tpm_file
         file AnnoFile from file(reference.AnnoFile)
@@ -6389,11 +6387,11 @@ process 'pVACseq' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        vep_phased_vcf_gz,
-        vep_phased_vcf_gz_tbi,
-        anno_vcf,
-        anno_vcf_tbi,
-        hla_types
+        file(vep_phased_vcf_gz),
+        file(vep_phased_vcf_gz_tbi),
+        file(anno_vcf),
+        file(anno_vcf_tbi),
+        val(hla_types)
     ) from mkPhasedVCF_out_pVACseq_ch0
         .combine(vcf_vep_ex_gz, by: [0,1])
         .combine(hlas.splitText(), by: 0)
@@ -6468,8 +6466,8 @@ process concat_mhcI_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv',
-        '*all_epitopes.tsv'
+        file("*filtered.tsv"),
+        file("*all_epitopes.tsv")
     ) from mhcI_out_f.groupTuple(by: 0)
 
     output:
@@ -6506,8 +6504,8 @@ process concat_mhcII_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv',
-        '*all_epitopes.tsv'
+        file("*filtered.tsv"),
+        file("*all_epitopes.tsv")
     ) from mhcII_out_f.groupTuple(by: 0)
 
     output:
@@ -6544,8 +6542,8 @@ process aggregated_reports {
     input:
     set (
         TumorReplicateId,
-        pvacseq_mhcI_all_file,
-        pvacseq_mhcII_all_file
+        file(pvacseq_mhcI_all_file),
+        file(pvacseq_mhcII_all_file)
     ) from concat_mhcI_all_files_out_aggregated_reports_ch0
         .combine(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
 
@@ -6579,10 +6577,10 @@ process 'pVACtools_generate_protein_seq' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        vep_phased_vcf_gz,
-        vep_phased_vcf_idx,
-        vep_tumor_vcf_gz,
-        vep_tumor_vcf_idx
+        file(vep_phased_vcf_gz),
+        file(vep_phased_vcf_idx),
+        file(vep_tumor_vcf_gz),
+        file(vep_tumor_vcf_idx)
     ) from generate_protein_fasta_phased_vcf_ch0
         .combine(generate_protein_fasta_tumor_vcf_ch0, by:[0,1])
 
@@ -6629,8 +6627,8 @@ if(have_HLAHD) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            long_peptideSeq_fasta,
-            hlahd_allel_file
+            file(long_peptideSeq_fasta),
+            file(hlahd_allel_file)
         ) from pVACtools_generate_protein_seq
             .combine(hlahd_mixMHC2_pred_ch0, by:0)
 
@@ -6711,9 +6709,9 @@ if(have_HLAHD) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            mut_peps,
-            vep_somatic_gx_vcf_gz,
-            vep_somatic_gx_vcf_gz_tbi,
+            file(mut_peps),
+            file(vep_somatic_gx_vcf_gz),
+            file(vep_somatic_gx_vcf_gz_tbi),
             file(mixmhc2pred_chck_file)
         ) from pepare_mixMHC2_seq_out_ch0
             .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
@@ -6778,8 +6776,8 @@ process addCCF {
         TumorReplicateId,
         file(epitopes),
         file(CCF),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) from concat_mhcI_filtered_files_out_addCCF_ch0
         .concat(
                 concat_mhcI_all_files_out_addCCF_ch0,
@@ -6823,8 +6821,8 @@ process csin {
     input:
     set (
         TumorReplicateId,
-        "*_MHCI_all_epitopes.tsv",
-        "*_MHCII_all_epitopes.tsv"
+        file("*_MHCI_all_epitopes.tsv"),
+        file("*_MHCII_all_epitopes.tsv")
     ) from MHCI_all_epitopes
         .combine(MHCII_all_epitopes, by:0)
 
@@ -6901,7 +6899,7 @@ process immunogenicity_scoring {
     input:
     set (
         TumorReplicateId,
-        pvacseq_file
+        file(pvacseq_file)
     ) from MHCI_final_immunogenicity
     // val(TumorReplicateId) from mhCI_tag_immunogenicity
     // file pvacseq_file from MHCI_final_immunogenicity
@@ -6994,8 +6992,8 @@ if(params.TCR) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readFWD,
-            readREV,
+            file(readFWD),
+            file(readREV),
             file(mixcr_chck_file)
         ) from reads_tumor_mixcr_DNA_ch
             .combine(mixcr_chck_ch0)
@@ -7032,8 +7030,8 @@ if(params.TCR) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readFWD,
-            readREV,
+            file(readFWD),
+            file(readREV),
             file(mixcr_chck_file)
         ) from reads_normal_mixcr_DNA_ch
             .combine(mixcr_chck_ch1)
@@ -7071,8 +7069,8 @@ if(params.TCR) {
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                readRNAFWD,
-                readRNAREV,
+                file(readRNAFWD),
+                file(readRNAREV),
                 file(mixcr_chck_file)
             ) from reads_tumor_mixcr_RNA_ch
                 .combine(mixcr_chck_ch2)
@@ -7108,9 +7106,9 @@ process collectSampleInfo {
     input:
     set(
         TumorReplicateId,
-        csin,
-        tmb,
-        tmb_coding
+        file(csin),
+        file(tmb),
+        file(tmb_coding)
     ) from sample_info_csin
         .combine(sample_info_tmb, by: 0)
         .combine(sample_info_tmb_coding, by: 0)
