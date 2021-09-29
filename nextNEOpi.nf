@@ -128,8 +128,8 @@ setExomeCaptureKit(params.exomeCaptureKit)
 reference = defineReference()
 database = defineDatabases()
 
-// create tmp dir
-mkTmpDir()
+// create tmp dir and make sure we have the realpath for it
+params.tmpDir = mkTmpDir()
 
 /*--------------------------------------------------
   For workflow summary
@@ -7185,7 +7185,8 @@ ________________________________________________________________________________
 def mkTmpDir() {
     myTmpDir = file(params.tmpDir)
     result = myTmpDir.mkdirs()
-    println result ? "tmpDir created: $myTmpDir" : "Cannot create directory: $myTmpDir"
+    println result ? "tmpDir created: $myTmpDir" : exit 1, "Cannot create directory: $myTmpDir"
+    return myTmpDir.toRealPath()
 }
 
 def checkParamReturnFileReferences(item) {
