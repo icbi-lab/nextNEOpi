@@ -6666,6 +6666,9 @@ if(have_HLAHD) {
 
             tag 'install mixMHC2pred'
 
+            // do not cache
+            cache false
+
             output:
             file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
 
@@ -6681,6 +6684,9 @@ if(have_HLAHD) {
         process link_mixMHC2pred {
 
             tag 'link mixMHC2pred'
+
+            // do not cache
+            cache false
 
             output:
             file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
@@ -6850,6 +6856,9 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
 
         tag 'install IGS'
 
+        // do not cache
+        cache false
+
         output:
         file(".igs_install_ok.chck") into igs_chck_ch
 
@@ -6868,6 +6877,9 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
     process link_IGS {
 
         tag 'link IGS'
+
+        // do not cache
+        cache false
 
         output:
         file(".igs_install_ok.chck") into igs_chck_ch
@@ -6935,6 +6947,9 @@ if(params.TCR) {
 
             tag 'install mixcr'
 
+            // do not cache
+            cache false
+
             output:
             file(".mixcr_install_ok.chck") into (
                 mixcr_chck_ch0,
@@ -6957,6 +6972,9 @@ if(params.TCR) {
         process link_mixcr {
 
             tag 'link mixcr'
+
+            // do not cache
+            cache false
 
             output:
             file(".mixcr_install_ok.chck") into (
