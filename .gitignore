@@ -27,3 +27,5 @@ nextNEOpiGDC.nf
 conf/process_icbi.config
 conf/params_icbi.config
 assets/hlahdenv.yml
+bin/make_release.sh
+
