@@ -128,8 +128,8 @@ setExomeCaptureKit(params.exomeCaptureKit)
 reference = defineReference()
 database = defineDatabases()
 
-// create tmp dir
-mkTmpDir()
+// create tmp dir and make sure we have the realpath for it
+tmpDir = mkTmpDir(params.tmpDir)
 
 /*--------------------------------------------------
   For workflow summary
@@ -182,7 +182,7 @@ summary['VEP options']                   = params.vep_options
 summary['Number of scatters']            = params.scatter_count
 summary['Output dir']                    = params.outputDir
 summary['Working dir']                   = workflow.workDir
-summary['TMP dir']                       = params.tmpDir
+summary['TMP dir']                       = tmpDir
 summary['Current home']                  = "$HOME"
 summary['Current user']                  = "$USER"
 summary['Current path']                  = "$PWD"
@@ -1065,10 +1065,10 @@ process 'SplitIntervals' {
     script:
     IntervalName = IntervalsList.baseName
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk SplitIntervals \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta}  \\
         -scatter ${x} \\
         --interval-merging-rule ALL \\
@@ -1760,9 +1760,9 @@ process 'make_uBAM' {
 
     if (single_end)
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             --READ_GROUP_NAME ${procSampleName} \\
@@ -1773,9 +1773,9 @@ process 'make_uBAM' {
         """
     else
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             -F2 ${readsREV} \\
@@ -1850,7 +1850,7 @@ process 'Bwa' {
     samtools view -@2 -Shbu - | \\
     sambamba sort \\
         --sort-picard \\
-        --tmpdir=${params.tmpDir} \\
+        --tmpdir=${tmpDir} \\
         -m ${params.SB_sort_mem} \\
         -l 6 \\
         -t ${sort_threads} \\
@@ -1906,10 +1906,10 @@ process 'merge_uBAM_BAM' {
     paired_run = (single_end) ? 'false' : 'true'
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeBamAlignment \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         --VALIDATION_STRINGENCY SILENT \\
         --EXPECTED_ORIENTATIONS FR \\
         --ATTRIBUTES_TO_RETAIN X0 \\
@@ -1980,10 +1980,10 @@ process 'MarkDuplicates' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     sambamba markdup \\
         -t ${task.cpus} \\
-        --tmpdir ${params.tmpDir} \\
+        --tmpdir ${tmpDir} \\
         --hash-table-size=${params.SB_hash_table_size } \\
         --overflow-list-size=${params.SB_overflow_list_size} \\
         --io-buffer-size=${params.SB_io_buffer_size} \\
@@ -1996,7 +1996,7 @@ process 'MarkDuplicates' {
         -l 0 \\
         /dev/stdin | \\
     gatk --java-options ${params.JAVA_Xmx} SetNmMdAndUqTags \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -R ${RefFasta} \\
         -I /dev/stdin \\
         -O ${procSampleName}_aligned_sort_mkdp.bam \\
@@ -2089,9 +2089,9 @@ if(params.WES) {
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} CollectHsMetrics \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --INPUT ${bam} \\
             --OUTPUT ${procSampleName}.HS.metrics.txt \\
             -R ${RefFasta} \\
@@ -2099,7 +2099,7 @@ if(params.WES) {
             --TARGET_INTERVALS ${IntervalsList} \\
             --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
         gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --INPUT ${bam} \\
             --OUTPUT ${procSampleName}.AS.metrics.txt \\
             -R ${RefFasta} &&
@@ -2207,9 +2207,9 @@ process 'scatterBaseRecalGATK4' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -2253,7 +2253,7 @@ process 'gatherGATK4scsatteredBQSRtables' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk GatherBQSRReports \\
         -I ${bqsr_table.join(" -I ")} \\
@@ -2324,10 +2324,10 @@ process 'scatterGATK4applyBQSRS' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     gatk ApplyBQSR \\
         --java-options ${params.JAVA_Xmx} \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -2376,12 +2376,12 @@ process 'GatherRecalBamFiles' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     rm -f ${procSampleName}_gather.fifo
     mkfifo ${procSampleName}_gather.fifo
     gatk --java-options ${java_opts} GatherBamFiles \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${bam.join(" -I ")} \\
         -O ${procSampleName}_gather.fifo \\
         --CREATE_INDEX false \\
@@ -2439,10 +2439,10 @@ process 'GetPileup' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk GetPileupSummaries \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -O ${procSampleName}_pileup.table \\
         -L ${IntervalsList} \\
@@ -2556,12 +2556,12 @@ process 'Mutect2' {
     def panel_of_normals = (pon.name != 'NO_FILE') ? "--panel-of-normals $pon" : ""
     def mk_pon_idx = (pon.name != 'NO_FILE') ? "tabix -f $pon" : ""
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     ${mk_pon_idx}
 
     gatk Mutect2 \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Tumorbam} -tumor ${TumorReplicateId} \\
         -I ${Normalbam} -normal ${NormalReplicateId} \\
@@ -2620,20 +2620,20 @@ process 'gatherMutect2VCFs' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz
 
     gatk MergeMutectStats \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --stats ${stats.join(" --stats ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats
 
     gatk LearnReadOrientationModel \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${f1r2_tar_gz.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
     """
@@ -2710,22 +2710,22 @@ process 'FilterMutect2' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk CalculateContamination \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${pileupTumor} \\
         --matched-normal ${pileupNormal} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_cont.table && \\
     gatk FilterMutectCalls \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -V ${vcf} \\
         --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
         --ob-priors ${f1r2_tar_gz} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
     gatk SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -2791,10 +2791,10 @@ process 'HaploTypeCaller' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
         -L ${intervals} \\
@@ -2850,10 +2850,10 @@ process 'CNNScoreVariants' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk CNNScoreVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
         -V ${raw_germline_vcf} \\
@@ -2897,10 +2897,10 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${filtered_germline_vcf.join(" -I ")} \\
         -O ${NormalReplicateId}_germline_CNNscored.vcf.gz
     """
@@ -2954,10 +2954,10 @@ process 'FilterGermlineVariantTranches' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk FilterVariantTranches \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -V ${scored_germline_vcf} \\
         --resource ${hcSNPS1000G} \\
         --resource ${HapMap} \\
@@ -3034,9 +3034,9 @@ if (have_GATK3) {
         script:
         procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T RealignerTargetCreator \\
             --known ${MillsGold} \\
             --known ${KnownIndels} \\
@@ -3045,7 +3045,7 @@ if (have_GATK3) {
             -I ${bam} \\
             -o ${interval}_target.list \\
             -nt ${task.cpus} && \\
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T IndelRealigner \\
             -R ${RefFasta} \\
             -L ${interval} \\
@@ -3093,12 +3093,12 @@ if (have_GATK3) {
         procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
         rm -f ${procSampleName}_gather.fifo
         mkfifo ${procSampleName}_gather.fifo
         gatk --java-options ${java_opts} GatherBamFiles \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             -I ${bam.join(" -I ")} \\
             -O ${procSampleName}_gather.fifo \\
             --CREATE_INDEX false \\
@@ -3310,16 +3310,16 @@ process 'gatherVarscanVCFs' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${snp_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${indel_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3513,7 +3513,7 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     bgzip -c ${VarScanSNP_VCF} > ${VarScanSNP_VCF}.gz
     tabix -p vcf ${VarScanSNP_VCF}.gz
@@ -3521,14 +3521,14 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     tabix -p vcf ${VarScanINDEL_VCF}.gz
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${VarScanSNP_VCF}.gz \\
         -I ${VarScanINDEL_VCF}.gz \\
         -O ${TumorReplicateId}_varscan_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_varscan_combined.vcf.gz \\
         -O ${TumorReplicateId}_varscan_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3606,9 +3606,9 @@ if(have_Mutect1) {
                  ) ? "--cosmic " + file(params.databases.Cosmic)
                    : ""
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
-        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \\
+        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${tmpDir} -jar $MUTECT1 \\
             --analysis_type MuTect \\
             --reference_sequence ${RefFasta} \\
             ${cosmic} \\
@@ -3684,15 +3684,15 @@ if(have_Mutect1) {
         script:
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
         gatk --java-options ${java_opts} MergeVcfs \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             -I ${vcf.join(" -I ")} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
 
         gatk SelectVariants \\
-            --tmp-dir ${params.tmpDir} \\
+            --tmp-dir ${tmpDir} \\
             --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz \\
             -R ${RefFasta} \\
             --exclude-filtered true \\
@@ -3939,14 +3939,14 @@ process 'finalizeStrelkaVCF' {
     """
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${somatic_snvs} \\
         -I ${somatic_indels} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3963,7 +3963,7 @@ process 'finalizeStrelkaVCF' {
     rm -f vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
     gatk SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --variant ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -4262,29 +4262,29 @@ process 'mkCombinedVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -V ${tumorVCF} \\
         --sample-name ${TumorReplicateId} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz
 
     gatk --java-options ${java_opts} RenameSampleInVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${germlineVCF} \\
         --NEW_SAMPLE_NAME ${TumorReplicateId} \\
         -O ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
         -I ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -4363,7 +4363,7 @@ process 'VEPvcf' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     # pVACSeq
     vep -i ${combinedVCF} \\
@@ -4488,7 +4488,7 @@ if(have_GATK3) {
 
         script:
         """
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T ReadBackedPhasing \\
             -R ${RefFasta} \\
             -I ${tumorBAM} \\
@@ -7182,10 +7182,15 @@ ________________________________________________________________________________
 
 */
 
-def mkTmpDir() {
-    myTmpDir = file(params.tmpDir)
+def mkTmpDir(d) {
+    myTmpDir = file(d)
     result = myTmpDir.mkdirs()
-    println result ? "tmpDir created: $myTmpDir" : "Cannot create directory: $myTmpDir"
+    if (result) {
+        println("tmpDir: " + myTmpDir.toRealPath())
+    } else {
+        exit 1, "Cannot create directory: " + myTmpDir
+    }
+    return myTmpDir.toRealPath()
 }
 
 def checkParamReturnFileReferences(item) {
