@@ -26,7 +26,7 @@ def flatten(l):
 
 
 def filter_class_I(hlas=[]):
-    class_I = [
+    ref_I = [
         "HLA-A",
         "HLA-B",
         "HLA-C",
@@ -42,15 +42,30 @@ def filter_class_I(hlas=[]):
     class_II = []
     for hla in list(hlas):
         hla_gene = hla.split("*")[0]
-        if hla_gene in class_I:
+        if hla_gene in ref_I:
             continue
         else:
             class_II.append(hla)
-
     return class_II
 
+def filter_class_II(hlas=[]):
+    ref_I = [
+        "HLA-A",
+        "HLA-B",
+        "HLA-C"
+    ]
+    class_I = []
+    for hla in list(hlas):
+        hla_gene = hla.split("*")[0]
+        if hla_gene in ref_I:
+            class_I.append(hla)
+        else:
+            continue
+    return class_I
 
-def parse_hlahd(inFile, hlas=[]):
+def parse_hlahd(inFile,
+                hla_class,
+                hlas=[]):
     hlas_tmp = []
     csv_reader = csv.reader(inFile, delimiter="\t")
     # inFile.readline()
@@ -59,6 +74,7 @@ def parse_hlahd(inFile, hlas=[]):
             if len(line[1].split("-")[1].split(":")[0].split("*")[0]) > 1:
                 hlas_tmp.append(
                     line[1].split("-")[1].split(":")[0] + ":" + line[1].split(":")[1]
+                    # line[1].split(":")[0] + ":" + line[1].split(":")[1]
                 )
             else:
                 hlas_tmp.append(line[1].split(":")[0] + ":" + line[1].split(":")[1])
@@ -66,12 +82,18 @@ def parse_hlahd(inFile, hlas=[]):
             if len(line[2].split("-")[1].split(":")[0].split("*")[0]) > 1:
                 hlas_tmp.append(
                     line[2].split("-")[1].split(":")[0] + ":" + line[2].split(":")[1]
+                    # line[2].split(":")[0] + ":" + line[2].split(":")[1]
                 )
             else:
                 hlas_tmp.append(line[2].split(":")[0] + ":" + line[2].split(":")[1])
+    inFile.seek(0)
 
-    for hla in filter_class_I(hlas_tmp):
-        hlas.append(hla)
+    if hla_class == "classII":
+        for hla in filter_class_I(hlas_tmp):
+            hlas.append(hla)
+    elif hla_class == "classI":
+        for hla in filter_class_II(hlas_tmp):
+            hlas.append(hla)
 
     return hlas
 
@@ -365,15 +387,28 @@ if __name__ == "__main__":
         read_custom_hla(args.custom, hla_array)
     else:
         if args.force_DNA:
-            parse_opti(optitype_dna_result, hlaI_array)
-            parse_hlahd(hlahd_dna_result, hlaII_array)
-            hla_array = forced_calls(hlaI_array, hlaII_array)
+            if not optitype_dna_result:
+                parse_hlahd(hlahd_dna_result, "classI", hlaI_array)
+                parse_hlahd(hlahd_dna_result, "classII", hlaII_array)
+                hla_array = forced_calls(hlaI_array, hlaII_array)
+            else:
+                parse_opti(optitype_dna_result, hlaI_array)
+                parse_hlahd(hlahd_dna_result, "classII", hlaII_array)
+                hla_array = forced_calls(hlaI_array, hlaII_array)
         elif args.force_RNA:
-            parse_opti(optitype_rna_result, hlaI_array)
-            parse_hlahd(hlahd_rna_result, hlaII_array)
-            hla_array = forced_calls(hlaI_array, hlaII_array)
+            if not optitype_rna_result:
+                parse_hlahd(hlahd_rna_result, "classI" ,hlaI_array)
+                parse_hlahd(hlahd_rna_result, "classII", hlaII_array)
+                hla_array = forced_calls(hlaI_array, hlaII_array)
+            else:
+                parse_opti(optitype_rna_result, hlaI_array)
+                parse_hlahd(hlahd_rna_result, "classII", hlaII_array)
+                hla_array = forced_calls(hlaI_array, hlaII_array)
         else:
-            parse_opti(optitype_dna_result, hlaI_array)
+            if args.opti_out:
+                parse_opti(optitype_dna_result, hlaI_array)
+            else:
+                parse_hlahd(hlahd_dna_result, "classI", hlaI_array)
 
             # Check if OptiType RNAseq data are available
             if args.opti_out_RNA:
@@ -385,7 +420,7 @@ if __name__ == "__main__":
                     hlaI_array = merge_hlasI(hlaI_array, hla_array_opti_RNA)
 
             if args.hlahd_out:
-                parse_hlahd(hlahd_dna_result, hlaII_array)
+                parse_hlahd(hlahd_dna_result, "classII", hlaII_array)
 
             # Check if HLA-HD RNAseq data are available
             if args.hlahd_out_RNA:
@@ -408,3 +443,4 @@ if __name__ == "__main__":
 
     for hla in list(set(valid_hlas)):
         print(hla)
+

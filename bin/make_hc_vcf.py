@@ -90,7 +90,7 @@ if __name__ == "__main__":
         _, file_extension = os.path.splitext(fname)
         if file_extension == ".gz":
             mode = "rb"
-        return open(os.path.join(os.path.dirname(__file__), fname), mode)
+        return open(fname, mode)
 
     def _file_write(fname):
         """Returns an open file handle if the given filename exists."""

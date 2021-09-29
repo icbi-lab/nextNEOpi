@@ -1,39 +1,39 @@
 ![nextNEOpi overview](img/nextNEOpi_noBG.png)
 # NeoEpitope predictions Nextflow Pipeline
-Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from tumor
+Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from Tumor
 to predict neoepitopes.
 
 The pipeline uses the following tools:
 * MuTect2
 * MuTect1
 * VarScan2
-* Strekla2/Manta
+* Strelka2/Manta
 * Sequenza
 * ASCAT
 * CNVkit
 * OptiType
-* HLAHD
+* HLA-HD
 * pVACseq (netMHCpan, netMHCIIpan, mhcflurry)
 * NeoFuse
 * mixMHC2pred
 * mixcr
 
-It outputs a vcf files with the annotated and filtered SNPs and Indels, which
+It outputs a vcf file with the annotated and filtered SNPs and Indels, which
 where called with each of the callers and a high confidence vcf file (hc) in
 which only variants that were called by a minimum of 2 of the callers are listed.
-All vcf files are annotatd with VEP. In addition the germline variants are called
+All vcf files are annotated with VEP. In addition the germline variants are called
 using HaploTypeCaller and a phased vcf for pVACseq is generated as well.
 Copy number variations are analyzed using CNVkit, ASCAT, and sequenza. Tumor purity
 is estimated by ASCAT and Sequenza and is used to derive the clonality measure for
 the predicted neoantigens. Tumor mutational burden (TMB) is calculated for all
 variants over the entire read covered genome and for coding variants on read covered
 exons.
-HLA class I and class II alleles are predicted with OptiType and HLAHD.
+HLA class I and class II alleles are predicted with OptiType and HLA-HD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
-neoepitope predictor. Fusion neoantiges are predicted with NeoFuse.
+neoepitope predictor. Fusion neoantigens are predicted with NeoFuse.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
-A GBM model [1] is be used to predict immunogenicity scores for MHC class I single nucleotide
+A GBM model [1] is used to predict immunogenicity scores for MHC class I single nucleotide
 variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
 TCR and BCR repertoire.
 
@@ -42,6 +42,10 @@ TCR and BCR repertoire.
 ![nextNEOpi overview](img/nextNEOpi_small.png)
 
 
+## Hardware recommendations
+
+nextNEOpi is designed to run on high memory multi-core servers (recommended > 16 cores, min. 64GB RAM, > 5 TB of free disk space). For analysis of larger cohorts we strongly recommend running nextNEOpi on a HPC cluster with multiple compute nodes that meet these specifications.
+However, by tuning the memory and CPU parameters in ```params.config``` and ```process.config``` it should also be possible to run nextNEOpi on systems with lower CPU and memory resources.
 
 ## 1. Installation
 
@@ -93,7 +97,7 @@ If you prefer local installation of the analysis tools please install the follow
 * PERL
 * CONDA
 * YARA
-* HLAHD
+* HLA-HD
 * ALLELECOUNT
 * RSCRIPT (R > 3.6.1)
 * SEQUENZA (3.0)
@@ -155,7 +159,7 @@ Most pipeline parameters can be edited in the ```params.config``` file or change
 References, databases should be edited in the ```resources.config``` file.
 
 ```
-nextflow run nextNEOpi.nf --readsTumor <tumorFastq> --readsNormal <normalFastq> | --batchFile <batchFile.csv>" [--single_end] -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+nextflow run nextNEOpi.nf --readsTumor <tumorFastq> --readsNormal <normalFastq> [--reads_RNAseq] | --batchFile <batchFile_FASTQ.csv | batchFile_BAM.csv> -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 ```
 
 **Profiles:** conda or singularity
@@ -165,19 +169,16 @@ its dependencies.
 
 **Profiles:** cluster
 
-We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
+We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. **cluster** and the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
-Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster profile to your scheduling system.
-
-
-**Single-end reads:**
-
-```--single_end``` DNA reads are single end: sets parameter to TRUE (default false)
-
-```--single_end_RNA``` RNA reads are single end: sets parameter to TRUE (default false)
+For an example SGE cluster profile, please see ```profiles``` in ```conf/profiles.config```. You may uncomment and adjust the cluster profile to your scheduling system.
 
 
-**RNA reads are from tag seq library i.e. 3-prime end sequencing protocol**
+**Sequencing data input:**
+
+Besides raw reads in **FASTQ** fromated files, input data may also be provided in **BAM** format.
+
+**RNA reads from tag seq library i.e. 3-prime end sequencing protocol**
 
 ```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.
 
@@ -185,37 +186,38 @@ Please see ```profiles``` in ```conf/profiles.config``` to adjust the cluster pr
 
 ```--batchFile``` _[recommended]_
 
-Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also `example_batchFile.csv`
+Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also `example_batchFile_FASTQ.csv` or `example_batchFile_BAM.csv`
 
+**FASTQ raw reads**
 * e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | Tumor1_reads_2.fastq | normal1 | Normal1_reads_1.fastq | Normal1_reads_2.fastq | Tumor1_RNAseq_reads_1.fastq | Tumor1_RNAseq_reads_2.fastq | None | XX
+ sample2 | Tumor2_reads_1.fastq | Tumor2_reads_2.fastq | normal2 | Normal2_reads_1.fastq | Normal2_reads_2.fastq | Tumor2_RNAseq_reads_1.fastq | Tumor2_RNAseq_reads_2.fastq | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | TumorN_reads_2.fastq | normalN | NormalN_reads_1.fastq | NormalN_reads_2.fastq | TumorN_RNAseq_reads_1.fastq | TumorN_RNAseq_reads_2.fastq | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | TumorN_reads_2.fastq | normalN | NormalN_reads_1.fastq | NormalN_reads_2.fastq | TumorN_RNAseq_reads_1.fastq | TumorN_RNAseq_reads_2.fastq | custom_HLAs.txt | XX
 
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | Tumor1_RNAseq_reads_1.fastq | None | None | XX
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | Tumor2_RNAseq_reads_1.fastq | None | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | TumorN_RNAseq_reads_1.fastq | None | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | TumorN_RNAseq_reads_1.fastq | None | custom_HLAs.txt | XX
 
 
 
 * e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:
 
- | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex | group |
- | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ | ----- |
- | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX | group1
- sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY | group1
+ | tumorSampleName | readsTumorFWD | readsTumorREV | normalSampleName | readsNormalFWD | readsNormalREV | readsRNAseqFWD | readsRNAseqREV | HLAfile | sex |
+ | --------------- | ------------- | ------------- | ---------------- | -------------- | -------------- | -------------- | -------------- | ------- | ------ |
+ | sample1 | Tumor1_reads_1.fastq | None | normal1 | Normal1_reads_1.fastq | None | None | None | None | XX
+ sample2 | Tumor2_reads_1.fastq | None | normal2 | Normal2_reads_1.fastq | None | None | None | None | XY
  |... |
- sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX | groupX
+ sampleN | TumorN_reads_1.fastq | None | normalN | NormalN_reads_1.fastq | None | None | None | custom_HLAs.txt | XX
 
 
 
@@ -226,6 +228,46 @@ or
 
 ```--readsNormal``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)
 
+(_optional but recommended_:
+```--readsRNAseq``` reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped))
+
+
+**BAM files**
+
+**Note:** If BAM files are used it is very much recommended that they also include also the unmapped and multimapping reads. These reads can be
+helpful for HLA-typing.
+
+* e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq data:
+
+ | tumorSampleName | bamTumor | normalSampleName | bamNormal | bamRNAseq | HLAfile | sex |
+ | --------------- | ---------| ---------------- | --------- | --------- | ------- | --- |
+ | sample1 | Tumor1.bam | normal1 | Normal1.bam | Tumor1_RNAseq.bam | None | XX
+ | sample2 | Tumor2.bam | normal2 | Normal2.bam | Tumor2_RNAseq.bam | None | XY
+ |... |
+ | sampleN | TumorN.bam | normalN | NormalN.bam | TumorN_RNAseq.bam | None | XX
+
+
+* e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq data:
+
+ | tumorSampleName | bamTumor | normalSampleName | bamNormal | bamRNAseq | HLAfile | sex |
+ | --------------- | ---------| ---------------- | --------- | --------- | ------- | --- |
+ | sample1 | Tumor1.bam | normal1 | Normal1.bam | None | None | XX
+ | sample2 | Tumor2.bam | normal2 | Normal2.bam | None | None | XY
+ |... |
+ | sampleN | TumorN.bam | normalN | NormalN.bam | None | None | XX
+
+
+
+or
+
+
+```--tumorBam``` tumor_1.bam
+
+```--normalBam``` normal_1.bam
+
+(_optional but recommended_:
+```--rnaBam``` tumor_1_RNAseq.bam
+
 
 **Notes**
 - _You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
@@ -233,8 +275,11 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa._
 
 - in the ```HLAfile``` coulumn a user suppiled HLA types file may be specified for a given sample, see also ```--customHLA``` option below
 
-- the ```sex``` column can be XX or Female, XY or Male. If not specified or "None" Male is assumed
+- the ```sex``` column can be "XX", "female" or "Female", "XY", "male" or "Male". If not specified or "None" Male is assumed
 
+- when providing paired end fastq files via commandline options (```--readsTumor, --readsNormal, --readsRNA```), please make sure you put the filename pattern into qoutes: e.g. ```--readsTumor "reads_{1,2}.fastq.gz"```
+
+- Please make sure your **```/tmp``` (or the directory set as ```$TMPDIR```) has a lot of free space (> 50GB, depending on input data size)**. You may change the tmp dir used by nextNEOpi by setting the parameter ```tmpDir``` in ```params.config``` or on the command line ```--tmpDir``` to a directory of your choice.
 
 **Example run command with batchfile:**
 ```
@@ -286,13 +331,18 @@ nextflow run nextNEOpi.nf \
 ```--TCR```                   Run mixcr for TCR prediction
                             Default: true
 
-```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01:01)
+```--customHLA```             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01)
+
+```--HLAHD_DIR``` Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.
 
 ```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
 
-
 ```--HLA_force_DNA``` Use only WES/WGS for HLA typing. Default: false
 
+```--run_HLAHD_RNA``` Run HLA-HD also on RNAseq. Highly accurate but can be very slow
+                      on larger fastq files. Default: false
+
+```--disable_OptiType``` Disable OptiType for HLA typing. If set, **HLA-HD** or a user supplied **custom HLA file** must be available (see ```--HLAHD_DIR``` and/or ```--customHLA```)
 
 ```--sex```                Provide the sex of the sample (XX or Female, XY or Male, None)
 

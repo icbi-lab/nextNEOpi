@@ -56,15 +56,70 @@ params.RUNTHIS = false
 // default is not to process a batchfile
 params.batchFile = false
 
+// default is not to get bams as input data
+bamInput = false
+
+// we got bam input on cmd line
+if (! params.batchFile) {
+    if(params.bamTumor != "NO_FILE" && params.readsTumor == "NO_FILE") {
+        bamInput = true
+    } else if(params.bamTumor == "NO_FILE" && params.readsTumor != "NO_FILE") {
+        bamInput = false
+    } else if(params.bamTumor != "NO_FILE" &&
+              (params.readsTumor != "NO_FILE" ||
+               params.readsNormal != "NO_FILE" ||
+               params.readsRNAseq != "NO_FILE")) {
+        exit 1, "Please do not provide tumor data as BAM and FASTQ"
+    }
+} else {
+    batchCSV = file(params.batchFile).splitCsv(header:true)
+
+    validFQfields = ["tumorSampleName",
+                     "readsTumorFWD",
+                     "readsTumorREV",
+                     "normalSampleName",
+                     "readsNormalFWD",
+                     "readsNormalREV",
+                     "readsRNAseqFWD",
+                     "readsRNAseqREV",
+                     "HLAfile",
+                     "sex"]
+
+    validBAMfields = ["tumorSampleName",
+                      "bamTumor",
+                      "normalSampleName",
+                      "bamNormal",
+                      "bamRNAseq",
+                      "HLAfile",
+                      "sex"]
+
+    if (batchCSV.size() > 0) {
+
+        if (batchCSV[0].keySet().sort() == validFQfields.sort()) {
+            bamInput = false
+        } else if (batchCSV[0].keySet().sort() == validBAMfields.sort()) {
+            bamInput = true
+        } else {
+            exit 1, "Error: Incorrect fields in batch file, please check your batchFile"
+        }
+    } else {
+        exit 1, "Error: No samples found, please check your batchFile"
+    }
+
+}
+
 // set single_end variable to supplied param
-single_end = params.single_end
-single_end_RNA = params.single_end_RNA
+single_end = false
+single_end_RNA = false
 
 // initialize RNAseq presence
 have_RNAseq = false
 
 // initialize RNA tag seq
 have_RNA_tag_seq = params.RNA_tag_seq
+
+// initialize custom HLA types presence
+use_custom_hlas = false
 
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
@@ -73,8 +128,8 @@ setExomeCaptureKit(params.exomeCaptureKit)
 reference = defineReference()
 database = defineDatabases()
 
-// create tmp dir
-mkTmpDir()
+// create tmp dir and make sure we have the realpath for it
+tmpDir = mkTmpDir(params.tmpDir)
 
 /*--------------------------------------------------
   For workflow summary
@@ -127,7 +182,7 @@ summary['VEP options']                   = params.vep_options
 summary['Number of scatters']            = params.scatter_count
 summary['Output dir']                    = params.outputDir
 summary['Working dir']                   = workflow.workDir
-summary['TMP dir']                       = params.tmpDir
+summary['TMP dir']                       = tmpDir
 summary['Current home']                  = "$HOME"
 summary['Current user']                  = "$USER"
 summary['Current path']                  = "$PWD"
@@ -146,10 +201,10 @@ def create_workflow_summary(summary) {
 
     def yaml_file = workDir.resolve('workflow_summary_mqc.yaml')
     yaml_file.text  = """
-    id: 'icbi-wes-summary'
+    id: 'nextNEOpi-summary'
     description: " - this information is collected when the pipeline is started."
-    section_name: 'icbi/wes Workflow Summary'
-    section_href: 'https://gitlab.i-med.ac.at/icbi-lab/pipelines/wes-nf'
+    section_name: 'nextNEOpi Workflow Summary'
+    section_href: 'https://github.com/icbi-lab/nextNEOpi'
     plot_type: 'html'
     data: |
         <dl class=\"dl-horizontal\">
@@ -161,83 +216,75 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
 }
 // End Summary
 
-// did not get a CSV batch file: just run a single sample
-if (! params.batchFile) {
+
+// set DNA and RNA sample counts to 0
+dna_count = 0
+rna_count = 0
+
+// did not get a CSV batch file and input is not BAM: just run a single sample
+if (! params.batchFile && ! bamInput) {
     // create channel with tumorSampleName/reads file set
     if (params.readsTumor != "NO_FILE") {
         // Sample name and reads file is passed via cmd line options
         // Sample name to use, if not given uses fastq file simpleName
         params.tumorSampleName  = "undefined"
         params.normalSampleName = "undefined"
-        if(!params.single_end) {
+        single_end = (file(params.readsTumor) instanceof LinkedList) ? false : true
+        if(! single_end) {
             tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor)[0].simpleName
         } else {
             tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.readsTumor).simpleName
-        }
-
-        Channel
-                .fromFilePairs(params.readsTumor)
-                .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1], "None") }
-                .into { raw_reads_tumor_ch;
-                        fastqc_reads_tumor_ch }
-
-        if (params.readsRNAseq) {
-            Channel
-                    .fromFilePairs(params.readsRNAseq)
-                    .map { reads -> tuple(tumorSampleName, reads[1][0], reads[1][1]) }
-                    .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-            have_RNAseq = true
-        } else {
-            Channel
-                    .of(tuple(row.tumorSampleName,
-                                        row.normalSampleName,
-                                        file("NO_FILE_RNA_FWD"),
-                                        file("NO_FILE_RNA_REV")))
-                    .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
-            Channel
-                .of(tuple(
-                    tumorSampleName,
-                    "NO_FILE"
-                ))
-                into { optitype_RNA_output; hlahd_output_RNA }
-
-            have_RNAseq = false
         }
     } else  {
         exit 1, "No tumor sample defined"
     }
 
     if (params.readsNormal != "NO_FILE") {
-        if(!params.single_end) {
+        normal_libType = (file(params.readsNormal) instanceof LinkedList) ? "PE" : "SE"
+        if ((normal_libType == "PE" && single_end) || (normal_libType == "SE" && ! single_end)) {
+            exit 1, "Please do not mix pe and se for tumor/normal pairs: " + tumorSampleName + " - Not supported"
+        }
+        if(! single_end) {
             normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal)[0].simpleName
         } else {
             normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.readsNormal).simpleName
         }
+
         Channel
-                .fromFilePairs(params.readsNormal)
-                .map { reads -> tuple(normalSampleName, tumorSampleName, reads[1][0], reads[1][1], "None") }
+                .fromFilePairs(params.readsTumor, size: -1)
+                .map { reads -> tuple(tumorSampleName,
+                                      normalSampleName,
+                                      reads[1][0],
+                                      (reads[1][1]) ? reads[1][1] : "NO_FILE_REV_T") }
+                .into { raw_reads_tumor_ch;
+                        fastqc_reads_tumor_ch }
+
+        Channel
+                .fromFilePairs(params.readsNormal, size: -1)
+                .map { reads -> tuple(tumorSampleName,
+                                      normalSampleName,
+                                      reads[1][0],
+                                      (reads[1][1]) ? reads[1][1] : "NO_FILE_REV_N") }
                 .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
     }  else  {
         exit 1, "No normal sample defined"
     }
-    // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
-    Channel
-            .of(tuple(
-                    tumorSampleName,
-                    file(params.customHLA)
-                ))
-            .set { custom_hlas_ch }
 
-    sexMap = [:]
-
-    if (params.sex in ["XX", "XY", "Female", "Male"]) {
-        sexMap[row.tumorSampleName] = params.sex
+    if (params.readsRNAseq) {
+        single_end_RNA = (file(params.readsRNAseq) instanceof LinkedList) ? false : true
+        Channel
+                .fromFilePairs(params.readsRNAseq, size: -1)
+                .map { reads -> tuple(tumorSampleName,
+                                      normalSampleName,
+                                      reads[1][0],
+                                      (reads[1][1]) ? reads[1][1] : "NO_FILE_RNA_REV") }
+                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+        have_RNAseq = true
     } else {
-        exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
+        have_RNAseq = false
     }
-} else {
-    // batchfile ()= csv with sampleId and T reads [N reads] [and group]) was provided
+} else if ( params.batchFile && ! bamInput) {
+    // batchfile ()= csv with sampleId and T/N reads was provided
     // create channel with all sampleId/reads file sets from the batch file
     // check if reverse reads are specified, if not set up single end processing
     // check if Normal reads are specified, if not set up exit with error
@@ -255,10 +302,10 @@ if (! params.batchFile) {
 
     for ( row in batchCSV ) {
         if(row.sex && row.sex != "None") {
-            if (params.sex in ["XX", "XY", "Female", "Male"]) {
-               sexMap[row.tumorSampleName] = (row.sex == "Female" || row.sex == "XX") ? "XX" : "XY"
+            if (row.sex in ["XX", "XY", "Female", "Male", "female", "male"]) {
+               sexMap[row.tumorSampleName] = (row.sex == "Female" || row.sex == "XX" || row.sex == "female") ? "XX" : "XY"
             } else {
-                exit 1, "Sex should be one of: XX, XY, Female, Male, got: " + params.sex
+                exit 1, "Sex should be one of: XX, XY, Female, Male, female, male, got: " + row.sex
             }
         } else {
             println("WARNING: sex not specified assuming: XY")
@@ -272,21 +319,36 @@ if (! params.batchFile) {
             pe_dna_count++
         }
 
-        if (row.readsNormalFWD == "None") {
-            exit 1, "No normal sample defined for " + row.readsTumorFWD
+        if (! row.readsTumorFWD || row.readsTumorFWD == "None") {
+            exit 1, "No tumor sample defined for " + row.tumorSampleName
+        } else {
+            dna_count++
         }
 
-        if (row.readsRNAseqFWD == "None") {
+        if (! row.readsNormalFWD || row.readsNormalFWD == "None") {
+            exit 1, "No normal sample defined for " + row.tumorSampleName
+        }
+
+        if (! row.readsRNAseqFWD || row.readsRNAseqFWD == "None") {
             have_RNAseq = false
         } else {
             have_RNAseq = true
-            if (row.readsRNAseqREV == "None") {
+            if (! row.readsRNAseqREV || row.readsRNAseqREV == "None") {
                 single_end_RNA = true
                 se_rna_count++
             } else {
                 pe_rna_count++
             }
+            rna_count++
         }
+
+        if (row.HLAfile != "None" || row.HLAfile != "") {
+            use_custom_hlas = true
+        }
+    }
+
+    if ((dna_count != rna_count) && (rna_count != 0)) {
+        exit 1, "Please do not mix samples with/without RNAseq data in batchfile"
     }
 
     if (pe_dna_count != 0 && se_dna_count != 0) {
@@ -303,8 +365,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsTumorFWD),
-                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV),
-                                row.group) }
+                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV)) }
             .into { raw_reads_tumor_ch;
                     fastqc_reads_tumor_ch }
 
@@ -314,8 +375,7 @@ if (! params.batchFile) {
             .map { row -> tuple(row.tumorSampleName,
                                 row.normalSampleName,
                                 file(row.readsNormalFWD),
-                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV),
-                                row.group) }
+                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV)) }
             .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
 
     if (have_RNAseq) {
@@ -327,22 +387,6 @@ if (! params.batchFile) {
                                     file(row.readsRNAseqFWD),
                                     file(row.readsRNAseqREV)) }
                 .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-    } else {
-        Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file("NO_FILE_RNA_FWD"),
-                                    file("NO_FILE_RNA_REV")) }
-                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
-        Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    file("NO_FILE")) }
-                .into { optitype_RNA_output; hlahd_output_RNA }
     }
 
     // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
@@ -350,8 +394,188 @@ if (! params.batchFile) {
             .fromPath(params.batchFile)
             .splitCsv(header:true)
             .map { row -> tuple(row.tumorSampleName,
-                                file((row.HLAfile == "None") ? "NO_FILE" : row.HLAfile)) }
+                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
             .set { custom_hlas_ch }
+} else if (bamInput && ! params.batchFile) {
+    // bam files provided on cmd line
+    if (params.bamTumor != "NO_FILE") {
+        params.tumorSampleName  = "undefined"
+        tumorSampleName = params.tumorSampleName != "undefined" ? params.tumorSampleName : file(params.bamTumor).simpleName
+
+    } else {
+        exit 1, "No tumor sample defined"
+    }
+    if (params.bamNormal != "NO_FILE") {
+        params.normalSampleName = "undefined"
+        normalSampleName = params.normalSampleName != "undefined" ? params.normalSampleName : file(params.bamNormal).simpleName
+    } else {
+        exit 1, "No normal sample defined"
+    }
+
+    Channel
+            .of(tuple(tumorSampleName,
+                    normalSampleName,
+                    file(params.bamTumor),
+                    file(params.bamNormal)))
+            .set { dna_bam_files }
+
+    if (params.bamRNAseq) {
+        Channel
+                .of(tuple(tumorSampleName,
+                          normalSampleName,
+                          file(params.bamRNAseq)))
+                .set { rna_bam_files }
+        have_RNAseq = true
+    }
+} else {
+    // bam files provided as batch file in CSV format
+    // bams will be transformed to fastq files
+    // library type SE/PE will be determinded automatically
+    // mixing of PE/SE samples is not possible in a batch file,
+    // but it is possible to provide PE DNA and SE RNA or vice versa
+    batchCSV = file(params.batchFile).splitCsv(header:true)
+
+    sexMap = [:]
+
+    for ( row in batchCSV ) {
+        if (row.sex && row.sex != "None") {
+            if (row.sex in ["XX", "XY", "Female", "female", "Male", "male"]) {
+                sexMap[row.tumorSampleName] = (row.sex == "Female" || row.sex == "XX" || row.sex == "female") ? "XX" : "XY"
+            } else {
+                exit 1, "Sex should be one of: XX, XY, Female, female, Male, male, got: " + row.sex
+            }
+        } else {
+            println("WARNING: sex not specified assuming: XY")
+            sexMap[row.tumorSampleName] = "XY"
+        }
+
+        if (! row.bamTumor || row.bamTumor == "" || row.bamTumor == "None") {
+            exit 1, "No tumor sample defined for " + row.tumorSampleName
+        }
+
+        if (! row.bamNormal || row.bamNormal == "" || row.bamNormal == "None") {
+            exit 1, "No normal sample defined for " + row.bamTumor
+        }
+
+        if (! row.bamRNAseq || row.bamRNAseq == "" || row.bamRNAseq == "None") {
+            have_RNAseq = false
+        } else {
+            have_RNAseq = true
+            rna_count++
+        }
+
+        if (row.HLAfile != "None" || row.HLAfile != "") {
+            use_custom_hlas = true
+        }
+
+        dna_count++
+    }
+
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                row.normalSampleName,
+                                file(row.bamTumor),
+                                file(row.bamNormal)) }
+            .set { dna_bam_files }
+
+    if (have_RNAseq) {
+        Channel
+                .fromPath(params.batchFile)
+                .splitCsv(header:true)
+                .map { row -> tuple(row.tumorSampleName,
+                                    row.normalSampleName,
+                                    file(row.bamRNAseq)) }
+                .set { rna_bam_files }
+    }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
+            .set { custom_hlas_ch }
+
+}
+
+// set cutom HLA channel and sex channel if no batchFile was passed
+if (! params.batchFile) {
+    // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
+    if (params.customHLA != "NO_FILE_HLA") {
+        use_custom_hlas = true
+    }
+
+    Channel
+            .of(tuple(
+                    tumorSampleName,
+                    file(params.customHLA)
+                ))
+            .set { custom_hlas_ch }
+
+    sexMap = [:]
+
+    if (params.sex in ["XX", "XY", "Female", "Male", "female", "male"]) {
+        sexMap[tumorSampleName] = params.sex
+    } else {
+        exit 1, "Sex should be one of: XX, XY, Female, Male, female, male, got: " + params.sex
+    }
+}
+
+// we do not support mixed batches of samples with and without RNAseq data
+// separate batches are needed for this
+if (params.batchFile && (dna_count != rna_count) && (rna_count != 0)) {
+    exit 1, "Please do not mix samples with/without RNAseq data in batchfile"
+}
+
+
+// make empty RNAseq channels if no RNAseq data available
+if (! have_RNAseq && params.batchFile) {
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                row.normalSampleName,
+                                file("NO_FILE_RNA_FWD"),
+                                file("NO_FILE_RNA_REV")) }
+            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                file("NO_FILE_OPTI_RNA")) }
+            .set { optitype_RNA_output }
+
+    Channel
+            .fromPath(params.batchFile)
+            .splitCsv(header:true)
+            .map { row -> tuple(row.tumorSampleName,
+                                file("NO_FILE_HLAHD_RNA")) }
+            .set { hlahd_output_RNA }
+
+} else if (! have_RNAseq && ! params.batchFile ){
+    Channel
+            .of(tuple(tumorSampleName,
+                        normalSampleName,
+                        file("NO_FILE_RNA_FWD"),
+                        file("NO_FILE_RNA_REV")))
+            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
+
+    Channel
+        .of(tuple(
+            tumorSampleName,
+            "NO_FILE_OPTI_RNA"
+        ))
+        .set { optitype_RNA_output }
+
+    Channel
+        .of(tuple(
+            tumorSampleName,
+            "NO_FILE_HLAHD_RNA"
+        ))
+        .into { hlahd_output_RNA }
 }
 
 // optional panel of normals file
@@ -360,19 +584,27 @@ pon_file = file(params.mutect2ponFile)
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
-HLAHD_DIR		  = file(params.HLAHD_DIR)
 MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
-// check HLAHD
+// check HLAHD & OptiType
 have_HLAHD = false
-HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
-if (checkToolAvailable(HLAHD, "exists", "warn")) {
-    HLAHD_PATH = HLAHD_DIR + "/bin"
-    have_HLAHD = true
-} else {
-    // exit 1, "ERROR: Could not find a working HLAHD installation at: " + params.HLAHD_DIR + "! Please provide the correct path to HLAHD by setting HLAHD_DIR"
+run_OptiType = (params.disable_OptiType) ? false : true
+
+if (params.HLAHD_DIR != "") {
+    HLAHD = file(params.HLAHD_DIR + "/bin/hlahd.sh")
+    if (checkToolAvailable(HLAHD, "exists", "warn")) {
+        HLAHD_DIR  = file(params.HLAHD_DIR)
+        HLAHD_PATH = HLAHD_DIR + "/bin"
+        have_HLAHD = true
+    }
+}
+if (! have_HLAHD && run_OptiType) {
     log.warn "WARNING: HLAHD not available - can not predict Class II neoepitopes"
+} else if (! have_HLAHD && ! run_OptiType && use_custom_hlas) {
+    log.warn "WARNING: HLAHD not available and OptiType disabled - using only user supplied HLA types"
+} else if (! have_HLAHD && ! run_OptiType && ! use_custom_hlas) {
+    exit 1, "ERROR: HLAHD not available and OptiType disabled - can not predict HLA types"
 }
 
 // check if all tools are installed when not running conda or singularity
@@ -395,7 +627,7 @@ if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singula
 
 // check if we have mutect1 installed
 have_Mutect1 = false
-if (file(params.MUTECT1) && file(params.JAVA7)) {
+if (params.MUTECT1 != "" && file(params.MUTECT1) && params.JAVA7 != "" && file(params.JAVA7)) {
     if(checkToolAvailable(params.JAVA7, "inPath", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
         JAVA7 = file(params.JAVA7)
         MUTECT1 = file(params.MUTECT1)
@@ -434,6 +666,229 @@ ________________________________________________________________________________
 **       P R E P R O C E S S I N G         **
 *********************************************
 */
+
+// Handle BAM input files. We need to convert BAMs to Fastq
+if(bamInput) {
+    process check_DNA_PE {
+        label 'nextNEOpiENV'
+
+        tag "$TumorReplicateId"
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(bamTumor),
+            file(bamNormal)
+        ) from dna_bam_files
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(bamTumor),
+            file(bamNormal),
+            stdout
+        ) into check_DNA_seqLib_ch
+
+
+        script:
+        """
+        check_pe.py $bamTumor $bamNormal
+        """
+    }
+    (bam_DNA_ch, check_DNA_seqLib_ch) = check_DNA_seqLib_ch.into(2)
+    check_seqLibTypes_ok(check_DNA_seqLib_ch, "DNA")
+
+
+    if (have_RNAseq) {
+        process check_RNA_PE {
+            label 'nextNEOpiENV'
+
+            tag "$TumorReplicateId"
+
+            input:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                file(bamRNAseq),
+            ) from rna_bam_files
+
+            output:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                file(bamRNAseq),
+                stdout
+            ) into check_RNA_seqLib_ch
+
+
+            script:
+            """
+            check_pe.py $bamRNAseq
+            """
+        }
+        (bam_RNA_ch, check_RNA_seqLib_ch) = check_RNA_seqLib_ch.into(2)
+        check_seqLibTypes_ok(check_RNA_seqLib_ch, "RNA")
+    }
+
+
+    process bam2fastq_DNA {
+        label 'nextNEOpiENV'
+
+        tag "$TumorReplicateId"
+
+        publishDir "${params.outputDir}/analyses/$TumorReplicateId/01_preprocessing",
+            mode: params.publishDirMode
+
+        input:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file(bamTumor),
+            file(bamNormal),
+            libType
+        ) from bam_DNA_ch
+
+
+        output:
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${TumorReplicateId}_FWD.fastq.gz"),
+            file("${tumorDNA_rev_fq}")
+        ) into (
+            raw_reads_tumor_ch,
+            fastqc_reads_tumor_ch
+        )
+
+        set(
+            TumorReplicateId,
+            NormalReplicateId,
+            file("${NormalReplicateId}_FWD.fastq.gz"),
+            file("${normalDNA_rev_fq}")
+        ) into (
+            raw_reads_normal_ch,
+            fastqc_reads_normal_ch
+        )
+
+        script:
+        if (libType == "MIXED") {
+            exit 1, "Please do not mix pe and se for tumor/normal pairs: " + TumorReplicateId + " - Not supported"
+        } else if (libType == "PE") {
+            tumorDNA_rev_fq = "${TumorReplicateId}_REV.fastq.gz"
+            normalDNA_rev_fq = "${NormalReplicateId}_REV.fastq.gz"
+        } else {
+            tumorDNA_rev_fq = "None"
+            normalDNA_rev_fq = "None"
+        }
+
+        if (libType == "PE")
+            """
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamTumor} | \\
+            samtools fastq \\
+                -@ ${task.cpus} \\
+                -c 5 \\
+                -1 ${TumorReplicateId}_FWD.fastq.gz \\
+                -2 ${TumorReplicateId}_REV.fastq.gz \\
+                -0 /dev/null -s /dev/null \\
+                -n \\
+                /dev/stdin
+
+            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamNormal} | \\
+            samtools fastq \\
+                -@ ${task.cpus} \\
+                -c 5 \\
+                -1 ${NormalReplicateId}_FWD.fastq.gz \\
+                -2 ${NormalReplicateId}_REV.fastq.gz \\
+                -0 /dev/null -s /dev/null \\
+                -n \\
+                /dev/stdin
+            """
+        else if (libType == "SE")
+            """
+            samtools fastq \\
+                -@ ${task.cpus} \\
+                -n \\
+                ${bamTumor} | \\
+                bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_FWD.fastq.gz
+
+            samtools fastq \\
+                -@ ${task.cpus} \\
+                -n \\
+                ${bamNormal} | \\
+                bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_FWD.fastq.gz
+
+            touch None
+            """
+    }
+
+    if (have_RNAseq) {
+        process bam2fastq_RNA {
+            label 'nextNEOpiENV'
+
+            tag "$TumorReplicateId"
+
+            publishDir "${params.outputDir}/analyses/$TumorReplicateId/01_preprocessing",
+                mode: params.publishDirMode
+
+            input:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                file(bamRNAseq),
+                libType
+            ) from bam_RNA_ch
+
+
+            output:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                file("${TumorReplicateId}_RNA_FWD.fastq.gz"),
+                file("${tumorRNA_rev_fq}")
+            ) into (
+                raw_reads_tumor_neofuse_ch,
+                fastqc_readsRNAseq_ch
+            )
+
+            script:
+            if (libType == "PE") {
+                tumorRNA_rev_fq = "${TumorReplicateId}_RNA_REV.fastq.gz"
+            } else if (libType == "SE") {
+                tumorRNA_rev_fq = "None"
+            } else {
+                exit 1, "An error occured: " + TumorReplicateId + ": RNAseq library type not SE or PE."
+            }
+
+            if (libType == "PE")
+                """
+                samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bamRNAseq} | \\
+                samtools fastq \\
+                    -@ ${task.cpus} \\
+                    -c 5 \\
+                    -1 ${TumorReplicateId}_RNA_FWD.fastq.gz \\
+                    -2 ${TumorReplicateId}_RNA_REV.fastq.gz \\
+                    -0 /dev/null -s /dev/null \\
+                    -n \\
+                /dev/stdin
+                """
+            else if (libType == "SE")
+                """
+                samtools fastq \\
+                    -@ ${task.cpus} \\
+                    -n \\
+                    ${bamRNAseq} | \\
+                    bgzip -@ ${task.cpus} -c /dev/stdin > ${TumorReplicateId}_RNA_FWD.fastq.gz
+
+                touch None
+                """
+        }
+    }
+}
+// END BAM input handling
+
+// Common region files preparation for faster processing
 if (params.WES) {
     process 'RegionsBedToIntervalList' {
 
@@ -610,10 +1065,10 @@ process 'SplitIntervals' {
     script:
     IntervalName = IntervalsList.baseName
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk SplitIntervals \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta}  \\
         -scatter ${x} \\
         --interval-merging-rule ALL \\
@@ -731,10 +1186,8 @@ process FastQC {
         NormalReplicateId,
         file(tumor_readsFWD),
         file(tumor_readsREV),
-        sampleGroup,      // unused so far
         file(normal_readsFWD),
         file(normal_readsREV),
-        sampleGroup,      // unused so far
         file(readsRNAseq_FWD),
         file(readsRNAseq_REV)
     ) from fastqc_reads_tumor_ch
@@ -884,8 +1337,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file(tumor_readsFWD),
-            file(tumor_readsREV),
-            sampleGroup,      // unused so far
+            file(tumor_readsREV)
         ) from raw_reads_tumor_ch
 
         output:
@@ -893,8 +1345,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file("${TumorReplicateId}_trimmed_R1.fastq.gz"),
-            file("${trimmedReads_2}"),
-            sampleGroup
+            file("${trimmedReads_2}")
         ) into (
             reads_tumor_ch,
             reads_tumor_uBAM_ch,
@@ -974,8 +1425,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
+            file(normal_readsREV)
         ) from raw_reads_normal_ch
 
         output:
@@ -983,8 +1433,7 @@ if (params.trim_adapters) {
             TumorReplicateId,
             NormalReplicateId,
             file("${NormalReplicateId}_trimmed_R1.fastq.gz"),
-            file("${trimmedReads_2}"),
-            sampleGroup
+            file("${trimmedReads_2}")
         ) into (
             reads_normal_ch,
             reads_normal_uBAM_ch,
@@ -1064,10 +1513,8 @@ if (params.trim_adapters) {
             NormalReplicateId,
             file(tumor_readsFWD),
             file(tumor_readsREV),
-            sampleGroup,      // unused so far
             file(normal_readsFWD),
-            file(normal_readsREV),
-            sampleGroup,      // unused so far
+            file(normal_readsREV)
         ) from fastqc_reads_tumor_trimmed_ch
             .combine(fastqc_reads_normal_trimmed_ch, by: [0,1])
 
@@ -1294,7 +1741,6 @@ process 'make_uBAM' {
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
-        sampleGroup,      // unused so far
         sampleType
     ) from reads_uBAM_ch
 
@@ -1314,9 +1760,9 @@ process 'make_uBAM' {
 
     if (single_end)
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             --READ_GROUP_NAME ${procSampleName} \\
@@ -1327,9 +1773,9 @@ process 'make_uBAM' {
         """
     else
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} FastqToSam \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
             -F1 ${readsFWD} \\
             -F2 ${readsREV} \\
@@ -1366,7 +1812,6 @@ process 'Bwa' {
         NormalReplicateId,
         file(readsFWD),
         file(readsREV),
-        sampleGroup,      // unused so far
         sampleType
     ) from reads_ch
     set(
@@ -1405,7 +1850,7 @@ process 'Bwa' {
     samtools view -@2 -Shbu - | \\
     sambamba sort \\
         --sort-picard \\
-        --tmpdir=${params.tmpDir} \\
+        --tmpdir=${tmpDir} \\
         -m ${params.SB_sort_mem} \\
         -l 6 \\
         -t ${sort_threads} \\
@@ -1461,10 +1906,10 @@ process 'merge_uBAM_BAM' {
     paired_run = (single_end) ? 'false' : 'true'
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeBamAlignment \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         --VALIDATION_STRINGENCY SILENT \\
         --EXPECTED_ORIENTATIONS FR \\
         --ATTRIBUTES_TO_RETAIN X0 \\
@@ -1535,10 +1980,10 @@ process 'MarkDuplicates' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     sambamba markdup \\
         -t ${task.cpus} \\
-        --tmpdir ${params.tmpDir} \\
+        --tmpdir ${tmpDir} \\
         --hash-table-size=${params.SB_hash_table_size } \\
         --overflow-list-size=${params.SB_overflow_list_size} \\
         --io-buffer-size=${params.SB_io_buffer_size} \\
@@ -1551,7 +1996,7 @@ process 'MarkDuplicates' {
         -l 0 \\
         /dev/stdin | \\
     gatk --java-options ${params.JAVA_Xmx} SetNmMdAndUqTags \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -R ${RefFasta} \\
         -I /dev/stdin \\
         -O ${procSampleName}_aligned_sort_mkdp.bam \\
@@ -1644,9 +2089,9 @@ if(params.WES) {
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} CollectHsMetrics \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --INPUT ${bam} \\
             --OUTPUT ${procSampleName}.HS.metrics.txt \\
             -R ${RefFasta} \\
@@ -1654,7 +2099,7 @@ if(params.WES) {
             --TARGET_INTERVALS ${IntervalsList} \\
             --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
         gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             --INPUT ${bam} \\
             --OUTPUT ${procSampleName}.AS.metrics.txt \\
             -R ${RefFasta} &&
@@ -1762,9 +2207,9 @@ process 'scatterBaseRecalGATK4' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
 
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -1808,7 +2253,7 @@ process 'gatherGATK4scsatteredBQSRtables' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk GatherBQSRReports \\
         -I ${bqsr_table.join(" -I ")} \\
@@ -1879,10 +2324,10 @@ process 'scatterGATK4applyBQSRS' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
     gatk ApplyBQSR \\
         --java-options ${params.JAVA_Xmx} \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
@@ -1931,12 +2376,12 @@ process 'GatherRecalBamFiles' {
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     rm -f ${procSampleName}_gather.fifo
     mkfifo ${procSampleName}_gather.fifo
     gatk --java-options ${java_opts} GatherBamFiles \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${bam.join(" -I ")} \\
         -O ${procSampleName}_gather.fifo \\
         --CREATE_INDEX false \\
@@ -1994,10 +2439,10 @@ process 'GetPileup' {
     script:
     procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk GetPileupSummaries \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${bam} \\
         -O ${procSampleName}_pileup.table \\
         -L ${IntervalsList} \\
@@ -2111,12 +2556,12 @@ process 'Mutect2' {
     def panel_of_normals = (pon.name != 'NO_FILE') ? "--panel-of-normals $pon" : ""
     def mk_pon_idx = (pon.name != 'NO_FILE') ? "tabix -f $pon" : ""
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     ${mk_pon_idx}
 
     gatk Mutect2 \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Tumorbam} -tumor ${TumorReplicateId} \\
         -I ${Normalbam} -normal ${NormalReplicateId} \\
@@ -2175,20 +2620,20 @@ process 'gatherMutect2VCFs' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz
 
     gatk MergeMutectStats \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --stats ${stats.join(" --stats ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_mutect2_raw.vcf.gz.stats
 
     gatk LearnReadOrientationModel \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${f1r2_tar_gz.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_read-orientation-model.tar.gz
     """
@@ -2265,22 +2710,22 @@ process 'FilterMutect2' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk CalculateContamination \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -I ${pileupTumor} \\
         --matched-normal ${pileupNormal} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_cont.table && \\
     gatk FilterMutectCalls \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -V ${vcf} \\
         --contamination-table ${TumorReplicateId}_${NormalReplicateId}_cont.table \\
         --ob-priors ${f1r2_tar_gz} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz && \\
     gatk SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --variant ${TumorReplicateId}_${NormalReplicateId}_oncefiltered.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -2346,10 +2791,10 @@ process 'HaploTypeCaller' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
         -L ${intervals} \\
@@ -2405,10 +2850,10 @@ process 'CNNScoreVariants' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk CNNScoreVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam} \\
         -V ${raw_germline_vcf} \\
@@ -2452,10 +2897,10 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${filtered_germline_vcf.join(" -I ")} \\
         -O ${NormalReplicateId}_germline_CNNscored.vcf.gz
     """
@@ -2509,10 +2954,10 @@ process 'FilterGermlineVariantTranches' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk FilterVariantTranches \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -V ${scored_germline_vcf} \\
         --resource ${hcSNPS1000G} \\
         --resource ${HapMap} \\
@@ -2589,9 +3034,9 @@ if (have_GATK3) {
         script:
         procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T RealignerTargetCreator \\
             --known ${MillsGold} \\
             --known ${KnownIndels} \\
@@ -2600,7 +3045,7 @@ if (have_GATK3) {
             -I ${bam} \\
             -o ${interval}_target.list \\
             -nt ${task.cpus} && \\
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T IndelRealigner \\
             -R ${RefFasta} \\
             -L ${interval} \\
@@ -2648,12 +3093,12 @@ if (have_GATK3) {
         procSampleName = (sampleType == "T") ? TumorReplicateId : NormalReplicateId
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
         rm -f ${procSampleName}_gather.fifo
         mkfifo ${procSampleName}_gather.fifo
         gatk --java-options ${java_opts} GatherBamFiles \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             -I ${bam.join(" -I ")} \\
             -O ${procSampleName}_gather.fifo \\
             --CREATE_INDEX false \\
@@ -2865,16 +3310,16 @@ process 'gatherVarscanVCFs' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${snp_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.snp.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${indel_vcf.join(" -I ")} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_varscan.indel.vcf \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3048,8 +3493,8 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        VarScanSNP_VCF,
-        VarScanINDEL_VCF
+        file(VarScanSNP_VCF),
+        file(VarScanINDEL_VCF)
     ) from FilterVarscanSnp_out_ch0
         .combine(FilterVarscanIndel_out_ch0, by: [0, 1])
 
@@ -3068,7 +3513,7 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     bgzip -c ${VarScanSNP_VCF} > ${VarScanSNP_VCF}.gz
     tabix -p vcf ${VarScanSNP_VCF}.gz
@@ -3076,14 +3521,14 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     tabix -p vcf ${VarScanINDEL_VCF}.gz
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${VarScanSNP_VCF}.gz \\
         -I ${VarScanINDEL_VCF}.gz \\
         -O ${TumorReplicateId}_varscan_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_varscan_combined.vcf.gz \\
         -O ${TumorReplicateId}_varscan_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3161,9 +3606,9 @@ if(have_Mutect1) {
                  ) ? "--cosmic " + file(params.databases.Cosmic)
                    : ""
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
-        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${params.tmpDir} -jar $MUTECT1 \\
+        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${tmpDir} -jar $MUTECT1 \\
             --analysis_type MuTect \\
             --reference_sequence ${RefFasta} \\
             ${cosmic} \\
@@ -3239,15 +3684,15 @@ if(have_Mutect1) {
         script:
         java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
-        mkdir -p ${params.tmpDir}
+        mkdir -p ${tmpDir}
 
         gatk --java-options ${java_opts} MergeVcfs \\
-            --TMP_DIR ${params.tmpDir} \\
+            --TMP_DIR ${tmpDir} \\
             -I ${vcf.join(" -I ")} \\
             -O ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz
 
         gatk SelectVariants \\
-            --tmp-dir ${params.tmpDir} \\
+            --tmp-dir ${tmpDir} \\
             --variant ${TumorReplicateId}_${NormalReplicateId}_mutect1_raw.vcf.gz \\
             -R ${RefFasta} \\
             --exclude-filtered true \\
@@ -3494,14 +3939,14 @@ process 'finalizeStrelkaVCF' {
     """
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${somatic_snvs} \\
         -I ${somatic_indels} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_strelka_combined.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3518,7 +3963,7 @@ process 'finalizeStrelkaVCF' {
     rm -f vcf_rename_${TumorReplicateId}_${NormalReplicateId}_tmp
 
     gatk SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         --variant ${TumorReplicateId}_${NormalReplicateId}_strelka_combined_somatic.vcf.gz \\
         -R ${RefFasta} \\
         --exclude-filtered true \\
@@ -3549,17 +3994,17 @@ process 'mkHCsomaticVCF' {
         TumorReplicateId,
         NormalReplicateId,
         _,
-        Mutect2_VCF,
-        Mutect2_Idx,
+        file(Mutect2_VCF),
+        file(Mutect2_Idx),
         _,
-        Mutect1_VCF,
-        Mutect1_Idx,
+        file(Mutect1_VCF),
+        file(Mutect1_Idx),
         _,
-        VarScan_VCF,
-        VarScan_Idx,
+        file(VarScan_VCF),
+        file(VarScan_Idx),
         _,
-        Strelka_VCF,
-        Strelka_IDX
+        file(Strelka_VCF),
+        file(Strelka_IDX)
     ) from FilterMutect2_out_ch1
         .combine(Mutect1_out_ch1, by: [0, 1])
         .combine(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0, 1])
@@ -3617,10 +4062,14 @@ if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
 
         tag 'installVEPcache'
 
+        // do not cache
+        cache false
+
         output:
         file("${vep_cache_chck_file_name}") into (
             vep_cache_ch0,
-            vep_cache_ch1
+            vep_cache_ch1,
+            vep_cache_ch2
         )
 
         script:
@@ -3647,7 +4096,7 @@ if(!vep_cache_chck_file.exists() || vep_cache_chck_file.isEmpty()) {
 } else {
 
     vep_cache_ch = Channel.fromPath(vep_cache_chck_file)
-    (vep_cache_ch0, vep_cache_ch1) = vep_cache_ch.into(2)
+    (vep_cache_ch0, vep_cache_ch1, vep_cache_ch2) = vep_cache_ch.into(3)
 
 }
 
@@ -3662,6 +4111,12 @@ if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
         label 'VEP'
 
         tag 'installVEPplugins'
+
+        // do not cache
+        cache false
+
+        input:
+        file(vep_cache_chck_file) from vep_cache_ch2
 
         output:
         file("${vep_plugins_chck_file_name}") into (
@@ -3807,29 +4262,29 @@ process 'mkCombinedVCF' {
     script:
     java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
     gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
-        --tmp-dir ${params.tmpDir} \\
+        --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -V ${tumorVCF} \\
         --sample-name ${TumorReplicateId} \\
         -O ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz
 
     gatk --java-options ${java_opts} RenameSampleInVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${germlineVCF} \\
         --NEW_SAMPLE_NAME ${TumorReplicateId} \\
         -O ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz
 
     gatk --java-options ${java_opts} MergeVcfs \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_tumor.vcf.gz \\
         -I ${NormalReplicateId}_germlineVAR_rename2tumorID.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz
 
     gatk --java-options ${java_opts} SortVcf \\
-        --TMP_DIR ${params.tmpDir} \\
+        --TMP_DIR ${tmpDir} \\
         -I ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined.vcf.gz \\
         -O ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
@@ -3845,9 +4300,9 @@ process 'VEPvcf' {
     publishDir "$params.outputDir/analyses/$TumorReplicateId/05_vep/vcf/high_confidence/",
         saveAs: {
             filename ->
-                if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && params.fullOutput) {
+                if (filename.indexOf("_vep_pick.vcf.gz") > 0 && params.fullOutput) {
                     return "combined/$filename"
-                } else if (filename.indexOf("_combined_sorted_vep.vcf.gz") > 0 && ! params.fullOutput) {
+                } else if (filename.indexOf("_vep_pick.vcf.gz") > 0 && ! params.fullOutput) {
                     return null
                 } else if (filename.endsWith(".fa")) {
                     return "$params.outputDir/analyses/$TumorReplicateId/06_proteinseq/$filename"
@@ -3877,8 +4332,8 @@ process 'VEPvcf' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz"),
-        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz.tbi"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz.tbi"),
     ) into (
         VEPvcf_out_ch0
     )
@@ -3886,11 +4341,18 @@ process 'VEPvcf' {
     set(
         TumorReplicateId,
         NormalReplicateId,
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz"),
+        file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz.tbi")
+    ) into (
+        VEPvcf_out_ch2,
+    )
+    set(
+        TumorReplicateId,
+        NormalReplicateId,
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz"),
         file("${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz.tbi")
     ) into (
         VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
-        VEPvcf_out_ch2,
         VEPvcf_out_ch3,
         VEPvcf_out_ch4
     )
@@ -3901,12 +4363,13 @@ process 'VEPvcf' {
 
     script:
     """
-    mkdir -p ${params.tmpDir}
+    mkdir -p ${tmpDir}
 
+    # pVACSeq
     vep -i ${combinedVCF} \\
-        -o ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
+        -o ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf \\
         --fork ${task.cpus} \\
-        --stats_file ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_summary.html \\
+        --stats_file ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_summary_pick.html \\
         --species ${params.vep_species} \\
         --assembly ${params.vep_assembly} \\
         --offline \\
@@ -3921,6 +4384,25 @@ process 'VEPvcf' {
         --format vcf \\
         --vcf 2> vep_errors_0.txt
 
+    # pVACSeq
+    vep -i ${tumorVCF} \\
+        -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf \\
+        --fork ${task.cpus} \\
+        --stats_file ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_summary_pick.html \\
+        --species ${params.vep_species} \\
+        --assembly ${params.vep_assembly} \\
+        --offline \\
+        --cache \\
+        --cache_version ${params.vep_cache_version} \\
+        --dir ${params.databases.vep_cache} \\
+        --dir_cache ${params.databases.vep_cache} \\
+        --hgvs \\
+        --fasta ${params.references.VepFasta} \\
+        --pick --plugin Frameshift --plugin Wildtype \\
+        --symbol --terms SO --transcript_version --tsl \\
+        --vcf 2>> vep_errors_1.txt
+
+    # All variants
     vep -i ${tumorVCF} \\
         -o ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
         --fork ${task.cpus} \\
@@ -3934,15 +4416,21 @@ process 'VEPvcf' {
         --dir_cache ${params.databases.vep_cache} \\
         --hgvs \\
         --fasta ${params.references.VepFasta} \\
-        --pick --plugin Frameshift --plugin Wildtype \\
         --plugin ProteinSeqs,${TumorReplicateId}_${NormalReplicateId}_tumor_reference.fa,${TumorReplicateId}_${NormalReplicateId}_tumor_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
-        --vcf 2> vep_errors_1.txt
+        --vcf 2>> vep_errors_1.txt
 
-    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf \\
-        > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz
 
-    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep.vcf.gz && \\
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf \\
+        > ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz
+
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_germlineVAR_combined_sorted_vep_pick.vcf.gz && \\
+        sleep 2
+
+    bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf \\
+        > ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz
+
+    tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep_pick.vcf.gz && \\
         sleep 2
 
     bgzip -c ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf \\
@@ -3950,6 +4438,7 @@ process 'VEPvcf' {
 
     tabix -p vcf ${TumorReplicateId}_${NormalReplicateId}_tumor_vep.vcf.gz && \\
         sleep 2
+
     sync
     """
 }
@@ -3999,7 +4488,7 @@ if(have_GATK3) {
 
         script:
         """
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${params.tmpDir} -jar $GATK3 \\
+        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T ReadBackedPhasing \\
             -R ${RefFasta} \\
             -I ${tumorBAM} \\
@@ -4621,16 +5110,14 @@ purity_estimate = Ascat_out_Clonality_ch0.combine(Sequenza_out_Clonality_ch0, by
 
             if(sequenzaOK) {
                 sample_purity = purity
-                log.warn "WARNING: changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
+                log.warn "WARNING (" + TumorReplicateId + "): changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
             } else {
-                log.warn "WARNING: neither ASCAT nor Sequenza produced results, using purity of 1.0"
+                log.warn "WARNING (" + TumorReplicateId + "): neither ASCAT nor Sequenza produced results, using purity of 1.0"
             }
         }
 
         return [ TumorReplicateId, NormalReplicateId, sample_purity ]
     }
-
-
 
 // CNVkit
 
@@ -4684,7 +5171,7 @@ process CNVkit {
         file(tumorBAI),
         file(normalBAM),
         file(normalBAI),
-        sample_purity
+        val(sample_purity)
     ) from MarkDuplicates_out_CNVkit_ch0
         .combine(purity_estimate, by: [0,1])
 
@@ -4867,6 +5354,8 @@ process 'Clonality' {
     publishDir "$params.outputDir/analyses/$TumorReplicateId/09_CCF/",
         mode: params.publishDirMode
 
+    cache 'lenient'
+
     input:
     set(
         TumorReplicateId,
@@ -4877,8 +5366,8 @@ process 'Clonality' {
         file(ascat_purity),
         file(seqz_CNVs),
         file(seqz_purity),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) from VEPvcf_out_ch1 // mkPhasedVCF_out_Clonality_ch0
         .combine(clonality_input, by: [0,1])
 
@@ -4887,13 +5376,15 @@ process 'Clonality' {
     set(
         TumorReplicateId,
         file("${TumorReplicateId}_CCFest.tsv"),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) into Clonality_out_ch0
     set(
         TumorReplicateId,
         NormalReplicateId,
-        file("${TumorReplicateId}_CCFest.tsv")
+        file("${TumorReplicateId}_CCFest.tsv"),
+        val(ascatOK),
+        val(sequenzaOK)
     ) into (
         ccf_ch0,
         ccf_ch1
@@ -4922,7 +5413,7 @@ process 'Clonality' {
             ${seg_opt} \\
             ${purity_opt} \\
             --min_vaf 0.01 \\
-            --result_table ${TumorReplicateId}_segments_CCF_input.txt
+            --result_table ${TumorReplicateId}_segments_CCF_input.txt && \\
         Rscript \\
             ${baseDir}/bin/CCF.R \\
             ${TumorReplicateId}_segments_CCF_input.txt \\
@@ -4947,6 +5438,7 @@ process 'MutationalBurden' {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 5
 
+    cache 'lenient'
 
     input:
     set(
@@ -4958,7 +5450,9 @@ process 'MutationalBurden' {
         file(Normalbai),
         file(vep_somatic_vcf_gz),
         file(vep_somatic_vcf_gz_tbi),
-        ccf_file,
+        file(ccf_file),
+        val(ascatOK),
+        val(sequenzaOK)
     ) from BaseRecalGATK4_out_MutationalBurden_ch0
         .combine(VEPvcf_out_ch3, by: [0,1])
         .combine(ccf_ch0, by: [0,1])
@@ -4974,12 +5468,7 @@ process 'MutationalBurden' {
     script:
     ccf_opts = ""
 
-    def ccf_fh = ccf_file.newReader()
-    String line
-    line = ccf_fh.readLine()
-    ccf_fh.close()
-
-    if(line.indexOf("Not avaliable") == -1) {
+    if (ascatOK || sequenzaOK) {
         ccf_opts =  "--ccf ${ccf_file} --ccf_clonal_thresh ${params.CCFthreshold} --p_clonal_thresh ${params.pClonal}"
     }
     """
@@ -5008,6 +5497,7 @@ process 'MutationalBurdenCoding' {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 5
 
+    cache 'lenient'
 
     input:
     set(
@@ -5019,7 +5509,9 @@ process 'MutationalBurdenCoding' {
         file(Normalbai),
         file(vep_somatic_vcf_gz),
         file(vep_somatic_vcf_gz_tbi),
-        ccf_file,
+        file(ccf_file),
+        val(ascatOK),
+        val(sequenzaOK)
     ) from BaseRecalGATK4_out_MutationalBurden_ch1
         .combine(VEPvcf_out_ch4, by: [0,1])
         .combine(ccf_ch1, by: [0,1])
@@ -5033,15 +5525,10 @@ process 'MutationalBurdenCoding' {
     ) into sample_info_tmb_coding
 
 
-
     script:
     ccf_opts = ""
-    def ccf_fh = ccf_file.newReader()
-    String line
-    line = ccf_fh.readLine()
-    ccf_fh.close()
 
-    if(line.indexOf("Not avaliable") == -1) {
+    if (ascatOK || sequenzaOK) {
         ccf_opts =  "--ccf ${ccf_file} --ccf_clonal_thresh ${params.CCFthreshold} --p_clonal_thresh ${params.pClonal}"
     }
     """
@@ -5171,104 +5658,9 @@ process 'mhc_extract' {
  *
  */
 
-process 'pre_map_hla' {
+if (run_OptiType) {
 
-    label 'nextNEOpiENV'
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/processing/",
-        mode: params.publishDirMode,
-        enabled: params.fullOutput
-
-    input:
-    set(
-        TumorReplicateId,
-        NormalReplicateId,
-        file(readsFWD),
-        file(readsREV),
-    ) from reads_tumor_hla_ch
-
-    file yaraIdx_files from Channel.value(reference.YaraIndexDNA)
-    val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
-
-    output:
-    set (
-        TumorReplicateId,
-        file("dna_mapped_{1,2}.bam")
-    ) into fished_reads
-
-    script:
-    if(single_end) {
-        yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
-        samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
-    } else {
-        yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
-        samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
-    }
-
-    if (single_end)
-        """
-        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
-            samtools view -@ $samtools_cpus -h -F 4 -b1 -o dna_mapped_1.bam
-        """
-    else
-        """
-        rm -f R1 R2
-        mkfifo R1 R2
-        yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
-            samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
-            tee R1 R2 > /dev/null &
-            samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > dna_mapped_1.bam &
-            samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > dna_mapped_2.bam &
-        wait
-        rm -f R1 R2
-        """
-}
-
-/*
- * STEP 2 - Run Optitype
- *
- * This is the major process, that formulates the IP and calls the selected
- * IP solver.
- *
- * Ouput formats: <still to enter>
- */
-
-process 'OptiType' {
-
-    label 'nextNEOpiENV'
-
-    tag "$TumorReplicateId"
-
-    publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/",
-        mode: params.publishDirMode
-
-    input:
-    set (
-        TumorReplicateId,
-        file(reads)
-    ) from fished_reads
-
-    output:
-    set (
-        TumorReplicateId,
-        file("${TumorReplicateId}_optitype_result.tsv")
-    ) into optitype_output
-    file("${TumorReplicateId}_optitype_coverage_plot.pdf")
-
-    script:
-    """
-    OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
-    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
-    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
-    rm -rf ./tmp/
-    """
-}
-
-if (have_RNAseq && ! have_RNA_tag_seq) {
-    process 'pre_map_hla_RNA' {
+    process 'pre_map_hla' {
 
         label 'nextNEOpiENV'
 
@@ -5282,18 +5674,18 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readRNAFWD,
-            readRNAREV
-        ) from reads_tumor_optitype_ch
+            file(readsFWD),
+            file(readsREV),
+        ) from reads_tumor_hla_ch
 
-        file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
-        val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+        file yaraIdx_files from Channel.value(reference.YaraIndexDNA)
+        val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
 
         output:
         set (
             TumorReplicateId,
-            file("rna_mapped_{1,2}.bam")
-        ) into fished_reads_RNA
+            file("dna_mapped_{1,2}.bam")
+        ) into fished_reads
 
         script:
         if(single_end) {
@@ -5304,26 +5696,35 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
             samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
         }
 
-        if (single_end_RNA)
+        if (single_end)
             """
-            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
-                samtools view -@ $samtools_cpus -h -F 4 -b1 -o rna_mapped_1.bam
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} | \\
+                samtools view -@ $samtools_cpus -h -F 4 -b1 -o dna_mapped_1.bam
             """
         else
             """
             rm -f R1 R2
             mkfifo R1 R2
-            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
+            yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readsFWD} ${readsREV} | \\
                 samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
                 tee R1 R2 > /dev/null &
-                samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > rna_mapped_1.bam &
-                samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > rna_mapped_2.bam &
+                samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > dna_mapped_1.bam &
+                samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > dna_mapped_2.bam &
             wait
             rm -f R1 R2
             """
     }
 
-    process 'OptiType_RNA' {
+    /*
+    * STEP 2 - Run Optitype
+    *
+    * This is the major process, that formulates the IP and calls the selected
+    * IP solver.
+    *
+    * Ouput formats: <still to enter>
+    */
+
+    process 'OptiType' {
 
         label 'nextNEOpiENV'
 
@@ -5336,57 +5737,154 @@ if (have_RNAseq && ! have_RNA_tag_seq) {
         set (
             TumorReplicateId,
             file(reads)
-        ) from fished_reads_RNA
+        ) from fished_reads
 
         output:
         set (
             TumorReplicateId,
-            file("${TumorReplicateId}_optitype_RNA_result.tsv")
-        ) into optitype_RNA_output
-        file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
+            file("${TumorReplicateId}_optitype_result.tsv")
+        ) into optitype_output
+        file("${TumorReplicateId}_optitype_coverage_plot.pdf")
 
         script:
-        if (single_end_RNA)
-            """
-            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-            MHC_MAPPED=`samtools view -c ${reads}`
-            if [ "\$MHC_MAPPED" != "0" ]; then
-                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
-                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
-                rm -rf ./tmp/
-            else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv
-                echo "No result" >  ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
-            fi
-            """
-        else
-            """
-            OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-            MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
-            MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
-            if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
-                \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
-                mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
-                rm -rf ./tmp/
-            else
-                touch ${TumorReplicateId}_optitype_RNA_result.tsv
-                echo "No result" > ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
-            fi
-            """
+        """
+        OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+        \$OPTITYPE -i ${reads} -e 1 -b 0.009 --dna -o ./tmp && \\
+        mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_result.tsv && \\
+        mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_coverage_plot.pdf && \\
+        rm -rf ./tmp/
+        """
     }
 
-} else if (have_RNAseq && have_RNA_tag_seq) {
+    if (have_RNAseq && ! have_RNA_tag_seq) {
+        process 'pre_map_hla_RNA' {
 
-    log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+            label 'nextNEOpiENV'
 
-    optitype_RNA_output = reads_tumor_optitype_ch
-                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+            tag "$TumorReplicateId"
 
+            publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/processing/",
+                mode: params.publishDirMode,
+                enabled: params.fullOutput
+
+            input:
+            set(
+                TumorReplicateId,
+                NormalReplicateId,
+                file(readRNAFWD),
+                file(readRNAREV)
+            ) from reads_tumor_optitype_ch
+
+            file yaraIdx_files from Channel.value(reference.YaraIndexRNA)
+            val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+
+            output:
+            set (
+                TumorReplicateId,
+                file("rna_mapped_{1,2}.bam")
+            ) into fished_reads_RNA
+
+            script:
+            if(single_end) {
+                yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
+                samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
+            } else {
+                yara_cpus = ((task.cpus - 6).compareTo(2) == -1) ? 2 : (task.cpus - 6)
+                samtools_cpus =  (((task.cpus - yara_cpus).div(3)).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus).div(3)
+            }
+
+            if (single_end_RNA)
+                """
+                yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} | \\
+                    samtools view -@ $samtools_cpus -h -F 4 -b1 -o rna_mapped_1.bam
+                """
+            else
+                """
+                rm -f R1 R2
+                mkfifo R1 R2
+                yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${readRNAFWD} ${readRNAREV} | \\
+                    samtools view -@ $samtools_cpus -h -F 4 -b1 | \\
+                    tee R1 R2 > /dev/null &
+                    samtools view -@ $samtools_cpus -h -f 0x40 -b1 R1 > rna_mapped_1.bam &
+                    samtools view -@ $samtools_cpus -h -f 0x80 -b1 R2 > rna_mapped_2.bam &
+                wait
+                rm -f R1 R2
+                """
+        }
+
+        process 'OptiType_RNA' {
+
+            label 'nextNEOpiENV'
+
+            tag "$TumorReplicateId"
+
+            publishDir "$params.outputDir/analyses/$TumorReplicateId/10_HLA_typing/Optitype/",
+                mode: params.publishDirMode
+
+            input:
+            set (
+                TumorReplicateId,
+                file(reads)
+            ) from fished_reads_RNA
+
+            output:
+            set (
+                TumorReplicateId,
+                file("${TumorReplicateId}_optitype_RNA_result.tsv")
+            ) into optitype_RNA_output
+            file("${TumorReplicateId}_optitype_RNA_coverage_plot.pdf")
+
+            script:
+            if (single_end_RNA)
+                """
+                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+                MHC_MAPPED=`samtools view -c ${reads}`
+                if [ "\$MHC_MAPPED" != "0" ]; then
+                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                    rm -rf ./tmp/
+                else
+                    touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                    echo "No result" >  ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
+                fi
+                """
+            else
+                """
+                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
+                MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
+                MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
+                if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
+                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
+                    mv ./tmp/*/*_result.tsv ./${TumorReplicateId}_optitype_RNA_result.tsv && \\
+                    mv ./tmp/*/*_coverage_plot.pdf ./${TumorReplicateId}_optitype_RNA_coverage_plot.pdf && \\
+                    rm -rf ./tmp/
+                else
+                    touch ${TumorReplicateId}_optitype_RNA_result.tsv
+                    echo "No result" > ${TumorReplicateId}_optitype_RNA_coverage_plot.pdf
+                fi
+                """
+        }
+
+    } else if (have_RNAseq && have_RNA_tag_seq) {
+
+        log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
+
+        optitype_RNA_output = reads_tumor_optitype_ch
+                                .map{ it -> tuple(it[0], file("NO_FILE_OPTI_RNA"))}
+
+    }
+}  else { // End if run_OptiType
+    log.info "INFO: will not run HLA typing with OptiType"
+
+    optitype_output = reads_tumor_hla_ch
+                            .map{ it -> tuple(it[0], file("NO_FILE_OPTI_DNA"))}
+
+    if (have_RNAseq) {
+        optitype_RNA_output = reads_tumor_optitype_ch
+                                .map{ it -> tuple(it[0], file("NO_FILE_OPTI_RNA"))}
+    }
 }
-
-
 
 /*
 *********************************************
@@ -5449,13 +5947,13 @@ if (have_HLAHD) {
 } else {
     // fill channels
     hlahd_output = reads_tumor_hlaHD_ch
-                        .map{ it -> tuple(it[0], file("NO_FILE"))}
+                        .map{ it -> tuple(it[0], file("NO_FILE_HLAHD_DNA"))}
 
     (hlahd_mixMHC2_pred_ch0, hlahd_output) = hlahd_output.into(2)
 
 }
 
-if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) {
+if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
     process 'run_hla_hd_RNA' {
 
         label 'HLAHD_RNA'
@@ -5506,14 +6004,14 @@ if (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) {
                 ${gSplit} ${dict} $TumorReplicateId .
             """
     }
-} else if ((have_RNAseq && ! have_HLAHD) || (have_RNAseq && have_RNA_tag_seq)) {
+} else if ((have_RNAseq && ! have_HLAHD) || (have_RNAseq && have_RNA_tag_seq) || (! params.run_HLAHD_RNA)) {
 
     if(have_RNA_tag_seq) {
         log.info "INFO: will not run HLA typing on RNAseq from tag libraries"
     }
 
     hlahd_output_RNA = reads_tumor_hlahd_RNA_ch
-                            .map{ it -> tuple(it[0], file("NO_FILE"))}
+                            .map{ it -> tuple(it[0], file("NO_FILE_HLAHD_RNA"))}
 
 }
 
@@ -5541,11 +6039,11 @@ process get_vhla {
     input:
     set (
         TumorReplicateId,
-        opti_out,
-        opti_out_rna,
-        hlahd_out,
-        hlahd_out_rna,
-        custom_hlas
+        file(opti_out),
+        file(opti_out_rna),
+        file(hlahd_out),
+        file(hlahd_out_rna),
+        file(custom_hlas)
     ) from optitype_output
         .combine(optitype_RNA_output, by: 0)
         .combine(hlahd_output, by: 0)
@@ -5559,9 +6057,10 @@ process get_vhla {
     ) into (hlas, hlas_neoFuse)
 
     script:
-    def user_hlas = custom_hlas.name != 'NO_FILE' ? "--custom $custom_hlas" : ''
-    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq) ? "--opti_out_RNA $opti_out_rna" : ''
-    rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
+    def optitype_hlas = (opti_out.name != 'NO_FILE_OPTI_DNA') ? "--opti_out $opti_out" : ''
+    def user_hlas = custom_hlas.name != 'NO_FILE_HLA' ? "--custom $custom_hlas" : ''
+    def rna_hlas = (have_RNAseq && ! have_RNA_tag_seq && (opti_out_rna.name != 'NO_FILE_OPTI_RNA')) ? "--opti_out_RNA $opti_out_rna" : ''
+    rna_hlas = (have_RNAseq && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
     def force_RNA = (params.HLA_force_DNA || have_RNA_tag_seq) ? false : params.HLA_force_RNA
@@ -5574,17 +6073,19 @@ process get_vhla {
         force_seq_type = "--force_DNA"
     }
 
-    hlahd_opt = (have_HLAHD) ? "--hlahd_out ${hlahd_out}" : ""
+    hlahd_opt = (have_HLAHD && (hlahd_out.name != 'NO_FILE_HLAHD_DNA')) ? "--hlahd_out ${hlahd_out}" : ""
 
+    script:
+    pVACseqAlleles = baseDir.toRealPath()  + "/assets/pVACseqAlleles.txt"
     """
     # merging script
     HLA_parser.py \\
-        --opti_out ${opti_out} \\
+        ${optitype_hlas} \\
         ${hlahd_opt} \\
         ${rna_hlas} \\
         ${user_hlas} \\
         ${force_seq_type} \\
-        --ref_hlas ${baseDir}/assets/pVACseqAlleles.txt \\
+        --ref_hlas ${pVACseqAlleles} \\
         > ./${TumorReplicateId}_hlas.txt
     """
 }
@@ -5642,9 +6143,9 @@ if (have_RNAseq) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readRNAFWD,
-            readRNAREV,
-            hla_types,
+            file(readRNAFWD),
+            file(readRNAREV),
+            file(hla_types),
             _,
             file(SVvcf),
             file(SVvcfIdx)
@@ -5694,7 +6195,6 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -H ${params.HLAHD_DIR} \\
                 ${sv_options} \\
                 -k true
             """
@@ -5714,7 +6214,6 @@ if (have_RNAseq) {
                 -a ${AnnoFile} \\
                 -N ${params.netMHCpan} \\
                 -C ${hla_types} \\
-                -H ${params.HLAHD_DIR} \\
                 ${sv_options} \\
                 -k true
             """
@@ -5770,7 +6269,7 @@ if (have_RNAseq) {
         input:
         set (
             TumorReplicateId,
-            tpm
+            file(tpm)
         ) from tpm_file
         // file tpm from tpm_file
         file AnnoFile from file(reference.AnnoFile)
@@ -5888,11 +6387,11 @@ process 'pVACseq' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        vep_phased_vcf_gz,
-        vep_phased_vcf_gz_tbi,
-        anno_vcf,
-        anno_vcf_tbi,
-        hla_types
+        file(vep_phased_vcf_gz),
+        file(vep_phased_vcf_gz_tbi),
+        file(anno_vcf),
+        file(anno_vcf_tbi),
+        val(hla_types)
     ) from mkPhasedVCF_out_pVACseq_ch0
         .combine(vcf_vep_ex_gz, by: [0,1])
         .combine(hlas.splitText(), by: 0)
@@ -5967,8 +6466,8 @@ process concat_mhcI_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv',
-        '*all_epitopes.tsv'
+        file("*filtered.tsv"),
+        file("*all_epitopes.tsv")
     ) from mhcI_out_f.groupTuple(by: 0)
 
     output:
@@ -6005,8 +6504,8 @@ process concat_mhcII_files {
     input:
     set(
         TumorReplicateId,
-        '*filtered.tsv',
-        '*all_epitopes.tsv'
+        file("*filtered.tsv"),
+        file("*all_epitopes.tsv")
     ) from mhcII_out_f.groupTuple(by: 0)
 
     output:
@@ -6043,8 +6542,8 @@ process aggregated_reports {
     input:
     set (
         TumorReplicateId,
-        pvacseq_mhcI_all_file,
-        pvacseq_mhcII_all_file
+        file(pvacseq_mhcI_all_file),
+        file(pvacseq_mhcII_all_file)
     ) from concat_mhcI_all_files_out_aggregated_reports_ch0
         .combine(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
 
@@ -6078,10 +6577,10 @@ process 'pVACtools_generate_protein_seq' {
     set(
         TumorReplicateId,
         NormalReplicateId,
-        vep_phased_vcf_gz,
-        vep_phased_vcf_idx,
-        vep_tumor_vcf_gz,
-        vep_tumor_vcf_idx
+        file(vep_phased_vcf_gz),
+        file(vep_phased_vcf_idx),
+        file(vep_tumor_vcf_gz),
+        file(vep_tumor_vcf_idx)
     ) from generate_protein_fasta_phased_vcf_ch0
         .combine(generate_protein_fasta_tumor_vcf_ch0, by:[0,1])
 
@@ -6128,8 +6627,8 @@ if(have_HLAHD) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            long_peptideSeq_fasta,
-            hlahd_allel_file
+            file(long_peptideSeq_fasta),
+            file(hlahd_allel_file)
         ) from pVACtools_generate_protein_seq
             .combine(hlahd_mixMHC2_pred_ch0, by:0)
 
@@ -6144,6 +6643,8 @@ if(have_HLAHD) {
         file("${TumorReplicateId}_mixMHC2pred_conf.txt") optional true
 
         script:
+        supported_list = baseDir.toRealPath() + "/assets/hlaii_supported.txt"
+        model_list     = baseDir.toRealPath() + "/assets/hlaii_models.txt"
         """
         pepChopper.py \\
             --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
@@ -6151,8 +6652,8 @@ if(have_HLAHD) {
             --fasta_out ${TumorReplicateId}_peptides.fasta
         HLAHD2mixMHC2pred.py \\
             --hlahd_list ${hlahd_allel_file} \\
-            --supported_list ${baseDir}/assets/hlaii_supported.txt \\
-            --model_list ${baseDir}/assets/hlaii_models.txt \\
+            --supported_list ${supported_list} \\
+            --model_list ${model_list} \\
             --output_dir ./ \\
             --sample_name ${TumorReplicateId}
         """
@@ -6164,6 +6665,9 @@ if(have_HLAHD) {
         process install_mixMHC2pred {
 
             tag 'install mixMHC2pred'
+
+            // do not cache
+            cache false
 
             output:
             file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
@@ -6180,6 +6684,9 @@ if(have_HLAHD) {
         process link_mixMHC2pred {
 
             tag 'link mixMHC2pred'
+
+            // do not cache
+            cache false
 
             output:
             file(".mixmhc2pred_install_ok.chck") into mixmhc2pred_chck_ch
@@ -6208,9 +6715,9 @@ if(have_HLAHD) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            mut_peps,
-            vep_somatic_gx_vcf_gz,
-            vep_somatic_gx_vcf_gz_tbi,
+            file(mut_peps),
+            file(vep_somatic_gx_vcf_gz),
+            file(vep_somatic_gx_vcf_gz_tbi),
             file(mixmhc2pred_chck_file)
         ) from pepare_mixMHC2_seq_out_ch0
             .combine(gene_annotator_out_mixMHC2pred_ch0, by: [0, 1])
@@ -6218,29 +6725,35 @@ if(have_HLAHD) {
         val allelesFile from pepare_mixMHC2_seq_out_ch1
 
         output:
-        file("${TumorReplicateId}_mixMHC2pred_all.tsv")
-        file("${TumorReplicateId}_mixMHC2pred_filtered.tsv")
+        file("${TumorReplicateId}_mixMHC2pred_all.tsv") optional true
+        file("${TumorReplicateId}_mixMHC2pred_filtered.tsv") optional true
 
         script:
         alleles = file(allelesFile).readLines().join(" ")
-        """
-        ${mixmhc2pred_target}/MixMHC2pred_unix \\
-            -i ${mut_peps} \\
-            -o ${TumorReplicateId}_mixMHC2pred.tsv \\
-            -a ${alleles}
-        parse_mixMHC2pred.py \\
-            --vep_vcf ${vep_somatic_gx_vcf_gz} \\
-            --pep_fasta ${mut_peps} \\
-            --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
-            --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
-            --sample_name ${TumorReplicateId} \\
-            --normal_name ${NormalReplicateId}
-        awk \\
-            '{
-                if (\$0 ~ /\\#/) { print }
-                else { if (\$18 <= 2) { print } }
-            }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
-        """
+
+        if(alleles.length() > 0)
+            """
+            ${mixmhc2pred_target}/MixMHC2pred_unix \\
+                -i ${mut_peps} \\
+                -o ${TumorReplicateId}_mixMHC2pred.tsv \\
+                -a ${alleles}
+            parse_mixMHC2pred.py \\
+                --vep_vcf ${vep_somatic_gx_vcf_gz} \\
+                --pep_fasta ${mut_peps} \\
+                --mixMHC2pred_result ${TumorReplicateId}_mixMHC2pred.tsv \\
+                --out ${TumorReplicateId}_mixMHC2pred_all.tsv \\
+                --sample_name ${TumorReplicateId} \\
+                --normal_name ${NormalReplicateId}
+            awk \\
+                '{
+                    if (\$0 ~ /\\#/) { print }
+                    else { if (\$18 <= 2) { print } }
+                }' ${TumorReplicateId}_mixMHC2pred_all.tsv > ${TumorReplicateId}_mixMHC2pred_filtered.tsv
+            """
+        else
+            """
+            true
+            """
     }
 }
 
@@ -6269,8 +6782,8 @@ process addCCF {
         TumorReplicateId,
         file(epitopes),
         file(CCF),
-        ascatOK,
-        sequenzaOK
+        val(ascatOK),
+        val(sequenzaOK)
     ) from concat_mhcI_filtered_files_out_addCCF_ch0
         .concat(
                 concat_mhcI_all_files_out_addCCF_ch0,
@@ -6314,8 +6827,8 @@ process csin {
     input:
     set (
         TumorReplicateId,
-        "*_MHCI_all_epitopes.tsv",
-        "*_MHCII_all_epitopes.tsv"
+        file("*_MHCI_all_epitopes.tsv"),
+        file("*_MHCII_all_epitopes.tsv")
     ) from MHCI_all_epitopes
         .combine(MHCII_all_epitopes, by:0)
 
@@ -6343,6 +6856,9 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
 
         tag 'install IGS'
 
+        // do not cache
+        cache false
+
         output:
         file(".igs_install_ok.chck") into igs_chck_ch
 
@@ -6361,6 +6877,9 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
     process link_IGS {
 
         tag 'link IGS'
+
+        // do not cache
+        cache false
 
         output:
         file(".igs_install_ok.chck") into igs_chck_ch
@@ -6392,7 +6911,7 @@ process immunogenicity_scoring {
     input:
     set (
         TumorReplicateId,
-        pvacseq_file
+        file(pvacseq_file)
     ) from MHCI_final_immunogenicity
     // val(TumorReplicateId) from mhCI_tag_immunogenicity
     // file pvacseq_file from MHCI_final_immunogenicity
@@ -6428,6 +6947,9 @@ if(params.TCR) {
 
             tag 'install mixcr'
 
+            // do not cache
+            cache false
+
             output:
             file(".mixcr_install_ok.chck") into (
                 mixcr_chck_ch0,
@@ -6450,6 +6972,9 @@ if(params.TCR) {
         process link_mixcr {
 
             tag 'link mixcr'
+
+            // do not cache
+            cache false
 
             output:
             file(".mixcr_install_ok.chck") into (
@@ -6485,9 +7010,8 @@ if(params.TCR) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readFWD,
-            readREV,
-            _,
+            file(readFWD),
+            file(readREV),
             file(mixcr_chck_file)
         ) from reads_tumor_mixcr_DNA_ch
             .combine(mixcr_chck_ch0)
@@ -6524,9 +7048,8 @@ if(params.TCR) {
         set(
             TumorReplicateId,
             NormalReplicateId,
-            readFWD,
-            readREV,
-            _,
+            file(readFWD),
+            file(readREV),
             file(mixcr_chck_file)
         ) from reads_normal_mixcr_DNA_ch
             .combine(mixcr_chck_ch1)
@@ -6564,8 +7087,8 @@ if(params.TCR) {
             set(
                 TumorReplicateId,
                 NormalReplicateId,
-                readRNAFWD,
-                readRNAREV,
+                file(readRNAFWD),
+                file(readRNAREV),
                 file(mixcr_chck_file)
             ) from reads_tumor_mixcr_RNA_ch
                 .combine(mixcr_chck_ch2)
@@ -6601,9 +7124,9 @@ process collectSampleInfo {
     input:
     set(
         TumorReplicateId,
-        csin,
-        tmb,
-        tmb_coding
+        file(csin),
+        file(tmb),
+        file(tmb_coding)
     ) from sample_info_csin
         .combine(sample_info_tmb, by: 0)
         .combine(sample_info_tmb_coding, by: 0)
@@ -6677,10 +7200,15 @@ ________________________________________________________________________________
 
 */
 
-def mkTmpDir() {
-    myTmpDir = file(params.tmpDir)
+def mkTmpDir(d) {
+    myTmpDir = file(d)
     result = myTmpDir.mkdirs()
-    println result ? "tmpDir created: $myTmpDir" : "Cannot create directory: $myTmpDir"
+    if (result) {
+        println("tmpDir: " + myTmpDir.toRealPath())
+    } else {
+        exit 1, "Cannot create directory: " + myTmpDir
+    }
+    return myTmpDir.toRealPath()
 }
 
 def checkParamReturnFileReferences(item) {
@@ -6846,19 +7374,39 @@ def checkLicense() {
     }
 }
 
+def check_seqLibTypes_ok(seqLib_ch, analyte) {
+    seqLibs = seqLib_ch.toList().get()
+    pe_count = 0
+    se_count = 0
+    seqLibField = (analyte == "DNA") ? 4 : 3
+    for (seqLib in seqLibs) {
+        pe_count += (seqLib[seqLibField] == "PE") ? 1 : 0
+        se_count += (seqLib[seqLibField] == "SE") ? 1 : 0
+        if (seqLib[seqLibField] == "MIXED") {
+            exit 1, "Please do not mix pe and se for tumor/normal pairs: " + seqLib[0] + " - Not supported"
+        }
+    }
+
+    if (pe_count != 0 && se_count != 0) {
+        for (seqLib in seqLibs) {
+            println(seqLib[0] + " : " + seqLib[seqLibField] + " : " + analyte)
+        }
+        exit 1, "Please do not mix pe and se " + analyte + "read samples in batch file. Create a separate batch file for se and pe " + analyte + "samples"
+    }
+    return true
+}
+
+
 def helpMessage() {
     log.info ""
     log.info "----------------------------"
     log.info "--        U S A G E       "
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal"] | ["--batchFile"] "-profile [conda|singularity],[cluster]" ["-resume"]'
+    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal" | "--bamTumor" "--bamNormal"] | ["--batchFile"] ["--bam"] "-profile [conda|singularity],[cluster]" ["-resume"]'
     log.info ""
     log.info "-------------------------------------------------------------------------"
     log.info ""
-    log.info "Single-end reads:"
-    log.info "---------------------------"
-    log.info "--single_end \t\t sets parameter to TRUE (default false)"
     log.info ""
     log.info " Mandatory arguments:"
     log.info " --------------------"
@@ -6866,30 +7414,33 @@ def helpMessage() {
     log.info "   or"
     log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
     log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
+    log.info "   or"
+    log.info "--bamTumor \t\t tumor_1.bam \t\t ; tumor BAM file"
+    log.info "--bamNormal \t\t normal_1.bam \t\t ; normal BAM file"
     log.info ""
     log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,XX,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,None,XX"
 
     log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None"
 
     log.info "CSV-file, single-end T/N reads, NO RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex,group"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX,group1"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY,group1"
+    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
+    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX"
+    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY"
     log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX,groupX"
+    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX"
 
 
     log.info "Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all"
@@ -6897,7 +7448,7 @@ def helpMessage() {
 
     log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below"
 
-    log.info "Note: sex can be XX or Female, XY or Male. If not specified or \"None\" Male is assumed"
+    log.info "Note: sex can be XX, female or Female, XY, male or Male. If not specified or \"None\" Male is assumed"
     log.info ""
     log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
