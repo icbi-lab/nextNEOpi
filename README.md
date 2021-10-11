@@ -178,6 +178,8 @@ For an example SGE cluster profile, please see ```profiles``` in ```conf/profile
 
 Besides raw reads in **FASTQ** fromated files, input data may also be provided in **BAM** format.
 
+**Note**: Per default DNA sequencing data will be treated as exome sequencing WES data. If whole genome sequencing is used, please specify ```--WES false``` on the command line or set ```WES = false``` in ```params.config```.
+
 **RNA reads from tag seq library i.e. 3-prime end sequencing protocol**
 
 ```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.
