@@ -7118,6 +7118,8 @@ process collectSampleInfo {
 
     label 'nextNEOpiENV'
 
+    tag "$TumorReplicateId"
+
     publishDir "${params.outputDir}/neoantigens/$TumorReplicateId/",
         mode: params.publishDirMode
 
