@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+import org.yaml.snakeyaml.Yaml
+
 log.info ""
 log.info " NEXTFLOW ~  version ${workflow.nextflow.version} ${workflow.nextflow.build}"
 log.info "-------------------------------------------------------------------------"
@@ -127,6 +129,11 @@ setExomeCaptureKit(params.exomeCaptureKit)
 // set and check references and databases
 reference = defineReference()
 database = defineDatabases()
+
+// check conda channels
+if (params.enable_conda) {
+    checkCondaChannels()
+}
 
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
@@ -7341,6 +7348,37 @@ def checkToolAvailable(tool, check, errMode) {
     }
 
     return checkResult
+}
+
+def checkCondaChannels() {
+    Yaml parser = new Yaml()
+    def channels = []
+    try {
+        def config = parser.load("conda config --show channels".execute().text)
+        channels = config.channels
+    } catch(NullPointerException | IOException e) {
+        log.warn "Could not verify conda channel configuration."
+        return
+    }
+
+    // Check that all channels are present
+    def required_channels = ['conda-forge', 'bioconda', 'defaults']
+    def conda_check_failed = !required_channels.every { ch -> ch in channels }
+
+    // Check that they are in the right order
+    conda_check_failed |= !(channels.indexOf('conda-forge') < channels.indexOf('bioconda'))
+    conda_check_failed |= !(channels.indexOf('bioconda') < channels.indexOf('defaults'))
+
+    if (conda_check_failed) {
+        log.warn "=============================================================================\n" +
+            "  There is a problem with your Conda configuration!\n\n" +
+            "  You will need to set-up the conda-forge and bioconda channels correctly.\n" +
+            "  Please refer to https://bioconda.github.io/user/install.html#set-up-channels\n" +
+            "  NB: The order of the channels matters!\n" +
+            "==================================================================================="
+
+        exit 1
+    }
 }
 
 def showLicense() {
