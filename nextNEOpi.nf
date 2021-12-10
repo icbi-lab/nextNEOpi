@@ -6920,8 +6920,7 @@ process immunogenicity_scoring {
         TumorReplicateId,
         file(pvacseq_file)
     ) from MHCI_final_immunogenicity
-    // val(TumorReplicateId) from mhCI_tag_immunogenicity
-    // file pvacseq_file from MHCI_final_immunogenicity
+    file(igs_install_chck_file) from igs_chck_ch
 
     output:
     file("${TumorReplicateId}_Class_I_immunogenicity.tsv")

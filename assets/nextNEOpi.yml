@@ -56,12 +56,7 @@ dependencies:
   - r-gplots
   - r-gsalib
   - r-optparse
-  - r-reshape2
-  - r-caret
-  - r-peptides
-  - r-doparallel
   - r-sequenza
-  - r-gbm
 
   # other python dependencies; these should be removed after functionality is moved into Java code
   - biopython=1.76
