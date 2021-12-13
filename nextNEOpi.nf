@@ -7221,9 +7221,12 @@ process multiQC {
     file("multiqc_report.html")
 
     script:
+    def set_locale = ""
+    if(! params.enable_conda && workflow.containerEngine == 'singularity' ) {
+        set_locale = "export LC_ALL=C.UTF-8; export LC_ALL=C.UTF-8"
+    }
     """
-    export LC_ALL=C.UTF-8
-    export LANG=C.UTF-8
+    ${set_locale}
     multiqc .
     """
 
