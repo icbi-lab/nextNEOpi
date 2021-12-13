@@ -366,7 +366,7 @@ code {
     });
   </script>
 <p><img src="img/nextNEOpi_noBG.png" alt="nextNEOpi overview"></p>
-<h1 id="neoepitope-predictions-nextflow-pipeline">NeoEpitope predictions Nextflow Pipeline</h1>
+<h1 id="nextflow-neoepitope-predictions-pipeline">Nextflow NeoEpitope predictions Pipeline</h1>
 <p>Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from Tumor
 to predict neoepitopes.</p>
 <p>The pipeline uses the following tools:</p>
@@ -509,6 +509,8 @@ its dependencies.</p>
 <p><strong>RNA reads from tag seq library i.e. 3-prime end sequencing protocol</strong></p>
 <p><code>--RNA_tag_seq</code> turns off the &quot;--trna-vaf&quot; and &quot;--trna-cov&quot; filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.</p>
 <p><strong>Mandatory arguments:</strong></p>
+<p><code>-config</code> nextNEOpi config file, e.g. <code>-config conf/params.config</code></p>
+<p><code>--accept_license</code> accept the license terms</p>
 <p><code>--batchFile</code> <em>[recommended]</em></p>
 <p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile_FASTQ.csv</code> or <code>example_batchFile_BAM.csv</code></p>
 <p><strong>FASTQ raw reads</strong></p>

@@ -1,5 +1,5 @@
 ![nextNEOpi overview](img/nextNEOpi_noBG.png)
-# NeoEpitope predictions Nextflow Pipeline
+# Nextflow NeoEpitope predictions Pipeline
 Pipeline takes fastq files from Tumor and Normal samples (WES or WGS) and optionally RNAseq from Tumor
 to predict neoepitopes.
 
@@ -185,6 +185,10 @@ Besides raw reads in **FASTQ** fromated files, input data may also be provided i
 ```--RNA_tag_seq``` turns off the "--trna-vaf" and "--trna-cov" filter from pVACseq epitope filtering. It also turns of HLA typing from RNAseq data. 3-prime end sequencing does not cover the entire transcript.
 
 **Mandatory arguments:**
+
+```-config``` nextNEOpi config file, e.g. `-config conf/params.config`
+
+```--accept_license``` accept the license terms
 
 ```--batchFile``` _[recommended]_
 
