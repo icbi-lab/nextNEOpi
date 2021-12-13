@@ -1,5 +1,7 @@
 #!/usr/bin/env nextflow
 
+import org.yaml.snakeyaml.Yaml
+
 log.info ""
 log.info " NEXTFLOW ~  version ${workflow.nextflow.version} ${workflow.nextflow.build}"
 log.info "-------------------------------------------------------------------------"
@@ -127,6 +129,11 @@ setExomeCaptureKit(params.exomeCaptureKit)
 // set and check references and databases
 reference = defineReference()
 database = defineDatabases()
+
+// check conda channels
+if (params.enable_conda) {
+    checkCondaChannels()
+}
 
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
@@ -2478,6 +2485,34 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
           recalNormalBAM, recalNormalBAI
         )}
 
+// Install GATK 3 from conda and register jar
+if (have_GATK3) {
+    process install_conda_GATK3 {
+        label 'GATK3'
+
+        tag "install GATK3"
+
+        output:
+        path("gatk3_install.ok") into (
+            install_conda_GATK3_ch0,
+            install_conda_GATK3_ch1
+        )
+
+        script:
+        if (params.enable_conda)
+            """
+            curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
+            tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+            gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+            touch gatk3_install.ok
+            """
+        else
+            """
+            touch gatk3_install.ok
+            """
+    }
+}
+
 if (have_GATK3) {
     (
         BaseRecalGATK4_out_Mutect2_ch0,
@@ -3019,6 +3054,7 @@ if (have_GATK3) {
             database.MillsGold,
             database.MillsGoldIdx ]
         )
+        file(gatk3_install_ok) from install_conda_GATK3_ch0
 
         each file(interval) from SplitIntervals_out_ch3.flatten()
 
@@ -4473,6 +4509,7 @@ if(have_GATK3) {
             reference.RefIdx,
             reference.RefDict ]
         )
+        file(gatk3_install_ok) from install_conda_GATK3_ch1
 
         output:
         set (
@@ -6913,8 +6950,7 @@ process immunogenicity_scoring {
         TumorReplicateId,
         file(pvacseq_file)
     ) from MHCI_final_immunogenicity
-    // val(TumorReplicateId) from mhCI_tag_immunogenicity
-    // file pvacseq_file from MHCI_final_immunogenicity
+    file(igs_install_chck_file) from igs_chck_ch
 
     output:
     file("${TumorReplicateId}_Class_I_immunogenicity.tsv")
@@ -7118,6 +7154,8 @@ process collectSampleInfo {
 
     label 'nextNEOpiENV'
 
+    tag "$TumorReplicateId"
+
     publishDir "${params.outputDir}/neoantigens/$TumorReplicateId/",
         mode: params.publishDirMode
 
@@ -7183,9 +7221,12 @@ process multiQC {
     file("multiqc_report.html")
 
     script:
+    def set_locale = ""
+    if(! params.enable_conda && workflow.containerEngine == 'singularity' ) {
+        set_locale = "export LC_ALL=C.UTF-8; export LC_ALL=C.UTF-8"
+    }
     """
-    export LC_ALL=C.UTF-8
-    export LANG=C.UTF-8
+    ${set_locale}
     multiqc .
     """
 
@@ -7339,6 +7380,37 @@ def checkToolAvailable(tool, check, errMode) {
     }
 
     return checkResult
+}
+
+def checkCondaChannels() {
+    Yaml parser = new Yaml()
+    def channels = []
+    try {
+        def config = parser.load("conda config --show channels".execute().text)
+        channels = config.channels
+    } catch(NullPointerException | IOException e) {
+        log.warn "Could not verify conda channel configuration."
+        return
+    }
+
+    // Check that all channels are present
+    def required_channels = ['conda-forge', 'bioconda', 'defaults']
+    def conda_check_failed = !required_channels.every { ch -> ch in channels }
+
+    // Check that they are in the right order
+    conda_check_failed |= !(channels.indexOf('conda-forge') < channels.indexOf('bioconda'))
+    conda_check_failed |= !(channels.indexOf('bioconda') < channels.indexOf('defaults'))
+
+    if (conda_check_failed) {
+        log.warn "=============================================================================\n" +
+            "  There is a problem with your Conda configuration!\n\n" +
+            "  You will need to set-up the conda-forge and bioconda channels correctly.\n" +
+            "  Please refer to https://bioconda.github.io/user/install.html#set-up-channels\n" +
+            "  NB: The order of the channels matters!\n" +
+            "==================================================================================="
+
+        exit 1
+    }
 }
 
 def showLicense() {
