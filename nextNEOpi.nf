@@ -2485,6 +2485,34 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
           recalNormalBAM, recalNormalBAI
         )}
 
+// Install GATK 3 from conda and register jar
+if (have_GATK3) {
+    process install_conda_GATK3 {
+        label 'GATK3'
+
+        tag "install GATK3"
+
+        output:
+        path("gatk3_install.ok") into (
+            install_conda_GATK3_ch0,
+            install_conda_GATK3_ch1
+        )
+
+        script:
+        if (params.enable_conda)
+            """
+            curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
+            tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+            gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
+            touch gatk3_install.ok
+            """
+        else
+            """
+            touch gatk3_install.ok
+            """
+    }
+}
+
 if (have_GATK3) {
     (
         BaseRecalGATK4_out_Mutect2_ch0,
@@ -3026,6 +3054,7 @@ if (have_GATK3) {
             database.MillsGold,
             database.MillsGoldIdx ]
         )
+        file(gatk3_install_ok) from install_conda_GATK3_ch0
 
         each file(interval) from SplitIntervals_out_ch3.flatten()
 
@@ -4480,6 +4509,7 @@ if(have_GATK3) {
             reference.RefIdx,
             reference.RefDict ]
         )
+        file(gatk3_install_ok) from install_conda_GATK3_ch1
 
         output:
         set (
@@ -6920,8 +6950,7 @@ process immunogenicity_scoring {
         TumorReplicateId,
         file(pvacseq_file)
     ) from MHCI_final_immunogenicity
-    // val(TumorReplicateId) from mhCI_tag_immunogenicity
-    // file pvacseq_file from MHCI_final_immunogenicity
+    file(igs_install_chck_file) from igs_chck_ch
 
     output:
     file("${TumorReplicateId}_Class_I_immunogenicity.tsv")
@@ -7192,9 +7221,12 @@ process multiQC {
     file("multiqc_report.html")
 
     script:
+    def set_locale = ""
+    if(! params.enable_conda && workflow.containerEngine == 'singularity' ) {
+        set_locale = "export LC_ALL=C.UTF-8; export LC_ALL=C.UTF-8"
+    }
     """
-    export LC_ALL=C.UTF-8
-    export LANG=C.UTF-8
+    ${set_locale}
     multiqc .
     """
 
