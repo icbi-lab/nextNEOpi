@@ -13,8 +13,7 @@ From: continuumio/miniconda
     conda config --add channels bioconda
     conda config --add channels conda-forge
 
-    conda install icu==58.2
-    conda install r-base=3.6.1
+    conda install r-base=3.6.3
     conda install r-reshape2
     conda install r-caret
     conda install r-peptides
