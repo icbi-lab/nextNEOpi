@@ -6197,11 +6197,14 @@ if (have_RNAseq) {
         output:
         set (
             TumorReplicateId,
-            file("./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_MHCI_filtered.tsv"),
-            file("./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_MHCI_unfiltered.tsv"),
-            file("./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_MHCII_filtered.tsv"),
-            file("./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_MHCII_unfiltered.tsv")
-        ) into Neofuse_results
+            file("./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_NeoFuse_MHCI_filtered.tsv"),
+            file("./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_NeoFuse_MHCI_unfiltered.tsv"),
+            file("./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_NeoFuse_MHCII_filtered.tsv"),
+            file("./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_NeoFuse_MHCII_unfiltered.tsv")
+        ) into (
+            Neofuse_results_ch0,
+            Neofuse_results_ch1
+        )
         set (
             TumorReplicateId,
             file("./${TumorReplicateId}/TPM/${TumorReplicateId}.tpm.txt")
@@ -6215,45 +6218,32 @@ if (have_RNAseq) {
 
 
         script:
-        sv_options = (single_end) ? "" : "-v ${SVvcf}"
-        if(single_end_RNA)
-            """
-            NeoFuse_single -1 ${readRNAFWD} \\
-                -d ${TumorReplicateId} \\
-                -o . \\
-                -m ${params.pepMin_length} \\
-                -M ${params.pepMax_length} \\
-                -n ${task.cpus} \\
-                -t ${params.IC50_Threshold} \\
-                -T ${params.rank} \\
-                -c ${params.conf_lvl} \\
-                -s ${STARidx} \\
-                -g ${RefFasta} \\
-                -a ${AnnoFile} \\
-                -N ${params.netMHCpan} \\
-                -C ${hla_types} \\
-                ${sv_options} \\
-                -k true
-            """
-        else
-            """
-            NeoFuse_single -1 ${readRNAFWD} -2 ${readRNAREV} \\
-                -d ${TumorReplicateId} \\
-                -o . \\
-                -m ${params.pepMin_length} \\
-                -M ${params.pepMax_length} \\
-                -n ${task.cpus} \\
-                -t ${params.IC50_Threshold} \\
-                -T ${params.rank} \\
-                -c ${params.conf_lvl} \\
-                -s ${STARidx} \\
-                -g ${RefFasta} \\
-                -a ${AnnoFile} \\
-                -N ${params.netMHCpan} \\
-                -C ${hla_types} \\
-                ${sv_options} \\
-                -k true
-            """
+        def reads = (single_end) ? "-1 ${readRNAFWD}" : "-1 ${readRNAFWD} -2 ${readRNAREV}"
+        def sv_options = (single_end) ? "" : "-v ${SVvcf}"
+        """
+        NeoFuse_single ${reads} \\
+            -d ${TumorReplicateId} \\
+            -o . \\
+            -m ${params.pepMin_length} \\
+            -M ${params.pepMax_length} \\
+            -n ${task.cpus} \\
+            -t ${params.IC50_Threshold} \\
+            -T ${params.rank} \\
+            -c ${params.conf_lvl} \\
+            -s ${STARidx} \\
+            -g ${RefFasta} \\
+            -a ${AnnoFile} \\
+            -N ${params.netMHCpan} \\
+            -C ${hla_types} \\
+            ${sv_options} \\
+            -k true
+
+        mv ./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_MHCI_filtered.tsv ./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_NeoFuse_MHCI_filtered.tsv
+        mv ./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_MHCI_unfiltered.tsv ./${TumorReplicateId}/NeoFuse/MHC_I/${TumorReplicateId}_NeoFuse_MHCI_unfiltered.tsv
+        mv ./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_MHCII_filtered.tsv ./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_NeoFuse_MHCII_filtered.tsv
+        mv ./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_MHCII_unfiltered.tsv ./${TumorReplicateId}/NeoFuse/MHC_II/${TumorReplicateId}_NeoFuse_MHCII_unfiltered.tsv
+
+        """
     }
 
     process publish_NeoFuse {
@@ -6263,15 +6253,16 @@ if (have_RNAseq) {
         saveAs: {
             fileName ->
                 if(fileName.indexOf("_MHCI_") >= 0) {
-                    targetFile = "Class_I/Fusions/" + fileName.replace("${TumorReplicateId}", "${TumorReplicateId}_NeoFuse")
+                    targetFile = "Class_I/Fusions/" + file(fileName).getName()
                 } else if(fileName.indexOf("_MHCII_") >= 0) {
-                    targetFile = "Class_II/Fusions/" + fileName.replace("${TumorReplicateId}", "${TumorReplicateId}_NeoFuse")
+                    targetFile = "Class_II/Fusions/" + file(fileName).getName()
                 } else {
                     targetFile = fileName
                 }
                 return targetFile
         },
-        mode: "copy"
+        mode: "copy",
+        enabled: params.fullOutput
 
         input:
         set(
@@ -6280,7 +6271,7 @@ if (have_RNAseq) {
             file(MHC_I_unfiltered),
             file(MHC_II_filtered),
             file(MHC_II_unfiltered)
-        ) from Neofuse_results
+        ) from Neofuse_results_ch0
 
         output:
         file(MHC_I_filtered)
@@ -6409,6 +6400,7 @@ if (have_RNAseq) {
 } else { // no RNAseq data
 
     (vcf_vep_ex_gz,  gene_annotator_out_mixMHC2pred_ch0, generate_protein_fasta_tumor_vcf_ch0) = VEPvcf_out_ch2.into(3)
+    Neofuse_results_ch1 = Channel.empty()
 
 }
 
@@ -6812,7 +6804,8 @@ process addCCF {
                 }
                 return "$targetFile"
         },
-        mode: params.publishDirMode
+        mode: params.publishDirMode,
+        enabled: params.fullOutput
 
     input:
     set(
@@ -6830,11 +6823,19 @@ process addCCF {
         .combine(Clonality_out_ch0, by: 0)
 
     output:
-    file(outfile)
+    tuple(
+        TumorReplicateId,
+        val("pVACseq"),
+        val(f_type),
+        val(mhc_class),
+        file(outfile)
+        ) into addCCF_out_ch
     file("INFO.txt") optional true
 
     script:
     outfile = (ascatOK || sequenzaOK) ? epitopes.baseName + "_ccf.tsv" : epitopes
+    f_type = (epitopes.baseName.indexOf("filtered") >= 0) ? "filtered" : "unfiltered"
+    mhc_class = (epitopes.baseName.indexOf("MHCII") >= 0) ? "II" : "I"
     if (ascatOK || sequenzaOK)
         """
         add_CCF.py \\
@@ -6847,6 +6848,148 @@ process addCCF {
         echo "WARNING: neither ASCAT nor Sequenza produced results: clonality information missing" > INFO.txt
         """
 }
+
+// convert channel in to (id, file) tuples
+Neofuse_results_ch1 = Neofuse_results_ch1.map{ it ->
+                                                id = it[0]
+                                                l = []
+                                                for ( f in it[1..-1] ) {
+                                                    f_type = (f.getName().indexOf("unfiltered") >= 0) ? "unfiltered" : "filtered"
+                                                    mhc_class = (f.getName().indexOf("MHCII") >= 0) ? "II" : "I"
+                                                    l.add(tuple(id, "NeoFuse", f_type, mhc_class, f))
+                                                }
+                                                return l
+                                            }
+                                            .flatten()
+                                            .collate(5)
+
+epitopes_fasta_in_ch = addCCF_out_ch.mix(Neofuse_results_ch1)
+(epitopes_fasta_in_ch, epitopes_protein_match_in_ch) = epitopes_fasta_in_ch.into(2)
+
+process make_epitopes_fasta {
+
+    label 'nextNEOpiENV'
+
+    tag "$TumorReplicateId"
+
+    input:
+    set(
+        TumorReplicateId,
+        val(caller),
+        val(f_type),
+        val(mhc_class),
+        file(epitopes)
+    ) from epitopes_fasta_in_ch
+
+    output:
+    tuple(
+        TumorReplicateId,
+        val(caller),
+        val(f_type),
+        val(mhc_class),
+        file(outfile)
+    ) into make_epitopes_fasta_out_ch
+
+    script:
+    outfile = epitopes.baseName + "_epitopes.fasta"
+    """
+    make_peptide_fasta.py \\
+        --epitope_caller ${caller} \\
+        --fasta ${outfile} \\
+        --epitope_file ${epitopes}
+    """
+}
+
+process blast_epitopes {
+
+    label 'Blast'
+
+    tag "$TumorReplicateId"
+
+    input:
+    tuple(
+        TumorReplicateId,
+        val(caller),
+        val(f_type),
+        val(mhc_class),
+        file(epitopes_fasta)
+    ) from make_epitopes_fasta_out_ch
+
+    file(blastdb) from Channel.value(reference.ProteinBlastDBdir)
+
+    output:
+    tuple(
+        TumorReplicateId,
+        val(caller),
+        val(f_type),
+        val(mhc_class),
+        file(outfile)
+    ) into blast_epitopes_out_ch
+
+    script:
+    outfile = epitopes_fasta.baseName + "_blast.tsv"
+    """
+    blastp -task blastp-short \\
+        -db ${blastdb}/${params.references.ProteinBlastDBname} \\
+        -query ${epitopes_fasta} \\
+        -out ${outfile} \\
+        -outfmt "6 qseqid sseqid qlen length nident qseq" \\
+        -num_alignments 5 \\
+        -num_threads ${task.cpus} \\
+        -comp_based_stats 0 \\
+        -ungapped \\
+        -seg no
+    """
+}
+
+process add_blast_hits {
+
+    label 'nextNEOpiENV'
+
+    tag "$TumorReplicateId"
+
+    publishDir "$params.outputDir/neoantigens/$TumorReplicateId/",
+        saveAs: {
+            fileName ->
+                targetFile = fileName
+                if(fileName.indexOf("NeoFuse_MHCI_") >= 0) {
+                    targetFile = "Class_I/Fusions/" + file(fileName).getName()
+                } else if(fileName.indexOf("NeoFuse_MHCII_") >= 0) {
+                    targetFile = "Class_II/Fusions/" + file(fileName).getName()
+                } else if(fileName.indexOf("${TumorReplicateId}_MHCI_") >= 0) {
+                    targetFile = "Class_I/" + file(fileName).getName()
+                } else if(fileName.indexOf("${TumorReplicateId}_MHCII_") >= 0) {
+                    targetFile = "Class_II/" + file(fileName).getName()
+                }
+
+                return "$targetFile"
+        },
+        mode: params.publishDirMode
+
+    input:
+    set(
+        TumorReplicateId,
+        val(caller),
+        val(f_type),
+        val(mhc_class),
+        file(blast_result),
+        file(epitopes)
+    ) from blast_epitopes_out_ch
+        .join(epitopes_protein_match_in_ch, by: [0,1,2,3])
+
+    output:
+    file("*_match_protein.tsv")
+
+    script:
+    outfile = epitopes.baseName + "_epitopes.fasta"
+    """
+    parse_blast_result.py \\
+        --blast_result ${blast_result} \\
+        --epitope_file ${epitopes} \\
+        --epitope_caller ${caller}
+    """
+}
+
 
 /*
   Immunogenicity scoring
@@ -7269,7 +7412,7 @@ def setExomeCaptureKit(captureKit) {
 
 def defineReference() {
     if(params.WES) {
-        if (params.references.size() != 20) exit 1, """
+        if (params.references.size() != 22) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -7293,10 +7436,11 @@ def defineReference() {
             'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
             'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
+            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
         ]
     } else {
-        if (params.references.size() < 18) exit 1, """
+        if (params.references.size() < 20) exit 1, """
         ERROR: Not all References needed found in configuration
         Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
         """
@@ -7319,7 +7463,8 @@ def defineReference() {
             'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
             'acLoci'            : checkParamReturnFileReferences("acLoci"),
             'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC")
+            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
+            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
         ]
     }
 }
