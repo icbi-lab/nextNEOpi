@@ -1,6 +1,8 @@
 Bootstrap: docker
-From: continuumio/miniconda
+From: mambaorg/micromamba
 
+%files
+    rigscore.yml /rigscore.yml
 
 %post
  apt-get update && apt-get install -y \
@@ -9,14 +11,7 @@ From: continuumio/miniconda
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
     export PATH=/opt/conda/bin:$PATH
 
-    conda config --add channels defaults
-    conda config --add channels bioconda
-    conda config --add channels conda-forge
+    micromamba install --yes --name base --file /rigscore.yml
 
-    conda install r-base=3.6.3
-    conda install r-reshape2
-    conda install r-caret
-    conda install r-peptides
-    conda install r-doparallel
-    conda install r-gbm
-    conda install pandas
+    rm -f /rigscore.yml
+
