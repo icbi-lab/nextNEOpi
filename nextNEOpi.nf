@@ -6424,7 +6424,6 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         input:
         val(iedb_MHCI_url) from Channel.value(params.IEDB_MHCI_url)
         val(iedb_MHCII_url) from Channel.value(params.IEDB_MHCII_url)
-        file(mhcflurry_dir) from Channel.value(database.MHCFLURRY_dir)
 
         output:
         file(iedb_chck_file_name) into iedb_install_out_ch
@@ -6435,11 +6434,11 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         """
         cd /opt/iedb/
         wget $iedb_MHCI_url
-        tar -xzvf $mchi_file
+        tar -xzvf $mhci_file
         cd mhc_i
         bash -l -c "./configure"
         cd /opt/iedb/
-        rm -f $mchi_file
+        rm -f $mhci_file
 
         wget $iedb_MHCII_url
         tar -xzvf $mhcii_file
