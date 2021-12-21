@@ -6436,14 +6436,14 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         wget $iedb_MHCI_url
         tar -xzvf $mhci_file
         cd mhc_i
-        bash -l -c "./configure"
+        bash -c "./configure"
         cd /opt/iedb/
         rm -f $mhci_file
 
         wget $iedb_MHCII_url
         tar -xzvf $mhcii_file
         cd mhc_ii
-        bash -l -c "python ./configure.py"
+        bash -c "python ./configure.py"
         cd /opt/iedb/
         rm $mhcii_file
 
