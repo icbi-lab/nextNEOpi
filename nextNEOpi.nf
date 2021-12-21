@@ -6322,6 +6322,8 @@ if (have_RNAseq) {
 
         tag "$TumorReplicateId"
 
+        label 'pVACtools'
+
         input:
         set(
             TumorReplicateId,
@@ -6404,6 +6406,60 @@ if (have_RNAseq) {
 
 }
 
+
+// IEDB installation
+iedb_chck_file_name = ".iedb_install_ok.chck"
+iedb_chck_file = file(params.databases.IEDB_dir + "/" + iedb_chck_file_name)
+
+if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
+
+    log.warn "WARNING: IEDB yet not installed, starting installation. This may take a while..."
+
+    process install_IEDB {
+
+        tag "Install IEDB"
+
+        label 'pVACtools'
+
+        input:
+        val(iedb_MHCI_url) from Channel.value(params.IEDB_MHCI_url)
+        val(iedb_MHCII_url) from Channel.value(params.IEDB_MHCII_url)
+        file(mhcflurry_dir) from Channel.value(database.MHCFLURRY_dir)
+
+        output:
+        file(iedb_chck_file_name) into iedb_install_out_ch
+
+        script:
+        mhci_file = iedb_MHCI_url.split("/")[-1]
+        mhcii_file = iedb_MHCII_url.split("/")[-1]
+        """
+        cd /opt/iedb/
+        wget $iedb_MHCI_url
+        tar -xzvf $mchi_file
+        cd mhc_i
+        bash -l -c "./configure"
+        cd /opt/iedb/
+        rm -f $mchi_file
+
+        wget $iedb_MHCII_url
+        tar -xzvf $mhcii_file
+        cd mhc_ii
+        bash -l -c "python ./configure.py"
+        cd /opt/iedb/
+        rm $mhcii_file
+
+        export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
+        mhcflurry-downloads fetch
+
+        echo "OK" > ${iedb_chck_file_name}
+        """
+    }
+} else {
+
+    iedb_install_out_ch = Channel.fromPath(iedb_chck_file)
+
+}
+
 /*
 Run pVACseq
 */
@@ -6411,6 +6467,8 @@ Run pVACseq
 process 'pVACseq' {
 
     tag "$TumorReplicateId"
+
+    label 'pVACtools'
 
     input:
     set(
@@ -6424,6 +6482,8 @@ process 'pVACseq' {
     ) from mkPhasedVCF_out_pVACseq_ch0
         .combine(vcf_vep_ex_gz, by: [0,1])
         .combine(hlas.splitText(), by: 0)
+
+    file(iedb_install_ok) from iedb_install_out_ch
 
     output:
     set(
@@ -6597,6 +6657,8 @@ process aggregated_reports {
 process 'pVACtools_generate_protein_seq' {
 
     tag "$TumorReplicateId"
+
+    label 'pVACtools'
 
     publishDir "$params.outputDir/analyses/$TumorReplicateId/06_proteinseq/",
     mode: params.publishDirMode,
@@ -7470,7 +7532,7 @@ def defineReference() {
 }
 
 def defineDatabases() {
-    if (params.databases.size() < 15) exit 1, """
+    if (params.databases.size() < 16) exit 1, """
     ERROR: Not all Databases needed found in configuration
     Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
     """
@@ -7489,7 +7551,9 @@ def defineDatabases() {
         'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
         'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
         'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx"),
-        'vep_cache'      : params.databases.vep_cache
+        'vep_cache'      : params.databases.vep_cache,
+        'iedb_dir'       : checkParamReturnFileDatabases("IEDB_dir"),
+        'mhcflurry_dir'  : checkParamReturnFileDatabases("MHCFLURRY_dir"),
     ]
 }
 
