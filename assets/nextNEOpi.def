@@ -24,3 +24,7 @@ From: mambaorg/micromamba
 
     apt-get clean
     micromamba clean --all --yes
+
+%environment
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
+    export PATH=/opt/conda/bin:$PATH
