@@ -6419,6 +6419,9 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
 
         tag "Install IEDB"
 
+        publishDir "${params.databases.IEDB_dir}",
+            mode: "copy"
+
         label 'pVACtools'
 
         input:
@@ -6426,12 +6429,13 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         val(iedb_MHCII_url) from Channel.value(params.IEDB_MHCII_url)
 
         output:
-        file(iedb_chck_file_name) into iedb_install_out_ch
+        file("${iedb_chck_file_name}") into iedb_install_out_ch
 
         script:
         mhci_file = iedb_MHCI_url.split("/")[-1]
         mhcii_file = iedb_MHCII_url.split("/")[-1]
         """
+        CWD=`pwd`
         cd /opt/iedb/
         wget $iedb_MHCI_url
         tar -xzvf $mhci_file
@@ -6450,6 +6454,7 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
         mhcflurry-downloads fetch
 
+        cd \$CWD
         echo "OK" > ${iedb_chck_file_name}
         """
     }
@@ -6477,12 +6482,12 @@ process 'pVACseq' {
         file(vep_phased_vcf_gz_tbi),
         file(anno_vcf),
         file(anno_vcf_tbi),
-        val(hla_types)
+        val(hla_types),
+        file(iedb_install_ok)
     ) from mkPhasedVCF_out_pVACseq_ch0
         .combine(vcf_vep_ex_gz, by: [0,1])
         .combine(hlas.splitText(), by: 0)
-
-    file(iedb_install_ok) from iedb_install_out_ch
+        .combine(iedb_install_out_ch)
 
     output:
     set(
@@ -6623,6 +6628,8 @@ process concat_mhcII_files {
 process aggregated_reports {
 
     tag "$TumorReplicateId"
+
+    label 'pVACtools'
 
     publishDir "$params.outputDir/analyses/$TumorReplicateId/12_pVACseq/",
         mode: params.publishDirMode
