@@ -288,11 +288,9 @@ if (batchCSV.size() > 0) {
     exit 1, "Error: No samples found, please check your batchFile"
 }
 
-def raw_DNA_data = []
-def raw_RNA_data = []
+def raw_data = []
 def custom_HLA_data = []
 
-def hla_map = [:]
 def t_map = [:]
 def n_map = [:]
 def r_map = [:]
@@ -334,10 +332,9 @@ for ( row in batchCSV ) {
     }
 
     if (row.HLAfile) {
-        if (hla_map[meta.sampleName] == null) {
             custom_HLA_data.add([meta, file(row.HLAfile, checkIfExists: true)])
-            hla_map[meta.sampleName] = true
-        }
+    } else {
+        custom_HLA_data.add([meta, []])
     }
 
     if (row.sampleType == "tumor_RNA") {
@@ -347,7 +344,7 @@ for ( row in batchCSV ) {
 
 
     if (! row.bam) {
-        def meta.libType = "SE"
+        meta.libType = "SE"
         if (row.reads1) { reads.add(file(row.reads1, checkIfExists: true)) }
         if (row.reads2) {
             reads.add(file(row.reads2, checkIfExists: true))
@@ -403,7 +400,7 @@ custom_HLA_data = custom_HLA_data.each {
 //batch_raw_DNA_data_ch = Channel.fromList(raw_DNA_data)
 //batch_raw_RNA_data_ch = Channel.fromList(raw_RNA_data)
 batch_raw_data_ch = Channel.fromList(raw_data)
-batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data)
+batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data.unique())
 
 if (bamInput == false) {
     batch_raw_data_ch.map {
@@ -570,7 +567,7 @@ if(bamInput) {
         )
 
         script:
-        def prefix = meta.sampleName + "_" + meta.sampleType
+        prefix = meta.sampleName + "_" + meta.sampleType
         meta.libType = libType
         if (libType == "PE")
             """
@@ -840,12 +837,10 @@ process 'IntervalListToBed' {
         mode: params.publishDirMode
 
     input:
-        path(paddedIntervalList) from preprocessIntervalList_out_ch1
+    path(paddedIntervalList) from preprocessIntervalList_out_ch1
 
     output:
-    tuple(
-        path("${paddedIntervalList.baseName}.{bed.gz,bed.gz.tbi}")
-    ) into (
+    path("${paddedIntervalList.baseName}.{bed.gz,bed.gz.tbi}") into (
         RegionsBedToTabix_out_ch0,
         RegionsBedToTabix_out_ch1
     )
@@ -875,7 +870,7 @@ process 'ScatteredIntervalListToBed' {
     input:
     tuple(
         val(IntervalName),
-        path(IntervalsList)
+        file(IntervalsList)
     ) from SplitIntervals_out_ch0_Name
         .combine(
             SplitIntervals_out_ch0.flatten()
@@ -905,7 +900,7 @@ process FastQC {
 
     tag "$meta.sampleName : $meta.sampleType"
 
-    publishDir "${params.outputDir}/analyses/${meta.sampleName}}/QC/fastqc",
+    publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
         mode: params.publishDirMode,
         saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
@@ -915,7 +910,7 @@ process FastQC {
 
 
     output:
-    tuple val(meta), path("*_fastqc*") into ch_fastqc // multiQC
+    tuple val(meta), path("*_fastqc.zip") into ch_fastqc // multiQC
 
     script:
     def reads_R1_ext = (reads[0].getExtension() == "gz") ? "fastq.gz" : reads[0].getExtension()
@@ -923,7 +918,7 @@ process FastQC {
 
     // do we have PE reads?
     def reads_R2 = "_missing_"
-    if(reads.size() > 1) {
+    if(meta.libType == "PE") {
         def reads_R2_ext = (reads[1].getExtension() == "gz") ? "fastq.gz" : reads[1].getExtension()
         reads_R2     = meta.sampleName + "_" + meta.sampleType + "_R2." + reads_R2_ext
     }
@@ -995,7 +990,7 @@ if (params.trim_adapters) {
         // do we have PE reads?
         def reads_R2         = ""
         def trimmed_reads_R2 = ""
-        if(reads.size() > 1) {
+        if(meta.libType == "PE") {
             reads_R2          = "--in2 " + reads[1]
             trimmed_reads_R2  = "--out2 " + meta.sampleName + "_" + meta.sampleType + "_trimmed_R2.fastq.gz"
         }
@@ -1036,7 +1031,7 @@ if (params.trim_adapters) {
 
         tag "$meta.sampleName : $meta.sampleType"
 
-        publishDir "${params.outputDir}/analyses/${meta.sampleName}}/QC/fastqc",
+        publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
             mode: params.publishDirMode,
             saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
@@ -1046,11 +1041,11 @@ if (params.trim_adapters) {
 
 
         output:
-        tuple val(meta), path("*_fastqc*") into ch_fastqc_trimmed // multiQC
+        tuple val(meta), path("*_fastqc.zip") into ch_fastqc_trimmed // multiQC
 
         script:
         def reads_R1 = reads[0]
-        def reads_R2 = (reads.size() > 1) ? reads[1] : ""
+        def reads_R2 = (meta.libType == "PE") ? reads[1] : ""
         """
         fastqc --quiet --threads ${task.cpus} \\
             ${reads_R1} ${reads_R2}
@@ -1128,6 +1123,8 @@ reads_ch.branch {
 (reads_BAM_ch, reads_uBAM_ch, reads_mixcr_DNA_ch) = reads_ch.DNA.into(3)
 (reads_tumor_optitype_ch, reads_tumor_hlahd_RNA_ch, reads_tumor_neofuse_ch, reads_tumor_mixcr_RNA_ch) = reads_ch.RNA.into(4)
 
+reads_mixcr_ch = reads_mixcr_DNA_ch.mix(reads_tumor_mixcr_RNA_ch)
+
 /* TODO: REM
 reads_mixcr_DNA_ch.branch {
     tumor:  it[0].sampleType == "tumor_DNA"
@@ -1158,10 +1155,10 @@ process 'make_uBAM' {
     tuple val(meta), path(ubam) into uBAM_out_ch0
 
     script:
-    def ubam = meta.sampleName + "_" + meta.sampleType + "_unaligned.bam"
-    def procSampleName = meta.sampleName + "_" + meta.sampleType
+    ubam = meta.sampleName + "_" + meta.sampleType + "_unaligned.bam"
+    def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
     def reads_in = "-F1 " + reads[0]
-    reads_in += (reads.size() > 1) ? " -F2 " + reads[1] : ""
+    reads_in += (meta.libType == "PE") ? " -F2 " + reads[1] : ""
     def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
     """
@@ -1170,9 +1167,9 @@ process 'make_uBAM' {
         --TMP_DIR ${tmpDir} \\
         --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} \\
         ${reads_in} \\
-        --READ_GROUP_NAME ${procSampleName} \\
-        --SAMPLE_NAME ${procSampleName} \\
-        --LIBRARY_NAME ${procSampleName} \\
+        --READ_GROUP_NAME ${read_group} \\
+        --SAMPLE_NAME ${read_group} \\
+        --LIBRARY_NAME ${read_group} \\
         --PLATFORM ILLUMINA \\
         -O ${ubam}
     """
@@ -1217,13 +1214,13 @@ process 'Bwa' {
     tuple val(meta), path(bam) into BWA_out_ch0
 
     script:
-    def bam = meta.sampleName + "_" + meta.sampleType + "_aligned.bam"
-    def procSampleName = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
+    bam = meta.sampleName + "_" + meta.sampleType + "_aligned.bam"
+    def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
 
     def sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
     """
     bwa mem \\
-        -R "@RG\\tID:${procSampleName}\\tLB:${procSampleName}\\tSM:${procSampleName}\\tPL:ILLUMINA" \\
+        -R "@RG\\tID:${read_group}\\tLB:${read_group}\\tSM:${read_group}\\tPL:ILLUMINA" \\
         -M ${RefFasta} \\
         -t ${task.cpus} \\
         -Y \\
@@ -1270,8 +1267,8 @@ process 'merge_uBAM_BAM' {
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
 
-    paired_run = (meta.libType == 'SE') ? 'false' : 'true'
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def paired_run = (meta.libType == 'SE') ? 'false' : 'true'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -1293,8 +1290,8 @@ process 'merge_uBAM_BAM' {
         --UNMAPPED_READ_STRATEGY COPY_TO_TAG \\
         --ALIGNER_PROPER_PAIR_FLAGS true \\
         --UNMAP_CONTAMINANT_READS true \\
-        --ALIGNED_BAM ${BAM} \\
-        --UNMAPPED_BAM ${uBAM} \\
+        --ALIGNED_BAM ${bam} \\
+        --UNMAPPED_BAM ${ubam} \\
         --OUTPUT ${procSampleName}_aligned_uBAM_merged.bam
     """
 }
@@ -1326,7 +1323,7 @@ process 'MarkDuplicates' {
     output:
     tuple(
         val(meta),
-        path("${procSampleName}_aligned_sort_mkdp.{bam,bai}")
+        path(bam_out)
     ) into (
         MarkDuplicates_out_ch0,
         MarkDuplicates_out_ch1,
@@ -1336,8 +1333,8 @@ process 'MarkDuplicates' {
     )
 
     script:
-    procSampleName = meta.sampleName + "_" + meta.sampleType
-
+    def procSampleName = meta.sampleName + "_" + meta.sampleType
+    bam_out = [procSampleName + "_aligned_sort_mkdp.bam", procSampleName + "_aligned_sort_mkdp.bai"]
     """
     mkdir -p ${tmpDir}
     sambamba markdup \\
@@ -1374,8 +1371,11 @@ process 'MarkDuplicates' {
 
 // spilt T/N and remove differing/unused info from meta for joining
 // this prepares T/N channel for CNVkit
+
+// TODO: cleanup this
 MarkDuplicates_out_ch4.branch {
-        meta, bam ->
+        meta_ori, bam ->
+            def meta = meta_ori.clone()
             tumor : meta.sampleType == "tumor_DNA"
                 meta.remove('sampleType')
                 return [meta, bam]
@@ -1386,7 +1386,6 @@ MarkDuplicates_out_ch4.branch {
 }.set{ MarkDuplicates_out_ch4 }
 
 MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_ch4.tumor.join(MarkDuplicates_out_ch4.normal, by:[0])
-
 
 if(params.WES) {
     // Generate HS metrics using picard
@@ -1418,13 +1417,13 @@ if(params.WES) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
         """
         mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} CollectHsMetrics \\
             --TMP_DIR ${tmpDir} \\
-            --INPUT ${bam} \\
+            --INPUT ${bam[0]} \\
             --OUTPUT ${procSampleName}.HS.metrics.txt \\
             -R ${RefFasta} \\
             --BAIT_INTERVALS ${BaitIntervalsList} \\
@@ -1432,10 +1431,10 @@ if(params.WES) {
             --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
         gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
             --TMP_DIR ${tmpDir} \\
-            --INPUT ${bam} \\
+            --INPUT ${bam[0]} \\
             --OUTPUT ${procSampleName}.AS.metrics.txt \\
             -R ${RefFasta} &&
-        samtools flagstat -@${task.cpus} ${bam} > ${procSampleName}.flagstat.txt
+        samtools flagstat -@${task.cpus} ${bam[0]} > ${procSampleName}.flagstat.txt
         """
     }
 } else {
@@ -1498,12 +1497,11 @@ process 'scatterBaseRecalGATK4' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
-
     """
     mkdir -p ${tmpDir}
     gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
         --tmp-dir ${tmpDir} \\
-        -I ${bam} \\
+        -I ${bam[0]} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
         -O ${procSampleName}_${intervals}_bqsr.table \\
@@ -1592,18 +1590,20 @@ process 'scatterGATK4applyBQSRS' {
     output:
     tuple(
         val(meta),
-        path("${procSampleName}_${intervals}_recal4.{bam,bai}")
+        path(bam_out)
     ) into scatterGATK4applyBQSRS_out_GatherRecalBamFiles_ch0
 
 
     script:
-    procSampleName = meta.sampleName + "_" + meta.sampleType
+    def procSampleName = meta.sampleName + "_" + meta.sampleType
+    bam_out = [ procSampleName + "_" + intervals + "_recal4.bam",
+                procSampleName + "_" + intervals + "_recal4.bai"]
     """
     mkdir -p ${tmpDir}
     gatk ApplyBQSR \\
         --java-options ${params.JAVA_Xmx} \\
         --tmp-dir ${tmpDir} \\
-        -I ${bam} \\
+        -I ${bam[0]} \\
         -R ${RefFasta} \\
         -L ${intervals} \\
         -O ${procSampleName}_${intervals}_recal4.bam \\
@@ -1623,9 +1623,10 @@ process 'GatherRecalBamFiles' {
     input:
     tuple(
         val(meta),
-        path(bam)
+        path(bam),
+        path(bai)
     ) from scatterGATK4applyBQSRS_out_GatherRecalBamFiles_ch0
-        .toSortedList({a, b -> a[1].baseName <=> b[1].baseName})
+        .toSortedList({a, b -> a[1][0].baseName <=> b[1][0].baseName})
         .flatten()
         .collate(3)
         .groupTuple(by: [0])
@@ -1642,7 +1643,7 @@ process 'GatherRecalBamFiles' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -1703,7 +1704,7 @@ process 'GetPileup' {
 
     gatk GetPileupSummaries \\
         --tmp-dir ${tmpDir} \\
-        -I ${bam} \\
+        -I ${bam[0]} \\
         -O ${procSampleName}_pileup.table \\
         -L ${IntervalsList} \\
         --variant ${GnomAD}
@@ -1743,20 +1744,25 @@ BaseRecalGATK4_out = BaseRecalGATK4_out
 //// end REM
 
 // NEW
+
+// TODO: cleanup this
+
 (BaseRecalNormal_out_ch0, BaseRecalGATK4_out) = BaseRecalGATK4_out_ch1.into(2)
 
 BaseRecalNormal_out_ch0.filter {
                                 it[0].sampleType == "normal_DNA"
                             }
                             .map {
-                                meta, bam ->
+                                meta_ori, bam ->
+                                    def meta = meta_ori.clone()
                                     meta.remove('sampleType')
                                     return [meta, bam]
                             }
                             .set { BaseRecalNormal_out_ch0 }
 
 BaseRecalGATK4_out.branch {
-        meta, bam ->
+        meta_ori, bam ->
+            def meta = meta_ori.clone()
             tumor : meta.sampleType == "tumor_DNA"
                 meta.remove('sampleType')
                 return [meta, bam]
@@ -1862,7 +1868,8 @@ process 'Mutect2' {
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}_${intervals}.{vcf.gz,vcf.gz.tbi}"),
+        path("${meta.sampleName}_${intervals}.vcf.gz"),
+        path("${meta.sampleName}_${intervals}.vcf.gz.tbi"),
         path("${meta.sampleName}_${intervals}.vcf.gz.stats"),
         path("${meta.sampleName}_${intervals}-f1r2.tar.gz")
     ) into Mutect2_out_ch0
@@ -1882,8 +1889,8 @@ process 'Mutect2' {
     gatk Mutect2 \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
-        -I ${Tumorbam} -tumor ${tumorName} \\
-        -I ${Normalbam} -normal ${normalName} \\
+        -I ${Tumorbam[0]} -tumor ${tumorName} \\
+        -I ${Normalbam[0]} -normal ${normalName} \\
         --germline-resource ${gnomADfull} \\
         ${panel_of_normals} \\
         -L ${intervals} \\
@@ -1918,6 +1925,7 @@ process 'gatherMutect2VCFs' {
     tuple(
         val(meta),
         path(vcf),
+        path(tbi),
         path(stats),
         path(f1r2_tar_gz)
     ) from Mutect2_out_ch0
@@ -1933,7 +1941,7 @@ process 'gatherMutect2VCFs' {
     ) into gatherMutect2VCFs_out_ch0
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -1972,8 +1980,10 @@ GetPileup_out = GetPileup_out
 */
 /// END REM
 
+// TODO: cleanup this
 GetPileup_out_ch0.branch {
-        meta, pileup ->
+        meta_ori, pileup ->
+            def meta = meta_ori.clone()
             tumor : meta.sampleType == "tumor_DNA"
                 meta.remove('sampleType')
                 return [meta, pileup]
@@ -1984,8 +1994,6 @@ GetPileup_out_ch0.branch {
 }.set{ GetPileup_out }
 
 GetPileup_out = GetPileup_out.tumor.join(GetPileup_out.normal, by: [0])
-
-
 
 /*
 CalculateContamination (GATK4): calculate fraction of reads coming from
@@ -2047,7 +2055,7 @@ process 'FilterMutect2' {
     gatk FilterMutectCalls \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
-        -V ${vcf} \\
+        -V ${vcf[0]} \\
         --contamination-table ${meta.sampleName}_cont.table \\
         --ob-priors ${f1r2_tar_gz} \\
         -O ${meta.sampleName}_oncefiltered.vcf.gz && \\
@@ -2118,7 +2126,7 @@ process 'HaploTypeCaller' {
     gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
-        -I ${Normalbam} \\
+        -I ${Normalbam[0]} \\
         -L ${intervals} \\
         --native-pair-hmm-threads ${task.cpus} \\
         --dbsnp ${DBSNP} \\
@@ -2161,7 +2169,8 @@ process 'CNNScoreVariants' {
     output:
     tuple(
         val(meta),
-        path("${raw_germline_vcf.baseName}_CNNScored.{vcf.gz,vcf.gz.tbi}")
+        path("${raw_germline_vcf[0].baseName}_CNNScored.vcf.gz"),
+        path("${raw_germline_vcf[0].baseName}_CNNScored.vcf.gz.tbi")
     ) into CNNScoreVariants_out_ch0
 
 
@@ -2172,14 +2181,14 @@ process 'CNNScoreVariants' {
     gatk CNNScoreVariants \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
-        -I ${Normalbam} \\
-        -V ${raw_germline_vcf} \\
+        -I ${Normalbam[0]} \\
+        -V ${raw_germline_vcf[0]} \\
         -tensor-type read_tensor \\
         --inter-op-threads ${task.cpus} \\
         --intra-op-threads ${task.cpus} \\
         --transfer-batch-size ${params.transferBatchSize} \\
         --inference-batch-size ${params.inferenceBatchSize} \\
-        -O ${raw_germline_vcf.baseName}_CNNScored.vcf.gz
+        -O ${raw_germline_vcf[0].baseName}_CNNScored.vcf.gz
     """
 }
 
@@ -2197,7 +2206,8 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     input:
     tuple(
         val(meta),
-        path(filtered_germline_vcf)
+        path(filtered_germline_vcf),
+        path(filtered_germline_vcf_tbi)
     ) from CNNScoreVariants_out_ch0
         .groupTuple(by: [0])
 
@@ -2208,7 +2218,7 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     ) into MergeHaploTypeCallerGermlineVCF_out_ch0
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2257,7 +2267,7 @@ process 'FilterGermlineVariantTranches' {
     output:
     tuple(
         val(meta),
-        path("${scored_germline_vcf.simpleName}_Filtered.{vcf.gz,vcf.gz.tbi}")
+        path("${scored_germline_vcf[0].simpleName}_Filtered.{vcf.gz,vcf.gz.tbi}")
     ) into FilterGermlineVariantTranches_out_ch0
 
 
@@ -2267,7 +2277,7 @@ process 'FilterGermlineVariantTranches' {
 
     gatk FilterVariantTranches \\
         --tmp-dir ${tmpDir} \\
-        -V ${scored_germline_vcf} \\
+        -V ${scored_germline_vcf[0]} \\
         --resource ${hcSNPS1000G} \\
         --resource ${HapMap} \\
         --resource ${MillsGold} \\
@@ -2275,7 +2285,7 @@ process 'FilterGermlineVariantTranches' {
         --snp-tranche 99.95 \\
         --indel-tranche 99.4 \\
         --invalidate-previous-filters \\
-        -O ${scored_germline_vcf.simpleName}_Filtered.vcf.gz
+        -O ${scored_germline_vcf[0].simpleName}_Filtered.vcf.gz
     """
 }
 
@@ -2332,11 +2342,14 @@ if (have_GATK3) {
         output:
         tuple(
             val(meta),
-            path("${procSampleName}_recalibrated_realign_${interval}.{bam,bai}")
+            path(bam_out)
         ) into IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
 
         script:
-        procSampleName = meta.sampleName + "_" + meta.sampleType
+        def procSampleName = meta.sampleName + "_" + meta.sampleType
+        bam_out = [ procSampleName + "_recalibrated_realign_" + interval + ".bam",
+                    procSampleName + "_recalibrated_realign_" + interval + ".bai"]
+
         """
         mkdir -p ${tmpDir}
 
@@ -2346,14 +2359,14 @@ if (have_GATK3) {
             --known ${KnownIndels} \\
             -R ${RefFasta} \\
             -L ${interval} \\
-            -I ${bam} \\
+            -I ${bam[0]} \\
             -o ${interval}_target.list \\
             -nt ${task.cpus} && \\
         $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T IndelRealigner \\
             -R ${RefFasta} \\
             -L ${interval} \\
-            -I ${bam} \\
+            -I ${bam[0]} \\
             -targetIntervals ${interval}_target.list \\
             -known ${KnownIndels} \\
             -known ${MillsGold} \\
@@ -2374,9 +2387,10 @@ if (have_GATK3) {
         input:
         tuple(
             val(meta),
-            path(bam)
+            path(bam),
+            path(bai)
         ) from IndelRealignerIntervals_out_GatherRealignedBamFiles_ch0
-            .toSortedList({a, b -> a[1].baseName <=> b[1].baseName})
+            .toSortedList({a, b -> a[1][0].baseName <=> b[1][0].baseName})
             .flatten()
             .collate(3)
             .groupTuple(by: [0])
@@ -2389,7 +2403,7 @@ if (have_GATK3) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
         mkdir -p ${tmpDir}
 
@@ -2466,9 +2480,10 @@ if (have_GATK3) {
 
 // NEW
 
-
+// TODO: cleanup this
     GatherRealignedBamFiles_out_ch.branch {
-            meta, bam ->
+            meta_ori, bam ->
+                def meta = meta_ori.clone()
                 tumor : meta.sampleType == "tumor_DNA"
                     meta.remove('sampleType')
                     return [meta, bam]
@@ -2565,7 +2580,7 @@ process 'VarscanSomaticScattered' {
         -q 1 \\
         -f ${RefFasta} \\
         -l ${intervals} \\
-        ${Normalbam} ${Tumorbam} > ${meta.sampleName}_${intervals}_mpileup.fifo &
+        ${Normalbam[0]} ${Tumorbam[0]} > ${meta.sampleName}_${intervals}_mpileup.fifo &
     varscan ${params.JAVA_Xmx} somatic \\
         ${meta.sampleName}_${intervals}_mpileup.fifo \\
         ${meta.sampleName}_${intervals}_varscan_tmp \\
@@ -2632,7 +2647,7 @@ process 'gatherVarscanVCFs' {
     ) into gatherVarscanVCFs_out_ch0
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2752,7 +2767,7 @@ process 'FilterVarscan' {
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}_varscan.snp.Somatic.hc.filtered.vcf")
+        path("${meta.sampleName}_varscan.snp.Somatic.hc.filtered.vcf"),
         path("${meta.sampleName}_varscan.indel.Somatic.hc.filtered.vcf")
     ) into FilterVarscan_out_ch0
 
@@ -2766,7 +2781,7 @@ process 'FilterVarscan' {
         -w1 \\
         -l /dev/stdin \\
         -f ${RefFasta} \\
-        ${bam} | \\
+        ${bam[0]} | \\
     varscan ${params.JAVA_Xmx} fpfilter \\
         ${snpSomaticHc} \\
         /dev/stdin \\
@@ -2778,7 +2793,7 @@ process 'FilterVarscan' {
         -b${params.min_base_q} \\
         -w1 \\
         -l /dev/stdin \\
-        -f ${RefFasta} ${bam} | \\
+        -f ${RefFasta} ${bam[0]} | \\
     varscan ${params.JAVA_Xmx} fpfilter \\
         ${indelSomaticHc} \\
         /dev/stdin \\
@@ -2820,7 +2835,7 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     )
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2905,10 +2920,10 @@ if(have_Mutect1) {
         ) into Mutect1scattered_out_ch0
 
         script:
-        cosmic = ( file(params.databases.Cosmic).exists() &&
-                   file(params.databases.CosmicIdx).exists()
-                 ) ? "--cosmic " + file(params.databases.Cosmic)
-                   : ""
+        def cosmic = ( file(params.databases.Cosmic).exists() &&
+                       file(params.databases.CosmicIdx).exists()
+                     ) ? "--cosmic " + file(params.databases.Cosmic)
+                       : ""
         """
         mkdir -p ${tmpDir}
 
@@ -2918,8 +2933,8 @@ if(have_Mutect1) {
             ${cosmic} \\
             --dbsnp ${DBSNP} \\
             -L ${intervals} \\
-            --input_file:normal ${Normalbam} \\
-            --input_file:tumor ${Tumorbam} \\
+            --input_file:normal ${Normalbam[0]} \\
+            --input_file:tumor ${Tumorbam[0]} \\
             --out ${meta.sampleName}_${intervals}.raw.stats.txt \\
             --vcf ${meta.sampleName}_${intervals}.raw.vcf.gz
         """
@@ -2958,9 +2973,10 @@ if(have_Mutect1) {
         tuple(
             val(meta),
             path(vcf),
+            path(idx),
             path(stats)
         ) from Mutect1scattered_out_ch0
-            .toSortedList({a, b -> a[1].baseName <=> b[1].baseName})
+            .toSortedList({a, b -> a[1][0].baseName <=> b[1][0].baseName})
             .flatten()
             .collate(4)
             .groupTuple(by: [0])
@@ -2972,7 +2988,7 @@ if(have_Mutect1) {
 
         tuple(
             val(meta),
-            val("mutect1")
+            val("mutect1"),
             path("${meta.sampleName}_mutect1_final.{vcf.gz,vcf.gz.tbi}")
         ) into (
             Mutect1_out_ch0,
@@ -2981,13 +2997,13 @@ if(have_Mutect1) {
 
 
         script:
-        java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
         mkdir -p ${tmpDir}
 
         gatk --java-options ${java_opts} MergeVcfs \\
             --TMP_DIR ${tmpDir} \\
-            -I ${vcf.join(" -I ")} \\
+            -I ${vcf[0].join(" -I ")} \\
             -O ${meta.sampleName}_mutect1_raw.vcf.gz
 
         gatk SelectVariants \\
@@ -3046,7 +3062,8 @@ process 'MantaSomaticIndels' {
         val(meta),
         path(Tumorbam),
         path(Normalbam),
-        path(RegionsBedGz)
+        path(RegionsBedGz),
+        path(RegionsBedGzTbi)
     ) from BaseRecalGATK4_out_MantaSomaticIndels_ch0
         .combine(RegionsBedToTabix_out_ch1)
 
@@ -3063,7 +3080,7 @@ process 'MantaSomaticIndels' {
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}_candidateSmallIndels.{vcf.gz,vcg.gz.tbi}")
+        path("${meta.sampleName}_candidateSmallIndels.{vcf.gz,vcf.gz.tbi}")
     ) into MantaSomaticIndels_out_ch0
 
     tuple(
@@ -3077,10 +3094,10 @@ process 'MantaSomaticIndels' {
     meta.libType == "PE"
 
     script:
-    exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
+    def exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
 
     """
-    configManta.py --tumorBam ${Tumorbam} --normalBam  ${Normalbam} \\
+    configManta.py --tumorBam ${Tumorbam[0]} --normalBam  ${Normalbam[0]} \\
         --referenceFasta ${RefFasta} \\
         --runDir manta_${meta.sampleName} ${exome_options}
     manta_${meta.sampleName}/runWorkflow.py -m local -j ${task.cpus}
@@ -3115,14 +3132,14 @@ StrelkaSomatic_in_ch = BaseRecalGATK4_out_StrelkaSomatic_ch0
                         .map {
                             it ->
                             meta       = it[0]
-                            tumor_bam  = [ it[1] ]
-                            normal_bam = [ it[2] ]
+                            tumor_bam  = it[1]
+                            normal_bam = it[2]
 
                             if (it[3] != null) {
-                                manta_indel_vfc = [ it[3] ]
+                                manta_indel_vfc = it[3]
                                 return [meta, tumor_bam, normal_bam, manta_indel_vfc]
                             } else {
-                                it.removeAt(2) // TODO: check this ???
+                                // it.removeAt(2) // TODO: check this ???
                                 return [meta, tumor_bam, normal_bam, []]
                             }
                         }
@@ -3141,9 +3158,10 @@ process StrelkaSomatic {
     tuple(
         val(meta),
         path(tumor_bam),
-        path(Normalbam),
+        path(normal_bam),
         path(manta_indel),
-        path(RegionsBedGz)
+        path(RegionsBedGz),
+        path(RegionsBedGzTbi)
     ) from StrelkaSomatic_in_ch
         .combine(RegionsBedToTabix_out_ch0)
 
@@ -3169,8 +3187,8 @@ process StrelkaSomatic {
     path("${meta.sampleName}_runStats.xml")
 
     script:
-    manta_indel_candidates = (manta_indel == null) ? "" : "--indelCandidates " + manta_indel[0]
-    exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
+    def manta_indel_candidates = (manta_indel == null) ? "" : "--indelCandidates " + manta_indel[0]
+    def exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
 
     """
     configureStrelkaSomaticWorkflow.py --tumorBam ${tumor_bam[0]} --normalBam  ${normal_bam[0]} \\
@@ -3227,13 +3245,13 @@ process 'finalizeStrelkaVCF' {
     path("${meta.sampleName}_strelka_combined_somatic.vcf.gz")
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
 
     gatk --java-options ${java_opts} MergeVcfs \\
         --TMP_DIR ${tmpDir} \\
-        -I ${somatic_snvs} \\
-        -I ${somatic_indels} \\
+        -I ${somatic_snvs[0]} \\
+        -I ${somatic_indels[0]} \\
         -O ${meta.sampleName}_strelka_combined.vcf.gz \\
         --SEQUENCE_DICTIONARY ${RefDict}
 
@@ -3461,6 +3479,7 @@ process 'VepTab' {
         val(meta),
         val(CallerName),
         path(Vcf),
+        path(tbi),
         path(vep_cache_chck_file),
         path(vep_plugin_chck_file)
     ) from FilterMutect2_out_ch0
@@ -3479,7 +3498,7 @@ process 'VepTab' {
 
     script:
     """
-    vep -i ${Vcf} \\
+    vep -i ${Vcf[0]} \\
         -o ${meta.sampleName}_${CallerName}_vep.txt \\
         --fork ${task.cpus} \\
         --stats_file ${meta.sampleName}_${CallerName}_vep_summary.html \\
@@ -3528,6 +3547,7 @@ process 'mkCombinedVCF' {
     tuple(
         val(meta),
         path(germlineVCF),
+        _,
         path(tumorVCF)
     ) from FilterGermlineVariantTranches_out_ch0
         .join(mkHCsomaticVCF_out_ch1, by: [0])          // uses confirmed mutect2 variants
@@ -3540,21 +3560,21 @@ process 'mkCombinedVCF' {
 
 
     script:
-    java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
     gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
-        -V ${tumorVCF} \\
-        --sample-name ${meta.sampleName} \\
+        -V ${tumorVCF[0]} \\
+        --sample-name ${meta.sampleName}_tumor \\
         -O ${meta.sampleName}_tumor.vcf.gz
 
     gatk --java-options ${java_opts} RenameSampleInVcf \\
         --TMP_DIR ${tmpDir} \\
-        -I ${germlineVCF} \\
-        --NEW_SAMPLE_NAME ${meta.sampleName} \\
+        -I ${germlineVCF[0]} \\
+        --NEW_SAMPLE_NAME ${meta.sampleName}_tumor \\
         -O ${meta.sampleName}_germline_rename2tumorID.vcf.gz
 
     gatk --java-options ${java_opts} MergeVcfs \\
@@ -3638,7 +3658,7 @@ process 'VEPvcf' {
     mkdir -p ${tmpDir}
 
     # pVACSeq
-    vep -i ${combinedVCF} \\
+    vep -i ${combinedVCF[0]} \\
         -o ${meta.sampleName}_tumor_germline_combined_sorted_vep_pick.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${meta.sampleName}_tumor_germline_combined_sorted_vep_summary_pick.html \\
@@ -3657,7 +3677,7 @@ process 'VEPvcf' {
         --vcf 2> vep_errors_0.txt
 
     # pVACSeq
-    vep -i ${tumorVCF} \\
+    vep -i ${tumorVCF[0]} \\
         -o ${meta.sampleName}_tumor_vep_pick.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${meta.sampleName}_tumor_vep_summary_pick.html \\
@@ -3675,7 +3695,7 @@ process 'VEPvcf' {
         --vcf 2>> vep_errors_1.txt
 
     # All variants
-    vep -i ${tumorVCF} \\
+    vep -i ${tumorVCF[0]} \\
         -o ${meta.sampleName}_tumor_vep.vcf \\
         --fork ${task.cpus} \\
         --stats_file ${meta.sampleName}_tumor_vep_summary.html \\
@@ -3759,9 +3779,9 @@ if(have_GATK3) {
         $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T ReadBackedPhasing \\
             -R ${RefFasta} \\
-            -I ${tumorBAM} \\
-            -V ${combinedVCF} \\
-            -L ${combinedVCF} \\
+            -I ${tumorBAM[0]} \\
+            -V ${combinedVCF[0]} \\
+            -L ${combinedVCF[0]} \\
             -o ${meta.sampleName}_vep_phased.vcf.gz
         """
     }
@@ -3813,14 +3833,14 @@ process AlleleCounter {
 
 
     script:
-    def outFileName = (meta.sampleType == "tumor_DNA") ? meta.sampleName + "_tumor.alleleCount" : meta.sampleName + "_normal.alleleCount"
+    outFileName = (meta.sampleType == "tumor_DNA") ? meta.sampleName + "_tumor.alleleCount" : meta.sampleName + "_normal.alleleCount"
     def single_end = (meta.libType == "SE") ? "-f 0" : ""
     """
     alleleCounter \\
         -l ${acLoci} \\
         -d \\
         -r ${RefFasta} \\
-        -b ${BAM} \\
+        -b ${BAM[0]} \\
         ${single_end} \\
         -o ${outFileName}
     """
@@ -3844,8 +3864,10 @@ AlleleCounter_out_ch = AlleleCounter_out_ch
         )}
 */
 
+// TODO: cleanup this
 AlleleCounter_out_ch0.branch {
-        meta, countFile ->
+        meta_ori, countFile ->
+            def meta = meta_ori.clone()
             tumor : meta.sampleType == "tumor_DNA"
                 meta.remove('sampleType')
                 return [meta, countFile]
@@ -3856,7 +3878,6 @@ AlleleCounter_out_ch0.branch {
 }.set{ AlleleCounter_out_ch0 }
 
 AlleleCounter_out_ch = AlleleCounter_out_ch0.tumor.join(AlleleCounter_out_ch0.normal, by: [0])
-
 
 // R script from Malin Larssons bitbucket repo:
 // https://bitbucket.org/malinlarsson/somatic_wgs_pipeline
@@ -3883,8 +3904,8 @@ process ConvertAlleleCounts {
         val(meta),
         path("${meta.sampleName}.BAF"),
         path("${meta.sampleName}.LogR"),
-        path("${meta.sampleName}.BAF"),
-        path("${meta.sampleName}.LogR")
+        path("${meta.sampleName}_normal.BAF"),
+        path("${meta.sampleName}_normal.LogR")
     ) into ConvertAlleleCounts_out_ch
 
     script:
@@ -3975,7 +3996,7 @@ if (params.controlFREEC) {
             -q 1 \\
             -f ${RefFasta} \\
             -l ${interval} \\
-            ${BAM} | \\
+            ${BAM[0]} | \\
         bgzip --threads ${task.cpus} -c > ${meta.sampleName}_${meta.sampleType}_${interval}.pileup.gz
         """
 
@@ -4024,8 +4045,10 @@ if (params.controlFREEC) {
     gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
 */
 
+// TODO: clean up this
     gatherMpileups_out_ch0.branch {
-            meta, pileupFile ->
+            meta_ori, pileupFile ->
+                def meta = meta_ori.clone()
                 tumor : meta.sampleType == "tumor_DNA"
                     meta.remove('sampleType')
                     return [meta, pileupFile]
@@ -4036,7 +4059,6 @@ if (params.controlFREEC) {
     }.set{ gatherMpileups_out_ch0 }
 
     gatherMpileups_out_ch0 = gatherMpileups_out_ch0.tumor.join(gatherMpileups_out_ch0.normal, by: [0])
-
 
     // run ControlFREEC : adopted from nfcore sarek
     process 'ControlFREEC' {
@@ -4214,8 +4236,8 @@ process 'SequenzaUtils' {
     sequenza-utils \\
         bam2seqz \\
         --fasta ${RefFasta} \\
-        --tumor ${tumorBAM} \\
-        --normal ${normalBAM} \\
+        --tumor ${tumorBAM[0]} \\
+        --normal ${normalBAM[0]} \\
         -gc ${SequnzaGC} \\
         --chromosome ${chromosome} \\
         | \\
@@ -4352,6 +4374,7 @@ purity_estimate = Ascat_out_Clonality_ch0.join(Sequenza_out_Clonality_ch0, by: [
             fileReader = seqz_purity.newReader()
 
             line = fileReader.readLine()
+            def fields
             if(line) {
                 fields = line.split("\t")
                 if(fields.size() < 3) {
@@ -4451,12 +4474,6 @@ process CNVkit {
     ) into CNVkit_out_ch0
 
     script:
-    sex = meta.sex
-    maleRef = (sex in ["XY", "Male"]) ? "-y" : ""
-    gender = (sex in ["XY", "Male"]) ? "Male" : "Female"
-    method = (params.WES) ? "--method hybrid" : "--method wgs"
-    targets = (params.WES) ? "--targets ${BaitsBed}" : ""
-
     def gender = (meta.sex == "None") ? "" : "--sample-sex " + meta.sex
     def maleRef = (meta.maleRef == "true") ? "-y" : ""
     def method = (params.WES) ? "--method hybrid" : "--method wgs"
@@ -4469,8 +4486,8 @@ process CNVkit {
 
     cnvkit.py \\
         batch \\
-        ${tumorBAM} \\
-        --normal ${normalBAM} \\
+        ${tumorBAM[0]} \\
+        --normal ${normalBAM[0]} \\
         ${method} \\
         ${targets} \\
         --fasta ${RefFasta} \\
@@ -4482,46 +4499,46 @@ process CNVkit {
         --output-dir ./
 
     cnvkit.py segmetrics \\
-        -s ${tumorBAM.baseName}.cn{s,r} \\
+        -s ${tumorBAM[0].baseName}.cn{s,r} \\
         --ci \\
         --pi
 
     cnvkit.py call \\
-        ${tumorBAM.baseName}.cns \\
+        ${tumorBAM[0].baseName}.cns \\
         --filter ci \\
         -m clonal \\
         --purity ${sample_purity} \\
         ${gender} \\
         ${maleRef} \\
-        -o ${tumorBAM.baseName}.call.cns
+        -o ${tumorBAM[0].baseName}.call.cns
 
     cnvkit.py \\
         scatter \\
-        ${tumorBAM.baseName}.cnr \\
-        -s ${tumorBAM.baseName}.cns \\
-        -o ${tumorBAM.baseName}_scatter.png
+        ${tumorBAM[0].baseName}.cnr \\
+        -s ${tumorBAM[0].baseName}.cns \\
+        -o ${tumorBAM[0].baseName}_scatter.png
 
     cnvkit.py \\
         diagram \\
-        ${tumorBAM.baseName}.cnr \\
-        -s ${tumorBAM.baseName}.cns \\
+        ${tumorBAM[0].baseName}.cnr \\
+        -s ${tumorBAM[0].baseName}.cns \\
         ${gender} \\
         ${maleRef} \\
-        -o ${tumorBAM.baseName}_diagram.pdf
+        -o ${tumorBAM[0].baseName}_diagram.pdf
 
     cnvkit.py \\
         breaks \\
-        ${tumorBAM.baseName}.cnr ${tumorBAM.baseName}.cns \\
-        -o ${tumorBAM.baseName}_breaks.tsv
+        ${tumorBAM[0].baseName}.cnr ${tumorBAM[0].baseName}.cns \\
+        -o ${tumorBAM[0].baseName}_breaks.tsv
 
     cnvkit.py \\
         genemetrics \\
-        ${tumorBAM.baseName}.cnr \\
-        -s ${tumorBAM.baseName}.cns \\
+        ${tumorBAM[0].baseName}.cnr \\
+        -s ${tumorBAM[0].baseName}.cns \\
         ${gender} \\
         ${maleRef} \\
         -t 0.2 -m 5 \\
-        -o ${tumorBAM.baseName}_gainloss.tsv
+        -o ${tumorBAM[0].baseName}_gainloss.tsv
 
     # run PDF to PNG conversion if mogrify and gs is installed
     mogrify -version > /dev/null 2>&1 && \\
@@ -4563,7 +4580,7 @@ clonality_input = Ascat_out_Clonality_ch1.join(Sequenza_out_Clonality_ch1, by: [
 
         fileReader = ascat_CNVs.newReader()
 
-        def fields = ""
+        def fields
         line = fileReader.readLine()
         fileReader.close()
         if(line) {
@@ -4662,8 +4679,8 @@ process 'Clonality' {
     if (ascatOK || sequenzaOK)
         """
         mkCCF_input.py \\
-            --PatientID ${meta.sampleName} \\
-            --vcf ${hc_vep_vcf} \\
+            --PatientID ${meta.sampleName}_tumor \\
+            --vcf ${hc_vep_vcf[0]} \\
             ${seg_opt} \\
             ${purity_opt} \\
             --min_vaf 0.01 \\
@@ -4690,7 +4707,7 @@ process 'MutationalBurden' {
         mode: params.publishDirMode
 
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
-    maxRetries 5
+    maxRetries 3
 
     cache 'lenient'
 
@@ -4723,9 +4740,9 @@ process 'MutationalBurden' {
     }
     """
     mutationalLoad.py \\
-        --normal_bam ${Normalbam} \\
-        --tumor_bam ${Tumorbam} \\
-        --vcf ${vep_somatic_vcf_gz} \\
+        --normal_bam ${Normalbam[0]} \\
+        --tumor_bam ${Tumorbam[0]} \\
+        --vcf ${vep_somatic_vcf_gz[0]} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
         ${ccf_opts} \\
@@ -4745,7 +4762,7 @@ process 'MutationalBurdenCoding' {
         mode: params.publishDirMode
 
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
-    maxRetries 5
+    maxRetries 3
 
     cache 'lenient'
 
@@ -4779,9 +4796,9 @@ process 'MutationalBurdenCoding' {
     }
     """
     mutationalLoad.py \\
-        --normal_bam ${Normalbam} \\
-        --tumor_bam ${Tumorbam} \\
-        --vcf ${vep_somatic_vcf_gz} \\
+        --normal_bam ${Normalbam[0]} \\
+        --tumor_bam ${Tumorbam[0]} \\
+        --vcf ${vep_somatic_vcf_gz[0]} \\
         --min_coverage 5 \\
         --min_BQ 20 \\
         --bed ${exons} \\
@@ -4840,7 +4857,7 @@ process 'mhc_extract' {
         exit 1, "MHC region not found for genome version: ${params.HLA_HD_genome_version}"
     }
 
-    def prefix = meta.sampleName + "_reads_mhc"
+    prefix = meta.sampleName + "_reads_mhc"
 
     if(meta.libType == "SE")
         """
@@ -4849,8 +4866,8 @@ process 'mhc_extract' {
         mkfifo mhc_mapped_bam
         mkfifo R.fastq
 
-        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp[0]} > unmapped_bam &
+        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp[0]} ${mhc_region} > mhc_mapped_bam &
 
         samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
             samtools sort -@4 -n - | \\
@@ -4870,8 +4887,8 @@ process 'mhc_extract' {
         mkfifo R1.fastq
         mkfifo R2.fastq
 
-        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp} > unmapped_bam &
-        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp} ${mhc_region} > mhc_mapped_bam &
+        samtools  view -@4 -h -b -u -f 4 ${tumor_BAM_aligned_sort_mkdp[0]} > unmapped_bam &
+        samtools  view -@4 -h -b -u ${tumor_BAM_aligned_sort_mkdp[0]} ${mhc_region} > mhc_mapped_bam &
 
         samtools merge -@4 -u - mhc_mapped_bam unmapped_bam | \\
             samtools sort -@4 -n - | \\
@@ -4928,6 +4945,8 @@ if (run_OptiType) {
         ) into fished_reads
 
         script:
+        def yara_cpus = task.cpus
+        def samtools_cpus = 1
         if(meta.libType == "SE") {
             yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
             samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
@@ -5024,7 +5043,9 @@ if (run_OptiType) {
 
             script:
             // check if single end
-            if(reads_RNA.size() == 1) {
+            def yara_cpus = task.cpus
+            def samtools_cpus = 1
+            if(meta.libType == "SE") {
                 yara_cpus = ((task.cpus - 2).compareTo(2) == -1) ? 2 : (task.cpus - 2)
                 samtools_cpus = ((task.cpus - yara_cpus).compareTo(1) == -1) ? 1 : (task.cpus - yara_cpus)
             } else {
@@ -5033,7 +5054,7 @@ if (run_OptiType) {
             }
 
             // check if single end
-            if (reads_RNA.size() == 1)
+            if (meta.libType == "SE")
                 """
                 yara_mapper -e 3 -t $yara_cpus -f bam ${yaraIdx} ${reads_RNA} | \\
                     samtools view -@ $samtools_cpus -h -F 4 -b1 -o rna_mapped_1.bam
@@ -5064,7 +5085,7 @@ if (run_OptiType) {
             input:
             tuple(
                 val(meta),
-                reads(reads)
+                path(reads)
             ) from fished_reads_RNA
 
             output:
@@ -5076,38 +5097,7 @@ if (run_OptiType) {
 
             script:
             def read_count_R1 = "samtools view -c ${reads[0]}"
-            def read_count_R2 = (reads.size() > 1) ? "samtools view -c ${reads[1]}" : ""
-/* TODO: REM
-            if (single_end_RNA)
-                """
-                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-                MHC_MAPPED=`samtools view -c ${reads}`
-                if [ "\$MHC_MAPPED" != "0" ]; then
-                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                    mv ./tmp/*/*_result.tsv ./${meta.sampleName}_optitype_RNA_result.tsv && \\
-                    mv ./tmp/*/*_coverage_plot.pdf ./${meta.sampleName}_optitype_RNA_coverage_plot.pdf && \\
-                    rm -rf ./tmp/
-                else
-                    touch ${meta.sampleName}_optitype_RNA_result.tsv
-                    echo "No result" >  ${meta.sampleName}_optitype_RNA_coverage_plot.pdf
-                fi
-                """
-            else
-                """
-                OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
-                MHC_MAPPED_FWD=`samtools view -c ${reads[0]}`
-                MHC_MAPPED_REV=`samtools view -c ${reads[1]}`
-                if [ "\$MHC_MAPPED_FWD" != "0" ] || [ "\$MHC_MAPPED_REV" != "0" ]; then
-                    \$OPTITYPE -i ${reads} -e 1 -b 0.009 --rna -o ./tmp && \\
-                    mv ./tmp/*/*_result.tsv ./${meta.sampleName}_optitype_RNA_result.tsv && \\
-                    mv ./tmp/*/*_coverage_plot.pdf ./${meta.sampleName}_optitype_RNA_coverage_plot.pdf && \\
-                    rm -rf ./tmp/
-                else
-                    touch ${meta.sampleName}_optitype_RNA_result.tsv
-                    echo "No result" > ${meta.sampleName}_optitype_RNA_coverage_plot.pdf
-                fi
-                """
-*/
+            def read_count_R2 = (meta.libType == "PE") ? "samtools view -c ${reads[1]}" : ""
             """
             OPTITYPE="\$(readlink -f \$(which OptiTypePipeline.py))"
             MHC_MAPPED_R1=\$($read_count_R1)
@@ -5184,14 +5174,14 @@ if (have_HLAHD) {
 
         script:
         def hlahd_p = Channel.value(HLAHD_PATH).getVal()
-        def in_reads = (reads.size() > 1) ? reads : reads[0] + " " + reads[0]
+        def in_reads = (meta.libType == "PE") ? reads : reads[0] + " " + reads[0]
 
         """
         export PATH=\$PATH:$hlahd_p
         $HLAHD -t ${task.cpus} \\
             -m 50 \\
             -f ${frData} ${in_reads} \\
-            ${gSplit} ${dict} ${meta.sampleName} .
+            ${gSplit} ${dict} ${meta.sampleName}_${meta.sampleType} .
         """
     }
 } else {
@@ -5234,14 +5224,14 @@ if (have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
 
         script:
         def hlahd_p = Channel.value(HLAHD_PATH).getVal()
-        def in_reads = (reads.size() > 1) ? reads : reads[0] + " " + reads[0]
+        def in_reads = (meta.libType == "PE") ? reads : reads[0] + " " + reads[0]
 
         """
         export PATH=\$PATH:$hlahd_p
         $HLAHD -t ${task.cpus} \\
             -m 50 \\
             -f ${frData} ${in_reads} \\
-            ${gSplit} ${dict} ${meta.sampleName} .
+            ${gSplit} ${dict} ${meta.sampleName}_${meta.sampleType} .
         """
     }
 } else if ((! have_HLAHD) || (have_RNA_tag_seq) || (! params.run_HLAHD_RNA)) {
@@ -5267,6 +5257,41 @@ From slack discussion on 20200425 (FF, GF, DR):
     * These class I HLA are used for the somatic pipeline and also for the embedded NeoFuse
 */
 
+optitype_output = optitype_output.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
+optitype_RNA_output = optitype_RNA_output.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
+hlahd_output = hlahd_output.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
+hlahd_output_RNA = hlahd_output_RNA.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
+batch_custom_HLA_data_ch = batch_custom_HLA_data_ch.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
 process get_vhla {
 
     label 'nextNEOpiENV'
@@ -5288,7 +5313,7 @@ process get_vhla {
         .join(optitype_RNA_output, by: 0)
         .join(hlahd_output, by: 0)
         .join(hlahd_output_RNA, by: 0)
-        .join(custom_HLA_data, by: 0)
+        .join(batch_custom_HLA_data_ch, by: 0)
 
     output:
     tuple(
@@ -5299,7 +5324,7 @@ process get_vhla {
     script:
     def optitype_hlas = (opti_out.size() > 0) ? "--opti_out $opti_out" : ''
     def user_hlas = (custom_hlas.size() > 0) ? "--custom $custom_hlas" : ''
-    def rna_hlas = (meta.have_RNA! have_RNA_tag_seq && (opti_out_rna.size() > 0)) ? "--opti_out_RNA $opti_out_rna" : ''
+    def rna_hlas = (meta.have_RNA && ! have_RNA_tag_seq && (opti_out_rna.size() > 0)) ? "--opti_out_RNA $opti_out_rna" : ''
     rna_hlas = (meta.have_RNA && have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) ? rna_hlas + " --hlahd_out_RNA $hlahd_out_rna" : rna_hlas
     def force_seq_type = ""
 
@@ -5315,8 +5340,7 @@ process get_vhla {
 
     hlahd_opt = (have_HLAHD && (hlahd_out.size() > 0)) ? "--hlahd_out ${hlahd_out}" : ""
 
-    script:
-    pVACseqAlleles = baseDir.toRealPath()  + "/assets/pVACseqAlleles.txt"
+    def pVACseqAlleles = baseDir.toRealPath()  + "/assets/pVACseqAlleles.txt"
     """
     # merging script
     HLA_parser.py \\
@@ -5347,6 +5371,20 @@ Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 /*
 if (have_RNAseq) {  // TODO: remove this if clause and check if solved it correctly
 */
+
+reads_tumor_neofuse_ch = reads_tumor_neofuse_ch.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, meta_ori, out_file]
+}
+MantaSomaticIndels_out_NeoFuse_in_ch0 = MantaSomaticIndels_out_NeoFuse_in_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, meta_ori, out_file]
+}
+
 process Neofuse {
 
     tag "${meta.sampleName}"
@@ -5384,8 +5422,10 @@ process Neofuse {
     input:
     tuple(
         val(meta),
+        val(meta_RNA_ori),
         path(reads_RNA),
         path(hla_types),
+        val(meta_DNA_ori),
         path(SVvcf)
     ) from reads_tumor_neofuse_ch
         .join(hlas_neoFuse, by: 0)
@@ -5398,28 +5438,28 @@ process Neofuse {
     output:
     tuple(
         val(meta),
-        path("./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv"),
-        path("./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv"),
-        path("./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv"),
-        path("./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv")
+        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv")
     ) into (
         Neofuse_results_ch0,
         Neofuse_results_ch1
     )
     tuple(
         val(meta),
-        path("./${meta.sampleName}/TPM/${meta.sampleName}.tpm.txt")
+        path("${meta.sampleName}/TPM/${meta.sampleName}.tpm.txt")
     ) into tpm_file
     tuple(
         val(meta),
-        path("./${meta.sampleName}/STAR/${meta.sampleName}.Aligned.sortedByCoord.out.{bam,bam.bai}")
+        path("${meta.sampleName}/STAR/${meta.sampleName}.Aligned.sortedByCoord.out.{bam,bam.bai}")
     ) into star_bam_file
     path("${meta.sampleName}/**")
 
 
     script:
-    def reads = (reads_RNA.size() > 1) ? "-1 " + reads_RNA[0] : "-1 " + reads_RNA[0] + " -2 " + reads_RNA[1]
-    def sv_options = (single_end) ? "" : "-v ${SVvcf}"
+    def reads = (meta_RNA_ori.libType == "SE") ? "-1 " + reads_RNA[0] : "-1 " + reads_RNA[0] + " -2 " + reads_RNA[1]
+    def sv_options = (meta_DNA_ori.libType == "SE") ? "" : "-v ${SVvcf[0]}"
     """
     NeoFuse_single ${reads} \\
         -d ${meta.sampleName} \\
@@ -5438,10 +5478,10 @@ process Neofuse {
         ${sv_options} \\
         -k true
 
-    mv ./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_filtered.tsv ./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv
-    mv ./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_unfiltered.tsv ./${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv
-    mv ./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_filtered.tsv ./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv
-    mv ./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_unfiltered.tsv ./${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv
 
     """
 }
@@ -5517,6 +5557,13 @@ process add_geneID {
 Add gene expression info to the VEP annotated, phased VCF file
 */
 
+VEPvcf_out_ch2 = VEPvcf_out_ch2.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
 process gene_annotator {
 
     tag "${meta.sampleName}"
@@ -5556,8 +5603,8 @@ process gene_annotator {
     vcf-expression-annotator \\
         -i GeneID \\
         -e TPM \\
-        -s ${meta.sampleName} \\
-        ${vep_somatic_vcf_gz} ${final_tpm} \\
+        -s ${meta.sampleName}_tumor \\
+        ${vep_somatic_vcf_gz[0]} ${final_tpm} \\
         custom gene \\
         -o ./${meta.sampleName}_vep_somatic_gx_tmp.vcf
     bgzip -f ${meta.sampleName}_vep_somatic_gx_tmp.vcf
@@ -5569,25 +5616,25 @@ process gene_annotator {
 
     bam_readcount_helper.py \\
         ${meta.sampleName}_vep_somatic_gx_dec_tmp.vcf.gz \\
-        ${meta.sampleName} \\
+        ${meta.sampleName}_tumor \\
         ${RefFasta} \\
-        ${RNA_bam} \\
+        ${RNA_bam[0]} \\
         ./
 
     vcf-readcount-annotator \\
-        -s ${meta.sampleName} \\
+        -s ${meta.sampleName}_tumor \\
         -t snv \\
         -o ${meta.sampleName}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
         ${meta.sampleName}_vep_somatic_gx_dec_tmp.vcf.gz \\
-        ${meta.sampleName}_bam_readcount_snv.tsv \\
+        ${meta.sampleName}_tumor_bam_readcount_snv.tsv \\
         RNA
 
     vcf-readcount-annotator \\
-        -s ${meta.sampleName} \\
+        -s ${meta.sampleName}_tumor \\
         -t indel \\
         -o ${meta.sampleName}_vep_somatic_gx.vcf \\
         ${meta.sampleName}_vep_somatic_gx_dec_snv_rc_tmp.vcf \\
-        ${meta.sampleName}_bam_readcount_indel.tsv \\
+        ${meta.sampleName}_tumor_bam_readcount_indel.tsv \\
         RNA
 
     bgzip -f ${meta.sampleName}_vep_somatic_gx.vcf
@@ -5629,8 +5676,8 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         path("${iedb_chck_file_name}") into iedb_install_out_ch
 
         script:
-        mhci_file = iedb_MHCI_url.split("/")[-1]
-        mhcii_file = iedb_MHCII_url.split("/")[-1]
+        def mhci_file = iedb_MHCI_url.split("/")[-1]
+        def mhcii_file = iedb_MHCII_url.split("/")[-1]
         """
         CWD=`pwd`
         cd /opt/iedb/
@@ -5664,6 +5711,12 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
 /*
 Run pVACseq
 */
+mkPhasedVCF_out_pVACseq_ch0 = mkPhasedVCF_out_pVACseq_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
 process 'pVACseq' {
 
@@ -5698,12 +5751,12 @@ process 'pVACseq' {
 
 
     script:
-    hla_type = (hla_types - ~/\n/)
-    NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
-    NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
-    phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz : ""
+    def hla_type = (hla_types - ~/\n/)
+    def NetChop = params.use_NetChop ? "--net-chop-method cterm" : ""
+    def NetMHCstab = params.use_NetMHCstab ? "--netmhc-stab" : ""
+    def phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz[0] : ""
 
-    filter_set = params.pVACseq_filter_sets[ "standard" ]
+    def filter_set = params.pVACseq_filter_sets[ "standard" ]
 
     if (params.pVACseq_filter_sets[ params.pVACseq_filter_set ] != null) {
         filter_set = params.pVACseq_filter_sets[ params.pVACseq_filter_set ]
@@ -5735,11 +5788,11 @@ process 'pVACseq' {
         ${phased_vcf_opt} \\
         -e1 ${params.mhci_epitope_len} \\
         -e2 ${params.mhcii_epitope_len} \\
-        --normal-sample-name ${meta.sampleName} \\
+        --normal-sample-name ${meta.sampleName}_normal \\
         ${NetChop} \\
         ${NetMHCstab} \\
         ${filter_set} \\
-        ${anno_vcf} ${meta.sampleName} ${hla_type} ${params.epitope_prediction_tools} ./${meta.sampleName}_${hla_type}
+        ${anno_vcf[0]} ${meta.sampleName}_tumor ${hla_type} ${params.epitope_prediction_tools} ./${meta.sampleName}_${hla_type}
     """
 }
 
@@ -5854,6 +5907,14 @@ process aggregated_reports {
     """
 }
 
+generate_protein_fasta_phased_vcf_ch0 = generate_protein_fasta_phased_vcf_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
+
 process 'pVACtools_generate_protein_seq' {
 
     tag "${meta.sampleName}"
@@ -5879,7 +5940,7 @@ process 'pVACtools_generate_protein_seq' {
     ) optional true into pVACtools_generate_protein_seq
 
     script:
-    phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz : ""
+    def phased_vcf_opt = (have_GATK3) ? "-p " + vep_phased_vcf_gz[0] : ""
 
     if(!have_GATK3) {
 
@@ -5892,12 +5953,20 @@ process 'pVACtools_generate_protein_seq' {
     """
     pvacseq generate_protein_fasta \\
         ${phased_vcf_opt} \\
-        -s ${meta.sampleName} \\
-        ${vep_tumor_vcf_gz} \\
+        -s ${meta.sampleName}_tumor \\
+        ${vep_tumor_vcf_gz[0]} \\
         31 \\
         ${meta.sampleName}_long_peptideSeq.fasta
     """
 }
+
+hlahd_mixMHC2_pred_ch0 = hlahd_mixMHC2_pred_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
 
 if(have_HLAHD) {
     process 'pepare_mixMHC2_seq' {
@@ -5928,8 +5997,8 @@ if(have_HLAHD) {
         path("${meta.sampleName}_mixMHC2pred_conf.txt") optional true
 
         script:
-        supported_list = baseDir.toRealPath() + "/assets/hlaii_supported.txt"
-        model_list     = baseDir.toRealPath() + "/assets/hlaii_models.txt"
+        def supported_list = baseDir.toRealPath() + "/assets/hlaii_supported.txt"
+        def model_list     = baseDir.toRealPath() + "/assets/hlaii_models.txt"
         """
         pepChopper.py \\
             --pep_len ${params.mhcii_epitope_len.split(",").join(" ")} \\
@@ -5960,7 +6029,7 @@ if(have_HLAHD) {
             script:
             """
             curl -sLk ${params.MiXMHC2PRED_url} -o mixmhc2pred.zip && \\
-            unzip mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
+            unzip -o mixmhc2pred.zip -d ${mixmhc2pred_target} && \\
             echo "OK" > .mixmhc2pred_install_ok.chck && \\
             cp -f .mixmhc2pred_install_ok.chck ${mixmhc2pred_chck_file}
             """
@@ -6012,7 +6081,7 @@ if(have_HLAHD) {
         path("${meta.sampleName}_mixMHC2pred_filtered.tsv") optional true
 
         script:
-        alleles = file(allelesFile).readLines().join(" ")
+        def alleles = file(allelesFile).readLines().join(" ")
 
         if(alleles.length() > 0)
             """
@@ -6021,11 +6090,11 @@ if(have_HLAHD) {
                 -o ${meta.sampleName}_mixMHC2pred.tsv \\
                 -a ${alleles}
             parse_mixMHC2pred.py \\
-                --vep_vcf ${vep_somatic_gx_vcf_gz} \\
+                --vep_vcf ${vep_somatic_gx_vcf_gz[0]} \\
                 --pep_fasta ${mut_peps} \\
                 --mixMHC2pred_result ${meta.sampleName}_mixMHC2pred.tsv \\
                 --out ${meta.sampleName}_mixMHC2pred_all.tsv \\
-                --sample_name ${meta.sampleName} \\
+                --sample_name ${meta.sampleName}_tumor \\
                 --normal_name ${meta.sampleName}_normal
             awk \\
                 '{
@@ -6041,6 +6110,15 @@ if(have_HLAHD) {
 }
 
 // add CCF clonality to neoepitopes result files
+
+// adjust channel
+Clonality_out_ch0 = Clonality_out_ch0.map{
+    meta_ori, out_file, ascatOK, sequenzaOK ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file, ascatOK, sequenzaOK]
+}
+
 process addCCF {
 
     label 'nextNEOpiENV'
@@ -6181,7 +6259,7 @@ process blast_epitopes {
     ) into blast_epitopes_out_ch
 
     script:
-    def outfile = epitopes_fasta.baseName + "_blast.tsv"
+    outfile = epitopes_fasta.baseName + "_blast.tsv"
     """
     blastp -task blastp-short \\
         -db ${blastdb}/${params.references.ProteinBlastDBname} \\
@@ -6235,7 +6313,6 @@ process add_blast_hits {
     path("*_match_protein.tsv")
 
     script:
-    outfile = epitopes.baseName + "_epitopes.fasta"
     """
     parse_blast_result.py \\
         --blast_result ${blast_result} \\
@@ -6393,7 +6470,7 @@ if(params.TCR) {
             script:
             """
             curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
-            unzip mixcr.zip && \\
+            unzip -o mixcr.zip && \\
             chmod +x mixcr*/mixcr && \\
             cp -f mixcr*/mixcr ${mixcr_target} && \\
             cp -f mixcr*/mixcr.jar ${mixcr_target} && \\
@@ -6501,11 +6578,11 @@ if(params.TCR) {
         """
     }
 */
-    process mixcr_DNA {
+    process mixcr {
 
         label 'nextNEOpiENV'
 
-        tag "${meta.sampleName}"
+        tag "${meta.sampleName} : ${meta.sampleType}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
             mode: params.publishDirMode
@@ -6515,29 +6592,30 @@ if(params.TCR) {
             val(meta),
             path(reads),
             path(mixcr_chck_file)
-        ) from reads_mixcr_DNA_ch
+        ) from reads_mixcr_ch
             .combine(mixcr_chck_ch0)
 
         output:
         tuple(
             val(meta),
-            path("${procSampleName}_mixcr_DNA.clonotypes.ALL.txt"),
+            path("${procSampleName}_mixcr.clonotypes.ALL.txt"),
         )
 
         script:
+        def starting_material = (meta.sampleType == "tumor_RNA") ? "rna" : "dna"
         procSampleName = meta.sampleName + "_" + meta.sampleType
         """
         mixcr analyze shotgun \\
             --threads ${task.cpus} \\
             --species hs \\
-            --starting-material dna \\
+            --starting-material ${starting_material} \\
             --only-productive \\
             $reads \\
-            ${procSampleName}_mixcr_DNA
+            ${procSampleName}_mixcr
         """
     }
 
-
+/*
     process mixcr_RNA {
 
         label 'nextNEOpiENV'
@@ -6572,7 +6650,22 @@ if(params.TCR) {
             ${meta.sampleName}_mixcr_RNA
         """
     }
+*/
+}
 
+
+// adjust channel
+sample_info_tmb = sample_info_tmb.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+sample_info_tmb_coding = sample_info_tmb_coding.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
 }
 
 process collectSampleInfo {
@@ -6614,33 +6707,34 @@ process collectSampleInfo {
 ***********************************
 */
 
-ch_fastqc.map {
-        it ->
-            it[0].remove('sampleType')
-            it[0].remove('libType')
-            return it
-}.set{ ch_fastqc }
+ch_fastqc = ch_fastqc.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
-ch_fastp.map {
-        it ->
-            it[0].remove('sampleType')
-            it[0].remove('libType')
-            return it
-}.set{ ch_fastp }
+ch_fastp = ch_fastp.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
-ch_fastqc_trimmed.map {
-        it ->
-            it[0].remove('sampleType')
-            it[0].remove('libType')
-            return it
-}.set{ ch_fastqc_trimmed }
+ch_fastqc_trimmed = ch_fastqc_trimmed.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
-alignmentMetrics_ch.map {
-        it ->
-            it[0].remove('sampleType')
-            it[0].remove('libType')
-            return it
-}.set{ alignmentMetrics_ch }
+alignmentMetrics_ch = alignmentMetrics_ch.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
+
 
 process multiQC {
 
@@ -6651,17 +6745,16 @@ process multiQC {
     publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC",
         mode: params.publishDirMode
 
-    input:
+   input:
     tuple(
         val(meta),
-        path("*"),
-        path("*"),
-        path("*"),
-        path("*")
-    )   from ch_fastqc
-            .join(ch_fastp, remainder: true, by: [0])
-            .join(ch_fastqc_trimmed, remainder: true, by: [0])
-            .join(alignmentMetrics_ch, remainder: true, by: [0])
+        path(qcfiles)
+    ) from ch_fastqc
+        .mix(ch_fastp)
+        .mix(ch_fastqc_trimmed)
+        .mix(alignmentMetrics_ch)
+        .transpose()
+        .groupTuple()
 
     output:
     path("multiqc_data/*")
@@ -6906,7 +6999,7 @@ def check_seqLibTypes_ok(seqLib_ch) {
     def lt_map = [:]
 
     for (seqLib in seqLibs) {
-        if (lt_map[seqLib[0].sampleType != "tumor_RNA") {
+        if (lt_map[seqLib[0].sampleType] != "tumor_RNA") {
             if (lt_map[seqLib[0].sampleName] == null) {
                 lt_map[seqLib[0].sampleName] = seqLib[2]
             } else {
@@ -6919,6 +7012,24 @@ def check_seqLibTypes_ok(seqLib_ch) {
     return true
 }
 
+// This function removes all keys in key list from meta object at idx 0.
+// If keep is true then the original meta object is kept at idx 1
+// of the channel values. Note with keep true all values [1..-1] will be
+// right shifted by 1
+def remove_from_meta(ch, keys=[], keep=false) {
+    ch = ch.map {
+            meta, f ->
+            def meta_new = meta.clone()
+            keys.each{ k ->
+                meta_new.remove(k)
+            }
+            if(keep) {
+                return [meta_new, meta.clone(), f]
+            } else {
+                return [meta_new, f]
+            }    }
+    return ch
+}
 
 def helpMessage() {
     log.info ""
