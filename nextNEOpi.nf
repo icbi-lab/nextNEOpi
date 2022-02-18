@@ -331,10 +331,13 @@ for ( row in batchCSV ) {
         exit 1, "Error: Incorrect sampleType [got: " + row.sampleType + " - allowed: " + validSampleTypes + "]: please check your batchFile"
     }
 
+    // remove stuff that is not required in the HLAfile channel
+    def meta_min = meta.clone()
+    meta_min.keySet().removeAll(['sampleType', 'libType'])
     if (row.HLAfile) {
-            custom_HLA_data.add([meta, file(row.HLAfile, checkIfExists: true)])
+        custom_HLA_data.add([meta_min, file(row.HLAfile, checkIfExists: true)])
     } else {
-        custom_HLA_data.add([meta, []])
+        custom_HLA_data.add([meta_min, []])
     }
 
     if (row.sampleType == "tumor_RNA") {
@@ -395,12 +398,12 @@ raw_data.each {
 custom_HLA_data = custom_HLA_data.each {
     record ->
     record[0].have_RNA = (r_map[record[0].sampleName]) ? true : false
-}
+}.unique()
 
 //batch_raw_DNA_data_ch = Channel.fromList(raw_DNA_data)
 //batch_raw_RNA_data_ch = Channel.fromList(raw_RNA_data)
 batch_raw_data_ch = Channel.fromList(raw_data)
-batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data.unique())
+batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data)
 
 if (bamInput == false) {
     batch_raw_data_ch.map {
@@ -1120,10 +1123,22 @@ reads_ch.branch {
 }
 .set{ reads_ch }
 
-(reads_BAM_ch, reads_uBAM_ch, reads_mixcr_DNA_ch) = reads_ch.DNA.into(3)
+(reads_BAM_ch, reads_uBAM_ch, reads_mixcr_DNA_ch, dummy_ch) = reads_ch.DNA.into(4)
 (reads_tumor_optitype_ch, reads_tumor_hlahd_RNA_ch, reads_tumor_neofuse_ch, reads_tumor_mixcr_RNA_ch) = reads_ch.RNA.into(4)
 
 reads_mixcr_ch = reads_mixcr_DNA_ch.mix(reads_tumor_mixcr_RNA_ch)
+
+// setup dummy RNA channels
+dummy_ch.filter{
+    it[0].have_RNA == false
+}.map{
+    it ->
+        return [it[0], []]
+}
+.into{ no_RNA_0; no_RNA_1 }
+
+//reads_tumor_optitype_ch = reads_tumor_optitype_ch.mix(no_RNA_0)
+//reads_tumor_hlahd_RNA_ch = reads_tumor_hlahd_RNA_ch.mix(no_RNA_1)
 
 /* TODO: REM
 reads_mixcr_DNA_ch.branch {
@@ -3026,7 +3041,7 @@ if(have_Mutect1) {
     Channel.empty().set { Mutect1_out_ch0 }
 
     GatherRealignedBamFiles_out_Mutect1scattered_ch0
-        .map {  item -> tuple(item[0], val("mutect1"), []) } // pass meta and emptpy [] would be [vcf, idx]
+        .map {  item -> tuple(item[0], "mutect1", []) } // pass meta and emptpy [] would be [vcf, idx]
         .set { Mutect1_out_ch1 }
 
 } // END if have MUTECT1
@@ -5130,10 +5145,8 @@ if (run_OptiType) {
     optitype_output = reads_tumor_hla_ch
                             .map{ it -> tuple(it[0], [])}
 
-    if (have_RNAseq) {
-        optitype_RNA_output = reads_tumor_optitype_ch
-                                .map{ it -> tuple(it[0], [])}
-    }
+    optitype_RNA_output = reads_tumor_optitype_ch
+                            .map{ it -> tuple(it[0], [])}
 }
 
 /*
@@ -5264,7 +5277,7 @@ optitype_output = optitype_output.map{
         return [meta, out_file]
 }
 
-optitype_RNA_output = optitype_RNA_output.map{
+optitype_RNA_output = optitype_RNA_output.mix(no_RNA_0).map{
     meta_ori, out_file ->
         def meta = meta_ori.clone()
         meta.keySet().removeAll(['sampleType', 'libType'])
@@ -5278,7 +5291,7 @@ hlahd_output = hlahd_output.map{
         return [meta, out_file]
 }
 
-hlahd_output_RNA = hlahd_output_RNA.map{
+hlahd_output_RNA = hlahd_output_RNA.mix(no_RNA_1).map{
     meta_ori, out_file ->
         def meta = meta_ori.clone()
         meta.keySet().removeAll(['sampleType', 'libType'])
@@ -5353,7 +5366,6 @@ process get_vhla {
         > ./${meta.sampleName}_hlas.txt
     """
 }
-
 // END HLA TYPING
 
 // NeoAntigen predictions
@@ -5557,11 +5569,15 @@ process add_geneID {
 Add gene expression info to the VEP annotated, phased VCF file
 */
 
+// branch into samples with and without RNA
 VEPvcf_out_ch2 = VEPvcf_out_ch2.map{
     meta_ori, out_file ->
         def meta = meta_ori.clone()
         meta.keySet().removeAll(['sampleType', 'libType'])
         return [meta, out_file]
+}.branch {
+    RNA   : it[0].have_RNA == true
+    no_RNA: it[0].have_RNA == false
 }
 
 process gene_annotator {
@@ -5576,7 +5592,7 @@ process gene_annotator {
         path(vep_somatic_vcf_gz),
         path(final_tpm),
         path(RNA_bam),
-    ) from VEPvcf_out_ch2
+    ) from VEPvcf_out_ch2.RNA
         .join(final_gene_expression_file, by: 0)
         .join(star_bam_file, by: 0)
 
@@ -5641,6 +5657,10 @@ process gene_annotator {
     tabix -p vcf ${meta.sampleName}_vep_somatic_gx.vcf.gz
     """
 }
+
+// re-add un-annotated vcfs for samples without RNAseq data
+(vcf_vep_ex_gz, generate_protein_fasta_tumor_vcf_ch0, gene_annotator_out_mixMHC2pred_ch0) = vcf_vep_ex_gz.mix(VEPvcf_out_ch2.no_RNA).into(3)
+
 // TODO: check channels and REM
 /*
 } else { // no RNAseq data
@@ -5737,16 +5757,28 @@ process 'pVACseq' {
         .combine(iedb_install_out_ch)
 
     output:
+// TODO: REM
+//    tuple(
+//        val(meta),
+//        val("class_I"),
+//        path("**/MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv"),
+//        path("**/MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv")
+//    ) optional true into mhcI_out_f
+//
     tuple(
         val(meta),
-        path("**/MHC_Class_I/*filtered.tsv"),
-        path("**/MHC_Class_I/*all_epitopes.tsv")
+        val("Class_I"),
+        path(pvacseq_class_I_out)
+//        path(["${meta.sampleName}/MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv",
+//              "${meta.sampleName}/MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv"])
     ) optional true into mhcI_out_f
 
     tuple(
         val(meta),
-        path("**/MHC_Class_II/*filtered.tsv"),
-        path("**/MHC_Class_II/*all_epitopes.tsv")
+        val("Class_II"),
+        path(pvacseq_class_II_out)
+//        path(["${meta.sampleName}/MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv",
+//              "${meta.sampleName}/MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv"])
     ) optional true into mhcII_out_f
 
 
@@ -5781,6 +5813,11 @@ process 'pVACseq' {
         filter_set = filter_set.replaceAll(/--trna-cov\s+\d+/, "--trna-cov 0")
     }
 
+    pvacseq_class_I_out = [ "MHC_Class_I/" + meta.sampleName + "_tumor_" + hla_type + ".filtered.tsv",
+                            "MHC_Class_I/" + meta.sampleName + "_tumor_" + hla_type + ".all_epitopes.tsv"]
+    pvacseq_class_II_out = [ "MHC_Class_II/" + meta.sampleName + "_tumor_" + hla_type + ".filtered.tsv",
+                             "MHC_Class_II/" + meta.sampleName + "_tumor_" + hla_type + ".all_epitopes.tsv"]
+
     """
     pvacseq run \\
         --iedb-install-directory /opt/iedb \\
@@ -5792,84 +5829,87 @@ process 'pVACseq' {
         ${NetChop} \\
         ${NetMHCstab} \\
         ${filter_set} \\
-        ${anno_vcf[0]} ${meta.sampleName}_tumor ${hla_type} ${params.epitope_prediction_tools} ./${meta.sampleName}_${hla_type}
+        ${anno_vcf[0]} ${meta.sampleName}_tumor ${hla_type} ${params.epitope_prediction_tools} ./
+
+    if [ -e ./MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv ]; then
+        mv ./MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.filtered.tsv 
+    fi
+    if [ -e ./MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv ]; then
+        mv ./MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv 
+    fi
+    if [ -e ./MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv ]; then
+        mv ./MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.filtered.tsv 
+    fi
+    if [ -e ./MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv ]; then
+        mv ./MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv 
+    fi
     """
 }
 
-process concat_mhcI_files {
+// combine class_I and class_II, and make list with filtered and list with all
+pVACseq_out = mhcI_out_f.mix(mhcII_out_f).groupTuple(by:[0,1]).map{
+    meta, mhc_class, files -> {
+        def flat_files = files.flatten()
+        def filtered = []
+        def all = []
+        flat_files.eachWithIndex{ v, ix -> ( ix& 1 ? all : filtered ) << v}
+        return [meta, mhc_class, filtered, all]
+    }
+}
+
+process concat_pVACseq_files {
 
     tag "${meta.sampleName}"
 
-    publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_Class_I/",
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
         mode: params.publishDirMode
 
     input:
     tuple(
         val(meta),
-        path("*filtered.tsv"),
-        path("*all_epitopes.tsv")
-    ) from mhcI_out_f.groupTuple(by: 0)
+        val(mhc_class),
+        path("*pVACseq_filtered_files"),
+        path("*pVACseq_all_files")
+    ) from pVACseq_out
 
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}_MHCI_filtered.tsv")
-    ) into (
-        MHCI_final_immunogenicity,
-        concat_mhcI_filtered_files_out_addCCF_ch0
-    )
-    tuple(
-        val(meta),
-        path("${meta.sampleName}_MHCI_all_epitopes.tsv")
-    ) into (
-        MHCI_all_epitopes,
-        concat_mhcI_all_files_out_aggregated_reports_ch0,
-        concat_mhcI_all_files_out_addCCF_ch0
-    )
+        val(mhc_class),
+        path(out_files)
+    ) into pVACseq_out_concat
 
     script:
+    out_files = [ meta.sampleName + "_MHC_" + mhc_class + "_filtered.tsv",
+                  meta.sampleName + "_MHC_" + mhc_class + "_all_epitopes.tsv" ]
     """
-    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${meta.sampleName}_MHCI_filtered.tsv
-    sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${meta.sampleName}_MHCI_all_epitopes.tsv
-    """
-}
-
-process concat_mhcII_files {
-
-    tag "${meta.sampleName}"
-
-    publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_Class_II/",
-        mode: params.publishDirMode
-
-    input:
-    tuple(
-        val(meta),
-        path("*filtered.tsv"),
-        path("*all_epitopes.tsv")
-    ) from mhcII_out_f.groupTuple(by: 0)
-
-    output:
-    tuple(
-        val(meta),
-        path("${meta.sampleName}_MHCII_filtered.tsv")
-    ) into (
-        concat_mhcII_filtered_files_out_addCCF_ch0
-    )
-    tuple(
-        val(meta),
-        path("${meta.sampleName}_MHCII_all_epitopes.tsv")
-    ) into (
-        MHCII_all_epitopes,
-        concat_mhcII_all_files_out_aggregated_reports_ch0,
-        concat_mhcII_all_files_out_addCCF_ch0
-    )
-
-    script:
-    """
-    sed -e '2,\${/^Chromosome/d' -e '}' *filtered.tsv > ${meta.sampleName}_MHCII_filtered.tsv
-    sed -e '2,\${/^Chromosome/d' -e '}' *all_epitopes.tsv > ${meta.sampleName}_MHCII_all_epitopes.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *pVACseq_filtered_files > ${meta.sampleName}_MHC_${mhc_class}_filtered.tsv
+    sed -e '2,\${/^Chromosome/d' -e '}' *pVACseq_all_files > ${meta.sampleName}_MHC_${mhc_class}_all_epitopes.tsv
     """
 }
+// pVACseq_out_concat.view()
+(pVACseq_out_concat_ch0, pVACseq_out_concat_ch1, pVACseq_out_concat_ch2) = pVACseq_out_concat.into(3)
+
+add_CCF_ch = pVACseq_out_concat_ch2.map{
+    meta, mhc_class, files -> {
+        return [meta, files ]
+    }
+}.transpose()
+
+
+igs_ch = pVACseq_out_concat_ch0.map{
+    meta, mhc_class, files -> {
+        if (mhc_class == "Class_I") {
+            return [meta, files[0]]
+        }
+    }
+}
+
+(aggregated_reports_ch0, csin_ch0) = pVACseq_out_concat_ch1.map{
+    meta, mhc_class, files -> {
+        return [meta, mhc_class, files[1]]
+    }
+}.into(2)
 
 
 process aggregated_reports {
@@ -5884,26 +5924,18 @@ process aggregated_reports {
     input:
     tuple(
         val(meta),
-        path(pvacseq_mhcI_all_file),
-        path(pvacseq_mhcII_all_file)
-    ) from concat_mhcI_all_files_out_aggregated_reports_ch0
-        .join(concat_mhcII_all_files_out_aggregated_reports_ch0, by: 0)
-
+        val(mhc_class),
+        path(epitope_file)
+    ) from aggregated_reports_ch0
 
     output:
-    path("**/*_MHCI_all_aggregated.tsv")
-    path("**/*_MHCII_all_aggregated.tsv")
+    path("${meta.sampleName}_MHC_${mhc_class}_all_aggregated.tsv")
 
     script:
     """
-    mkdir ./MHC_Class_I/
     pvacseq generate_aggregated_report \\
-        $pvacseq_mhcI_all_file \\
-        ./MHC_Class_I/${meta.sampleName}_MHCI_all_aggregated.tsv
-    mkdir ./MHC_Class_II/
-    pvacseq generate_aggregated_report \\
-        $pvacseq_mhcII_all_file \\
-        ./MHC_Class_II/${meta.sampleName}_MHCII_all_aggregated.tsv
+        $epitope_file \\
+        ${meta.sampleName}_MHC_${mhc_class}_all_aggregated.tsv
     """
 }
 
@@ -6146,12 +6178,7 @@ process addCCF {
         path(CCF),
         val(ascatOK),
         val(sequenzaOK)
-    ) from concat_mhcI_filtered_files_out_addCCF_ch0
-        .concat(
-                concat_mhcI_all_files_out_addCCF_ch0,
-                concat_mhcII_filtered_files_out_addCCF_ch0,
-                concat_mhcII_all_files_out_addCCF_ch0
-        )
+    ) from add_CCF_ch
         .combine(Clonality_out_ch0, by: 0)
 
     output:
@@ -6338,10 +6365,10 @@ process csin {
     input:
     tuple(
         val(meta),
-        path("*_MHCI_all_epitopes.tsv"),
-        path("*_MHCII_all_epitopes.tsv")
-    ) from MHCI_all_epitopes
-        .combine(MHCII_all_epitopes, by:0)
+        val(mhc_class),
+        path(all_epitopes),
+    ) from csin_ch0
+        .groupTuple()
 
     output:
     tuple(
@@ -6350,9 +6377,11 @@ process csin {
     ) into sample_info_csin
 
     script:
+    def mhc_i_idx = mhc_class.indexOf("Class_I")
+    def mhc_ii_idx = mhc_class.indexOf("Class_II")
     """
-    CSiN.py --MHCI_tsv *_MHCI_all_epitopes.tsv \\
-        --MHCII_tsv *_MHCII_all_epitopes.tsv \\
+    CSiN.py --MHCI_tsv ${all_epitopes[mhc_i_idx]} \\
+        --MHCII_tsv ${all_epitopes[mhc_ii_idx]} \\
         --rank $params.csin_rank \\
         --ic50 $params.csin_ic50 \\
         --gene_exp $params.csin_gene_exp \\
@@ -6423,7 +6452,7 @@ process immunogenicity_scoring {
     tuple(
         val(meta),
         path(pvacseq_file)
-    ) from MHCI_final_immunogenicity
+    ) from igs_ch
     path(igs_install_chck_file) from igs_chck_ch
 
     output:
