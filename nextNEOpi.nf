@@ -5410,13 +5410,13 @@ process Neofuse {
                     targetFile = params.fullOutput ? "11_Fusions/Custom_HLAs/" + file(fileName).getName() : ""
                 } else if(fileName.indexOf("LOGS/") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/LOGS/" + file(fileName).getName() : ""
-                } else if(fileName.indexOf("NeoFuse/MHC_I/") >= 0) {
-                    targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_I_unsupported.txt")
-                } else if(fileName.indexOf("NeoFuse/MHC_II/") >= 0) {
+                } else if(fileName.indexOf("_NeoFuse_MHC_Class_I_") >= 0) {
+                    targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName()
+                } else if(fileName.indexOf("_NeoFuse_MHC_Class_II_") >= 0) {
                     if(fileName.indexOf("_mixMHC2pred_conf.txt") < 0) {
-                        targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName().replace("_unsupported.txt", "_MHC_II_unsupported.txt")
-                    } else {
                         targetFile = params.fullOutput ? "11_Fusions/NeoFuse/" + file(fileName).getName() : ""
+                    } else {
+                        targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName()
                     }
                 } else if(fileName.indexOf("STAR/") >= 0) {
                     if(fileName.indexOf("Aligned.sortedByCoord.out.bam") >= 0) {
@@ -5450,10 +5450,10 @@ process Neofuse {
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv"),
-        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv"),
-        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv"),
-        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv")
+        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHC_Class_I_filtered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHC_Class_I_unfiltered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_filtered.tsv"),
+        path("${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_unfiltered.tsv")
     ) into (
         Neofuse_results_ch0,
         Neofuse_results_ch1
@@ -5490,10 +5490,13 @@ process Neofuse {
         ${sv_options} \\
         -k true
 
-    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_filtered.tsv
-    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHCI_unfiltered.tsv
-    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_filtered.tsv
-    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHCII_unfiltered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHC_Class_I_filtered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_MHCI_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHC_Class_I_unfiltered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_unsupported.txt ${meta.sampleName}/NeoFuse/MHC_I/${meta.sampleName}_NeoFuse_MHC_Class_I_unsupported.txt
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_filtered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_filtered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_MHCII_unfiltered.tsv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_unfiltered.tsv
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_unsupported.txt ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_unsupported.txt
+    mv ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_mixMHC2pred_conf.txt ${meta.sampleName}/NeoFuse/MHC_II/${meta.sampleName}_NeoFuse_MHC_Class_II_mixMHC2pred_conf.txt
 
     """
 }
@@ -5832,16 +5835,16 @@ process 'pVACseq' {
         ${anno_vcf[0]} ${meta.sampleName}_tumor ${hla_type} ${params.epitope_prediction_tools} ./
 
     if [ -e ./MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv ]; then
-        mv ./MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.filtered.tsv 
+        mv ./MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.filtered.tsv
     fi
     if [ -e ./MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv ]; then
-        mv ./MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv 
+        mv ./MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_I/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv
     fi
     if [ -e ./MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv ]; then
-        mv ./MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.filtered.tsv 
+        mv ./MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.filtered.tsv
     fi
     if [ -e ./MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv ]; then
-        mv ./MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv 
+        mv ./MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv ./MHC_Class_II/${meta.sampleName}_tumor_${hla_type}.all_epitopes.tsv
     fi
     """
 }
@@ -6161,9 +6164,9 @@ process addCCF {
         saveAs: {
             fileName ->
                 targetFile = fileName
-                if(fileName.indexOf("_MHCI_") >= 0) {
+                if(fileName.indexOf("_MHC_Class_I_") >= 0) {
                     targetFile = "Class_I/" + file(fileName).getName()
-                } else if(fileName.indexOf("_MHCII_") >= 0) {
+                } else if(fileName.indexOf("_MHC_Class_II_") >= 0) {
                     targetFile = "Class_II/" + file(fileName).getName()
                 }
                 return "$targetFile"
@@ -6315,9 +6318,9 @@ process add_blast_hits {
                     targetFile = "Class_I/Fusions/" + file(fileName).getName()
                 } else if(fileName.indexOf("NeoFuse_MHCII_") >= 0) {
                     targetFile = "Class_II/Fusions/" + file(fileName).getName()
-                } else if(fileName.indexOf("${meta.sampleName}_MHCI_") >= 0) {
+                } else if(fileName.indexOf("${meta.sampleName}_MHC_Class_I_") >= 0) {
                     targetFile = "Class_I/" + file(fileName).getName()
-                } else if(fileName.indexOf("${meta.sampleName}_MHCII_") >= 0) {
+                } else if(fileName.indexOf("${meta.sampleName}_MHC_Class_II_") >= 0) {
                     targetFile = "Class_II/" + file(fileName).getName()
                 }
 
