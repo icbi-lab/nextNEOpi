@@ -874,16 +874,30 @@ if (params.trim_adapters) {
         }
 
         def fastpAdapter = ''
-        if(params.adapterSeqFile != false) {
-            adapterSeqFile = Channel.fromPath(params.adapterSeqFile)
-            fastpAdapter = "--adapter_fasta $adapterSeqFile"
-        } else {
-            if(params.adapterSeq != false) {
-                adapterSeq   = Channel.value(params.adapterSeq)
-                fastpAdapter = "--adapter_sequence " + adapterSeq.getVal()
+        def adapterSeqFile
+        def aseq = false
+        def aseqR2 = false
+        def afile = false
 
-                if(params.adapterSeqR2 != false) {
-                    adapterSeqR2   = Channel.value(params.adapterSeqR2)
+        if (meta.sampleType.indexOf("DNA") > 0) {
+            afile = params.adapterSeqFile
+            aseq = params.adapterSeq
+            aseqR2 = params.adapterSeqR2
+        } else {
+             afile = params.adapterSeqFileRNAseq
+             aseq = params.adapterSeqRNAseq
+             aseqR2 = params.adapterSeqR2RNAseq
+        }
+        if(afile != false) {
+            adapterSeqFile = Channel.fromPath(afile)
+            fastpAdapter = "--adapter_fasta " + adapterSeqFile
+        } else {
+            if(aseq != false) {
+                adapterSeq   = Channel.value(aseq)
+                fastpAdapter = "--adapter_sequence " + aseq.getVal()
+
+                if(aseqR2 != false && meta.libType == "PE") {
+                    adapterSeqR2   = Channel.value(aseqR2)
                     fastpAdapter += " --adapter_sequence_r2 " + adapterSeqR2.getVal()
                 }
             }
