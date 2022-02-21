@@ -102,6 +102,7 @@ summary['DBSNP']                         = params.databases.DBSNP
 summary['GnomAD']                        = params.databases.GnomAD
 summary['GnomADfull']                    = params.databases.GnomADfull
 summary['KnownIndels']                   = params.databases.KnownIndels
+summary['BlastDB']                       = params.references.ProteinBlastDBdir
 summary['priority variant Caller']       = params.primaryCaller
 summary['Mutect 1 and 2 minAD']          = params.minAD
 summary['VarScan min_cov']               = params.min_cov
@@ -157,106 +158,6 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
 }
 // End Summary
 
-
-///////////////////////////////////////////////////////////////// REM
-/*
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                row.normalSampleName,
-                                file(row.readsTumorFWD),
-                                file((row.readsTumorREV == "None") ? "NO_FILE_REV_T" : row.readsTumorREV)) }
-            .into { raw_reads_tumor_ch;
-                    fastqc_reads_tumor_ch }
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                row.normalSampleName,
-                                file(row.readsNormalFWD),
-                                file((row.readsNormalREV == "None") ? "NO_FILE_REV_N" : row.readsNormalREV)) }
-            .into { raw_reads_normal_ch; fastqc_reads_normal_ch }
-
-     Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file(row.readsRNAseqFWD),
-                                    file(row.readsRNAseqREV)) }
-                .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
-    // user supplied HLA types (default: NO_FILE, will be checked in get_vhla)
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
-            .set { custom_hlas_ch }
-
-if (bamInput) {
-    // bam files provided as batch file in CSV format
-    // bams will be transformed to fastq files
-    // library type SE/PE will be determinded automatically
-    // mixing of PE/SE samples is not possible in a batch file,
-    // but it is possible to provide PE DNA and SE RNA or vice versa
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                row.normalSampleName,
-                                file(row.bamTumor),
-                                file(row.bamNormal)) }
-            .set { dna_bam_files }
-
-    if (have_RNAseq) {
-        Channel
-                .fromPath(params.batchFile)
-                .splitCsv(header:true)
-                .map { row -> tuple(row.tumorSampleName,
-                                    row.normalSampleName,
-                                    file(row.bamRNAseq)) }
-                .set { rna_bam_files }
-    }
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                file((row.HLAfile == "None") ? "NO_FILE_HLA" : row.HLAfile)) }
-            .set { custom_hlas_ch }
-
-}
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                row.normalSampleName,
-                                file("NO_FILE_RNA_FWD"),
-                                file("NO_FILE_RNA_REV")) }
-            .into { raw_reads_tumor_neofuse_ch; fastqc_readsRNAseq_ch }
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                file("NO_FILE_OPTI_RNA")) }
-            .set { optitype_RNA_output }
-
-    Channel
-            .fromPath(params.batchFile)
-            .splitCsv(header:true)
-            .map { row -> tuple(row.tumorSampleName,
-                                file("NO_FILE_HLAHD_RNA")) }
-            .set { hlahd_output_RNA }
-*/
-///////////////////////////////////////////////////////////////// END REM
-
-////////////////// start new
 
 def batchCSV = file(params.batchFile).splitCsv(header:true)
 
@@ -362,18 +263,8 @@ for ( row in batchCSV ) {
                 }
             }
         }
-        //if (row.sampleType != "tumor_RNA") {
-        //    raw_DNA_data.add([meta, reads])
-        //} else {
-        //    raw_RNA_data.add([meta, reads])
-        //}
         raw_data.add([meta, reads])
     } else {
-        //if (row.sampleType != "tumor_RNA") {
-        //    raw_DNA_data.add([meta, file(row.bam, checkIfExists: true)])
-        //} else {
-        //    raw_RNA_data.add([meta, file(row.bam, checkIfExists: true)])
-        //}
         raw_data.add([meta, file(row.bam, checkIfExists: true)])
     }
 
@@ -422,9 +313,6 @@ if (bamInput == false) {
 } else {
     fastq_ch = Channel.of().branch{single: []; multiple: []}
 }
-
-////////////////// end new
-
 
 // optional panel of normals file
 pon_file = file(params.mutect2ponFile)
@@ -967,24 +855,7 @@ if (params.trim_adapters) {
         output:
         tuple val(meta), path("*_trimmed_R{1,2}.fastq.gz") into reads_ch, fastqc_reads_trimmed_ch
         tuple val(meta), path("*.json") into ch_fastp // multiQC
-/* TODO: REM
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file("${TumorReplicateId}_trimmed_R1.fastq.gz"),
-            file("${trimmedReads_2}")
-        ) into (
-            reads_tumor_ch,
-            reads_tumor_uBAM_ch,
-            reads_tumor_mixcr_DNA_ch,
-            fastqc_reads_tumor_trimmed_ch
-        )
-        set(
-            TumorReplicateId,
-            NormalReplicateId,
-            file("*.json")
-        ) into ch_fastp_tumor // multiQC
-*/
+
 
         script:
         def reads_R1         = "--in1 " + reads[0]
@@ -1055,68 +926,11 @@ if (params.trim_adapters) {
         """
     }
 } else { // no adapter trimming
-    /*
-    (
-        reads_tumor_ch,
-        reads_tumor_uBAM_ch,
-        reads_tumor_mixcr_DNA_ch,
-        ch_fastqc_trimmed
-    ) = raw_reads_tumor_ch.into(4)
-
-    (
-        reads_normal_ch,
-        reads_normal_uBAM_ch,
-        reads_normal_mixcr_DNA_ch
-    ) = raw_reads_normal_ch.into(3)
-
-    ch_fastqc_trimmed = ch_fastqc_trimmed
-                            .map{ it -> tuple(it[0], it[1], "")}
-
-    (ch_fastp_normal, ch_fastp_tumor, ch_fastqc_trimmed) = ch_fastqc_trimmed.into(3)
-    */
-
     ch_fastqc_trimmed = Channel.empty()
     reads_ch = raw_reads_ch
 }
 
-/* TODO: remove
-} else { // no adapter trimming for RNAseq
-
-    (
-        reads_tumor_neofuse_ch,
-        reads_tumor_optitype_ch,
-        reads_tumor_hlahd_RNA_ch,
-        reads_tumor_mixcr_RNA_ch,
-        ch_fastp_RNAseq
-    ) = raw_reads_tumor_neofuse_ch.into(5)
-
-    ch_fastp_RNAseq = ch_fastp_RNAseq
-                            .map{ it -> tuple(it[0], it[1], "")}
-
-    (ch_fastqc_trimmed_RNAseq, ch_fastp_RNAseq) = ch_fastp_RNAseq.into(2)
-
-}
-*/
-
-// mix tumor normal channels and add sampleType (T/N) so that we can split again
-/*
-reads_uBAM_ch = Channel.empty()
-                        .mix(
-                            reads_tumor_uBAM_ch
-                                .combine(Channel.of("T")),
-                            reads_normal_uBAM_ch
-                                .combine(Channel.of("N"))
-                        )
-*/
-
-// get DNA reads
-/*
-reads_ch.filter {
-    it[0].sampleType != "tumor_RNA"
-}
-.into{ reads_BAM_ch, reads_uBAM_ch }
-*/
-
+// get DNA/RNA reads
 reads_ch.branch {
     DNA: it[0].sampleType != "tumor_RNA"
     RNA: it[0].sampleType == "tumor_RNA"
@@ -1136,20 +950,6 @@ dummy_ch.filter{
         return [it[0], []]
 }
 .into{ no_RNA_0; no_RNA_1 }
-
-//reads_tumor_optitype_ch = reads_tumor_optitype_ch.mix(no_RNA_0)
-//reads_tumor_hlahd_RNA_ch = reads_tumor_hlahd_RNA_ch.mix(no_RNA_1)
-
-/* TODO: REM
-reads_mixcr_DNA_ch.branch {
-    tumor:  it[0].sampleType == "tumor_DNA"
-    normal: it[0].sampleType == "normal_DNA"
-}
-.set{ reads_mixcr_DNA_ch }
-
-reads_tumor_mixcr_DNA_ch  = reads_mixcr_DNA_ch.tumor
-reads_normal_mixcr_DNA_ch = reads_mixcr_DNA_ch.normal
-*/
 
 /////// start processing reads ///////
 
@@ -1189,16 +989,6 @@ process 'make_uBAM' {
         -O ${ubam}
     """
 }
-
-/*
-reads_ch = Channel.empty()
-                    .mix(
-                        reads_tumor_ch
-                            .combine(Channel.of("T")),
-                        reads_normal_ch
-                            .combine(Channel.of("N"))
-                    )
-*/
 
 // Aligning reads to reference, sort and index; create BAMs
 process 'Bwa' {
@@ -1387,7 +1177,6 @@ process 'MarkDuplicates' {
 // spilt T/N and remove differing/unused info from meta for joining
 // this prepares T/N channel for CNVkit
 
-// TODO: cleanup this
 MarkDuplicates_out_ch4.branch {
         meta_ori, bam ->
             def meta = meta_ori.clone()
@@ -1726,42 +1515,6 @@ process 'GetPileup' {
     """
 }
 
-
-///// TODO: REM
-/*
-BaseRecalTumor = Channel.create()
-BaseRecalNormal = Channel.create()
-
-BaseRecalGATK4_out_ch2
-    .choice(
-        BaseRecalTumor, BaseRecalNormal
-    ) { it[2] == "T" ? 0 : 1 }
-
-(BaseRecalNormal_out_ch0, BaseRecalNormal) = BaseRecalNormal.into(2)
-BaseRecalNormal_out_ch0 = BaseRecalNormal_out_ch0
-        .map{ TumorReplicateId, NormalReplicateId,
-            sampleTypeN, recalNormalBAM, recalNormalBAI -> tuple(
-            TumorReplicateId, NormalReplicateId,
-            recalNormalBAM, recalNormalBAI
-            )}
-
-
-BaseRecalGATK4_out = BaseRecalTumor.combine(BaseRecalNormal, by: [0,1])
-BaseRecalGATK4_out = BaseRecalGATK4_out
-    .map{ TumorReplicateId, NormalReplicateId,
-          sampleTypeT, recalTumorBAM, recalTumorBAI,
-          sampleTypeN, recalNormalBAM, recalNormalBAI -> tuple(
-          TumorReplicateId, NormalReplicateId,
-          recalTumorBAM, recalTumorBAI,
-          recalNormalBAM, recalNormalBAI
-        )}
-*/
-//// end REM
-
-// NEW
-
-// TODO: cleanup this
-
 (BaseRecalNormal_out_ch0, BaseRecalGATK4_out) = BaseRecalGATK4_out_ch1.into(2)
 
 BaseRecalNormal_out_ch0.filter {
@@ -1788,8 +1541,6 @@ BaseRecalGATK4_out.branch {
 }.set{ BaseRecalGATK4_out }
 
 BaseRecalGATK4_out = BaseRecalGATK4_out.tumor.join(BaseRecalGATK4_out.normal, by: [0])
-
-//////////////////////////////// END NEW
 
 
 // Install GATK 3 from conda and register jar
@@ -1977,25 +1728,6 @@ process 'gatherMutect2VCFs' {
     """
 }
 
-// TODO: REM
-/*
-PileupTumor = Channel.create()
-PileupNormal = Channel.create()
-
-GetPileup_out_ch0
-    .choice(
-        PileupTumor, PileupNormal
-    ) { it[2] == "T" ? 0 : 1 }
-
-GetPileup_out = PileupTumor.combine(PileupNormal, by: [0,1])
-GetPileup_out = GetPileup_out
-    .map{ TumorReplicateId, NormalReplicateId, sampleTypeT, pileupTumor, sampleTypeN, pileupNormal -> tuple(
-            TumorReplicateId, NormalReplicateId, pileupTumor, pileupNormal
-        )}
-*/
-/// END REM
-
-// TODO: cleanup this
 GetPileup_out_ch0.branch {
         meta_ori, pileup ->
             def meta = meta_ori.clone()
@@ -2439,63 +2171,12 @@ if (have_GATK3) {
         """
     }
 
-//    recalRealTumor = Channel.create()
-//    recalRealNormal = Channel.create()
-
     (
         GatherRealignedBamFiles_out_AlleleCounter_ch0,
         GatherRealignedBamFiles_out_Mpileup4ControFREEC_ch0,
         GatherRealignedBamFiles_out_ch
     ) = GatherRealignedBamFiles_out_ch.into(3)
 
-// TODO: REM
-/*
-    GatherRealignedBamFiles_out_ch
-        .choice(
-            recalRealTumor, recalRealNormal
-        ) { it[2] == "T" ? 0 : 1 }
-
-
-    (
-        recalRealTumor_tmp,
-        recalRealTumor
-    ) = recalRealTumor.into(2)
-
-    recalRealTumor_tmp = recalRealTumor_tmp
-                            .map{ TumorReplicateId, NormalReplicateId,
-                                    sampleTypeT, realTumorBAM, realTumorBAI -> tuple(
-                                        TumorReplicateId, NormalReplicateId,
-                                        realTumorBAM, realTumorBAI
-                                    )
-                                }
-
-    (
-        GatherRealignedBamFilesTumor_out_FilterVarscan_ch0,
-        GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
-    ) = recalRealTumor_tmp.into(2)
-
-
-    RealignedBamFiles = recalRealTumor.combine(recalRealNormal, by: [0,1])
-    RealignedBamFiles = RealignedBamFiles
-                        .map{ TumorReplicateId, NormalReplicateId,
-                                sampleTypeT, realTumorBAM, realTumorBAI,
-                                sampleTypeN, realNormalBAM, realNormalBAI -> tuple(
-                                    TumorReplicateId, NormalReplicateId,
-                                    realTumorBAM, realTumorBAI,
-                                    realNormalBAM, realNormalBAI
-                                )
-                            }
-    (
-        VarscanBAMfiles_ch, // GatherRealignedBamFiles_out_VarscanSomaticScattered_ch0,
-        GatherRealignedBamFiles_out_Mutect1scattered_ch0,
-        GatherRealignedBamFiles_out_Sequenza_ch0
-    ) = RealignedBamFiles.into(3)
-*/
-// END REM
-
-// NEW
-
-// TODO: cleanup this
     GatherRealignedBamFiles_out_ch.branch {
             meta_ori, bam ->
                 def meta = meta_ori.clone()
@@ -2521,10 +2202,6 @@ if (have_GATK3) {
         GatherRealignedBamFiles_out_Mutect1scattered_ch0,
         GatherRealignedBamFiles_out_Sequenza_ch0
     ) = RealignedBamFiles.into(3)
-
-
-
-// END NEW
 
 } else {
 
@@ -3048,7 +2725,9 @@ if(have_Mutect1) {
 
 
 // Strelka2 and Manta
-// TODO: check what happens if the when clause results in not running the sample (se smple)
+// Will only run with PE libraries
+
+MantaSomaticIndels_out_ch0 = Channel.create()
 process 'MantaSomaticIndels' {
 
     label 'Manta'
@@ -3128,18 +2807,6 @@ process 'MantaSomaticIndels' {
     """
 }
 
-/* TODO: REM
-if( single_end)
-} else {
-    BaseRecalGATK4_out_MantaSomaticIndels_ch0
-        .map {  item -> tuple(item[0],
-                              item[1],
-                              "NO_FILE",
-                              "NO_FILE_IDX") }
-        .into { MantaSomaticIndels_out_ch0;  MantaSomaticIndels_out_NeoFuse_in_ch0 }
-}
-*/
-
 // combine bam/bai with manta indel vcf/idx
 // return null if not manta indels in case of single end library
 StrelkaSomatic_in_ch = BaseRecalGATK4_out_StrelkaSomatic_ch0
@@ -3154,7 +2821,6 @@ StrelkaSomatic_in_ch = BaseRecalGATK4_out_StrelkaSomatic_ch0
                                 manta_indel_vfc = it[3]
                                 return [meta, tumor_bam, normal_bam, manta_indel_vfc]
                             } else {
-                                // it.removeAt(2) // TODO: check this ???
                                 return [meta, tumor_bam, normal_bam, []]
                             }
                         }
@@ -3862,24 +3528,6 @@ process AlleleCounter {
 
 }
 
-/* TODO: REM
-alleleCountOutNormal = Channel.create()
-alleleCountOutTumor = Channel.create()
-
-AlleleCounter_out_ch0
-    .choice(
-        alleleCountOutTumor, alleleCountOutNormal
-    ) { it[2] == "T" ? 0 : 1 }
-
-AlleleCounter_out_ch = alleleCountOutTumor.combine(alleleCountOutNormal, by: [0,1])
-
-AlleleCounter_out_ch = AlleleCounter_out_ch
-    .map{ TumorReplicateId, NormalReplicateId, sampleTypeT, alleleCountTumor, sampleTypeN, alleleCountNormal -> tuple(
-            TumorReplicateId, NormalReplicateId, alleleCountTumor, alleleCountNormal
-        )}
-*/
-
-// TODO: cleanup this
 AlleleCounter_out_ch0.branch {
         meta_ori, countFile ->
             def meta = meta_ori.clone()
@@ -4048,19 +3696,6 @@ if (params.controlFREEC) {
         """
     }
 
-/* TODO: REM
-    mpileupOutNormal = Channel.create()
-    mpileupOutTumor = Channel.create()
-
-    gatherMpileups_out_ch0
-        .choice(
-            mpileupOutTumor, mpileupOutNormal
-        ) { it[2] == "T" ? 0 : 1 }
-
-    gatherMpileups_out_ch0 = mpileupOutTumor.combine(mpileupOutNormal, by: [0,1])
-*/
-
-// TODO: clean up this
     gatherMpileups_out_ch0.branch {
             meta_ori, pileupFile ->
                 def meta = meta_ori.clone()
@@ -5380,10 +5015,6 @@ process get_vhla {
 Prediction of gene fusion neoantigens with Neofuse and calculation of TPM values
 */
 
-/*
-if (have_RNAseq) {  // TODO: remove this if clause and check if solved it correctly
-*/
-
 reads_tumor_neofuse_ch = reads_tumor_neofuse_ch.map{
     meta_ori, out_file ->
         def meta = meta_ori.clone()
@@ -5664,15 +5295,6 @@ process gene_annotator {
 // re-add un-annotated vcfs for samples without RNAseq data
 (vcf_vep_ex_gz, generate_protein_fasta_tumor_vcf_ch0, gene_annotator_out_mixMHC2pred_ch0) = vcf_vep_ex_gz.mix(VEPvcf_out_ch2.no_RNA).into(3)
 
-// TODO: check channels and REM
-/*
-} else { // no RNAseq data
-
-    (vcf_vep_ex_gz,  gene_annotator_out_mixMHC2pred_ch0, generate_protein_fasta_tumor_vcf_ch0) = VEPvcf_out_ch2.into(3)
-    Neofuse_results_ch1 = Channel.empty()
-
-}
-*/
 
 // IEDB installation
 iedb_chck_file_name = ".iedb_install_ok.chck"
@@ -5760,28 +5382,16 @@ process 'pVACseq' {
         .combine(iedb_install_out_ch)
 
     output:
-// TODO: REM
-//    tuple(
-//        val(meta),
-//        val("class_I"),
-//        path("**/MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv"),
-//        path("**/MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv")
-//    ) optional true into mhcI_out_f
-//
     tuple(
         val(meta),
         val("Class_I"),
         path(pvacseq_class_I_out)
-//        path(["${meta.sampleName}/MHC_Class_I/${meta.sampleName}_tumor.filtered.tsv",
-//              "${meta.sampleName}/MHC_Class_I/${meta.sampleName}_tumor.all_epitopes.tsv"])
     ) optional true into mhcI_out_f
 
     tuple(
         val(meta),
         val("Class_II"),
         path(pvacseq_class_II_out)
-//        path(["${meta.sampleName}/MHC_Class_II/${meta.sampleName}_tumor.filtered.tsv",
-//              "${meta.sampleName}/MHC_Class_II/${meta.sampleName}_tumor.all_epitopes.tsv"])
     ) optional true into mhcII_out_f
 
 
@@ -6538,78 +6148,6 @@ if(params.TCR) {
         (mixcr_chck_ch0, mixcr_chck_ch1, mixcr_chck_ch2) = mixcr_chck_ch.into(3)
     }
 
-/* TODO: REM
-    process mixcr_DNA_tumor {
-
-        label 'nextNEOpiENV'
-
-        tag "${meta.sampleName}"
-
-        publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
-            mode: params.publishDirMode
-
-        input:
-        tuple(
-            val(meta),
-            path(reads),
-            path(mixcr_chck_file)
-        ) from reads_tumor_mixcr_DNA_ch
-            .combine(mixcr_chck_ch0)
-
-        output:
-        tuple(
-            val(meta),
-            path("${meta.sampleName}_mixcr_DNA.clonotypes.ALL.txt"),
-        )
-
-        script:
-        """
-        mixcr analyze shotgun \\
-            --threads ${task.cpus} \\
-            --species hs \\
-            --starting-material dna \\
-            --only-productive \\
-            $reads \\
-            ${meta.sampleName}_mixcr_DNA
-        """
-    }
-
-    process mixcr_DNA_normal {
-
-        label 'nextNEOpiENV'
-
-        tag "${meta.sampleName} : Norma"
-
-        publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
-            mode: params.publishDirMode
-
-        input:
-        tuple(
-            val(meta),
-            path(reads),
-            path(mixcr_chck_file)
-        ) from reads_normal_mixcr_DNA_ch
-            .combine(mixcr_chck_ch1)
-
-        output:
-        set(
-            NormalReplicateId,
-            path("${NormalReplicateId}_mixcr_DNA.clonotypes.ALL.txt"),
-        )
-
-        script:
-        reads = (single_end) ? readFWD : readFWD + " " + readREV
-        """
-        mixcr analyze shotgun \\
-            --threads ${task.cpus} \\
-            --species hs \\
-            --starting-material dna \\
-            --only-productive \\
-            $reads \\
-            ${NormalReplicateId}_mixcr_DNA
-        """
-    }
-*/
     process mixcr {
 
         label 'nextNEOpiENV'
@@ -6646,43 +6184,6 @@ if(params.TCR) {
             ${procSampleName}_mixcr
         """
     }
-
-/*
-    process mixcr_RNA {
-
-        label 'nextNEOpiENV'
-
-        tag "${meta.sampleName}"
-
-        publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
-            mode: params.publishDirMode
-
-        input:
-        tuple(
-            val(meta),
-            path(reads_RNA),
-            path(mixcr_chck_file)
-        ) from reads_tumor_mixcr_RNA_ch
-            .combine(mixcr_chck_ch2)
-
-        output:
-        tuple(
-            val(meta),
-            path("${meta.sampleName}_mixcr_RNA.clonotypes.ALL.txt"),
-        )
-
-        script:
-        """
-        mixcr analyze shotgun \\
-            --threads ${task.cpus} \\
-            --species hs \\
-            --starting-material rna \\
-            --only-productive \\
-            $reads_RNA \\
-            ${meta.sampleName}_mixcr_RNA
-        """
-    }
-*/
 }
 
 
