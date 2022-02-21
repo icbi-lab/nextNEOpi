@@ -52,9 +52,6 @@ if (params.help) exit 0, helpMessage()
 // switch for enable/disable processes (debug/devel only: use if(params.RUNTHIS) { .... })
 params.RUNTHIS = false
 
-// default is not to process a batchfile
-params.batchFile = false
-
 // default is not to get bams as input data
 bamInput = false
 
@@ -377,7 +374,7 @@ if (params.MUTECT1 != "" && file(params.MUTECT1) && params.JAVA7 != "" && file(p
 
 // check if we have GATK3 installed
 have_GATK3 = false
-if (file(params.GATK3) && file(params.JAVA8) && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
+if (params.GATK3 != "" && file(params.GATK3) && params.JAVA8 != "" && file(params.JAVA8) && ! workflow.profile.contains('conda') && ! workflow.profile.contains('singularity')) {
     if(checkToolAvailable(params.JAVA8, "inPath", "warn") && checkToolAvailable(params.GATK3, "exists", "warn")) {
         JAVA8 = file(params.JAVA8)
         GATK3 = file(params.GATK3)
