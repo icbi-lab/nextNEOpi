@@ -158,6 +158,12 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
 }
 // End Summary
 
+// Check if we got a batch file
+params.batchFile = null
+if (params.batchFile == null) {
+    log.error "No sample sheet specified, please use --batchFile to pass the sample sheet"
+    exit(1)
+}
 
 def batchCSV = file(params.batchFile).splitCsv(header:true)
 
@@ -291,8 +297,6 @@ custom_HLA_data = custom_HLA_data.each {
     record[0].have_RNA = (r_map[record[0].sampleName]) ? true : false
 }.unique()
 
-//batch_raw_DNA_data_ch = Channel.fromList(raw_DNA_data)
-//batch_raw_RNA_data_ch = Channel.fromList(raw_RNA_data)
 batch_raw_data_ch = Channel.fromList(raw_data)
 batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data)
 
@@ -5042,12 +5046,12 @@ process Neofuse {
                 } else if(fileName.indexOf("LOGS/") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/LOGS/" + file(fileName).getName() : ""
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_I_") >= 0) {
-                    targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName()
+                    targetFile = "11_Fusions/NeoFuse/Class_I/" + file(fileName).getName()
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_II_") >= 0) {
-                    if(fileName.indexOf("_mixMHC2pred_conf.txt") < 0) {
-                        targetFile = params.fullOutput ? "11_Fusions/NeoFuse/" + file(fileName).getName() : ""
+                    if(fileName.indexOf("_mixMHC2pred_conf.txt") > 0) {
+                        targetFile = params.fullOutput ? "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName() : ""
                     } else {
-                        targetFile = "11_Fusions/NeoFuse/" + file(fileName).getName()
+                        targetFile = "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName()
                     }
                 } else if(fileName.indexOf("STAR/") >= 0) {
                     if(fileName.indexOf("Aligned.sortedByCoord.out.bam") >= 0) {
@@ -5924,9 +5928,9 @@ process add_blast_hits {
         saveAs: {
             fileName ->
                 targetFile = fileName
-                if(fileName.indexOf("NeoFuse_MHCI_") >= 0) {
+                if(fileName.indexOf("NeoFuse_MHC_Class_I_") >= 0) {
                     targetFile = "Class_I/Fusions/" + file(fileName).getName()
-                } else if(fileName.indexOf("NeoFuse_MHCII_") >= 0) {
+                } else if(fileName.indexOf("NeoFuse_MHC_Class_II_") >= 0) {
                     targetFile = "Class_II/Fusions/" + file(fileName).getName()
                 } else if(fileName.indexOf("${meta.sampleName}_MHC_Class_I_") >= 0) {
                     targetFile = "Class_I/" + file(fileName).getName()
