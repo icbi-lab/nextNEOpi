@@ -4139,7 +4139,7 @@ process CNVkit {
     ) into CNVkit_out_ch0
 
     script:
-    def gender = (meta.sex == "None") ? "" : "--sample-sex " + meta.sex
+    def gender = (meta.sex == "None") ? "" : "--sample-sex " + ((meta.sex == XX) ? "female" : "male")
     def maleRef = (meta.maleRef == "true") ? "-y" : ""
     def method = (params.WES) ? "--method hybrid" : "--method wgs"
     def targets = (params.WES) ? "--targets ${BaitsBed}" : ""
