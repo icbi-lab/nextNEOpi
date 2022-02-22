@@ -5546,7 +5546,7 @@ process aggregated_reports {
 
     label 'pVACtools'
 
-    publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/",
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
         mode: params.publishDirMode
 
     input:
