@@ -200,18 +200,18 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 
  | sampleName | reads1 | reads2 | sampleType | HLAfile | sex |
  | ---------- |------- | ------ | ---------- | ------- | --- |
- | sample1 | reads_1.fastq.gz | reads_2.fastq.gz | tumor_DNA | | female
- | sample1 | reads_1.fastq.gz | reads_2.fastq.gz | normal_DNA | | female
- | sample1 | reads_1.fastq.gz | reads_2.fastq.gz | tumor_RNA | | female
- | sample2 | reads_1.fastq.gz | reads_2.fastq.gz | tumor_DNA | /data/sample2_hla.txt | male
- | sample2 | reads_1.fastq.gz | reads_2.fastq.gz | normal_DNA | | male
- | sample2 | reads_1.fastq.gz | | tumor_RNA | | male
- | sample3 | reads_3.fastq.gz | reads_3.fastq.gz | tumor_DNA | | female
- | sample3 | reads_3.fastq.gz | reads_3.fastq.gz | normal_DNA | | female
- | sample4 | reads_1_1.fastq.gz | reads_1_2.fastq.gz | tumor_DNA | | NA
- | sample4 | reads_2_1.fastq.gz | reads_2_2.fastq.gz | tumor_DNA | | NA
- | sample4 | reads_1.fastq.gz | reads_2.fastq.gz | normal_DNA | | NA
- | sample4 | reads_1.fastq.gz | reads_2.fastq.gz | tumor_RNA | | NA
+ | sample1 | reads_s1_t_1.fastq.gz | reads_s1_t_2.fastq.gz | tumor_DNA | | female
+ | sample1 | reads_s1_n_1.fastq.gz | reads_s1_n_2.fastq.gz | normal_DNA | | female
+ | sample1 | reads_s1_r_1.fastq.gz | reads_s1_r_2.fastq.gz | tumor_RNA | | female
+ | sample2 | reads_s2_t_1.fastq.gz | reads_s2_t2.fastq.gz | tumor_DNA | /data/sample2_hla.txt | male
+ | sample2 | reads_s2_n_1.fastq.gz | reads_s2_n_2.fastq.gz | normal_DNA | | male
+ | sample2 | reads_s2_r_1.fastq.gz | | tumor_RNA | | male
+ | sample3 | reads_s3_t_2.fastq.gz | reads_s3_t_2.fastq.gz | tumor_DNA | | female
+ | sample3 | reads_s3_n_1.fastq.gz | reads_s3_n_2.fastq.gz | normal_DNA | | female
+ | sample4 | reads_s4_t_1_1.fastq.gz | reads_s4_t_1_2.fastq.gz | tumor_DNA | | NA
+ | sample4 | reads_s4_t_2_1.fastq.gz | reads_s4_t_2_2.fastq.gz | tumor_DNA | | NA
+ | sample4 | reads_s4_n_1.fastq.gz | reads_s4_n_2.fastq.gz | normal_DNA | | NA
+ | sample4 | reads_s4_r_1.fastq.gz | reads_s4_r_2.fastq.gz | tumor_RNA | | NA
  |... |
 
 * CSV fields of the `batchFile`
