@@ -5859,6 +5859,8 @@ process make_epitopes_fasta {
 
     tag "${meta.sampleName}"
 
+    cache 'lenient'
+
     input:
     tuple(
         val(meta),
@@ -5892,6 +5894,8 @@ process blast_epitopes {
     label 'Blast'
 
     tag "${meta.sampleName}"
+
+    cache 'lenient'
 
     input:
     tuple(
