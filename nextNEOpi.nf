@@ -3374,9 +3374,9 @@ process 'VEPvcf' {
 
     # pVACSeq
     vep -i ${tumorVCF[0]} \\
-        -o ${meta.sampleName}_tumor_vep_pick.vcf \\
+        -o ${meta.sampleName}_hc_vep_pick.vcf \\
         --fork ${task.cpus} \\
-        --stats_file ${meta.sampleName}_tumor_vep_summary_pick.html \\
+        --stats_file ${meta.sampleName}_hc_vep_summary_pick.html \\
         --species ${params.vep_species} \\
         --assembly ${params.vep_assembly} \\
         --offline \\
@@ -3392,9 +3392,9 @@ process 'VEPvcf' {
 
     # All variants
     vep -i ${tumorVCF[0]} \\
-        -o ${meta.sampleName}_tumor_vep.vcf \\
+        -o ${meta.sampleName}_hc_vep.vcf \\
         --fork ${task.cpus} \\
-        --stats_file ${meta.sampleName}_tumor_vep_summary.html \\
+        --stats_file ${meta.sampleName}_hc_vep_summary.html \\
         --species ${params.vep_species} \\
         --assembly ${params.vep_assembly} \\
         --offline \\
@@ -3404,7 +3404,7 @@ process 'VEPvcf' {
         --dir_cache ${params.databases.vep_cache} \\
         --hgvs \\
         --fasta ${params.references.VepFasta} \\
-        --plugin ProteinSeqs,${meta.sampleName}_tumor_reference.fa,${meta.sampleName}_tumor_mutated.fa \\
+        --plugin ProteinSeqs,${meta.sampleName}_hc_reference.fa,${meta.sampleName}_hc_mutated.fa \\
         --symbol --terms SO --transcript_version --tsl \\
         --vcf 2>> vep_errors_1.txt
 
@@ -3415,16 +3415,16 @@ process 'VEPvcf' {
     tabix -p vcf ${meta.sampleName}_tumor_germline_combined_sorted_vep_pick.vcf.gz && \\
         sleep 2
 
-    bgzip -c ${meta.sampleName}_tumor_vep_pick.vcf \\
-        > ${meta.sampleName}_tumor_vep_pick.vcf.gz
+    bgzip -c ${meta.sampleName}_hc_vep_pick.vcf \\
+        > ${meta.sampleName}_hc_vep_pick.vcf.gz
 
-    tabix -p vcf ${meta.sampleName}_tumor_vep_pick.vcf.gz && \\
+    tabix -p vcf ${meta.sampleName}_hc_vep_pick.vcf.gz && \\
         sleep 2
 
-    bgzip -c ${meta.sampleName}_tumor_vep.vcf \\
-        > ${meta.sampleName}_tumor_vep.vcf.gz
+    bgzip -c ${meta.sampleName}_hc_vep.vcf \\
+        > ${meta.sampleName}_hc_vep.vcf.gz
 
-    tabix -p vcf ${meta.sampleName}_tumor_vep.vcf.gz && \\
+    tabix -p vcf ${meta.sampleName}_hc_vep.vcf.gz && \\
         sleep 2
 
     sync
