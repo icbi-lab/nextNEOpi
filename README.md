@@ -244,7 +244,7 @@ helpful for HLA-typing.
 
 * in the ```HLAfile``` coulumn a user suppiled HLA types file may be specified for a given sample
 
-* the ```sex``` column can be "XX", "female" or "Female", "XY", "male" or "Male". If not specified or "NA" the gender is guessed from the data.
+* the ```sex``` column can be "XX", "female" or "Female", "XY", "male" or "Male". If not specified or "NA" the gender is inferred from the data.
 
 * Please make sure your **```/tmp``` (or the directory set as ```$TMPDIR```) has a lot of free space (> 50GB, depending on input data size)**. You may change the tmp dir used by nextNEOpi by setting the parameter ```tmpDir``` in ```params.config``` or on the command line ```--tmpDir``` to a directory of your choice.
 

@@ -6582,61 +6582,39 @@ def helpMessage() {
     log.info "--        U S A G E       "
     log.info "----------------------------"
     log.info ""
-    log.info ' nextflow run nextNEOpi.nf -config conf/params.config ["--readsTumor" "--readsNormal" | "--bamTumor" "--bamNormal"] | ["--batchFile"] ["--bam"] "-profile [conda|singularity],[cluster]" ["-resume"]'
+    log.info ' nextflow run nextNEOpi.nf -config conf/params.config --batchFile <batchfile.csv> -profile [conda|singularity],[cluster] [-resume]'
     log.info ""
-    log.info "-------------------------------------------------------------------------"
+    log.info "-----------------------------------------------------------------------------------------------------------------------------------------"
     log.info ""
     log.info ""
     log.info " Mandatory arguments:"
     log.info " --------------------"
-    log.info "--batchFile  (RECOMMENDED)"
-    log.info "   or"
-    log.info "--readsTumor \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
-    log.info "--readsNormal \t\t reads_{1,2}.fastq \t\t paired-end reads; FASTQ files (can be zipped)"
-    log.info "   or"
-    log.info "--bamTumor \t\t tumor_1.bam \t\t ; tumor BAM file"
-    log.info "--bamNormal \t\t normal_1.bam \t\t ; normal BAM file"
+    log.info "--batchFile"
     log.info ""
-    log.info "CSV-file, paired-end T/N reads, paired-end RNAseq reads:"
+    log.info "CSV-file, T/N reads, and optionally RNAseq reads:"
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
-    log.info "sample1,Tumor1_reads_1.fastq,Tumor1_reads_2.fastq,normal1,Normal1_reads_1.fastq,Normal1_reads_2.fastq,Tumor1_RNAseq_reads_1.fastq,Tumor1_RNAseq_reads_2.fastq,None,XX"
-    log.info "sample2,Tumor2_reads_1.fastq,Tumor2_reads_2.fastq,normal2,Normal2_reads_1.fastq,Normal2_reads_2.fastq,Tumor2_RNAseq_reads_1.fastq,Tumor2_RNAseq_reads_2.fastq,None,XY"
-    log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,TumorN_reads_2.fastq,normalN,NormalN_reads_1.fastq,NormalN_reads_2.fastq,TumorN_RNAseq_reads_1.fastq,TumorN_RNAseq_reads_2.fastq,None,XX"
+    log.info "sampleName,reads1,reads2,sampleType,HLAfile,sex"
+    log.info "sample1,reads_s1_t_1.fastq.gz,reads_s1_t_2.fastq.gz,tumor_DNA,,female"
+    log.info "sample1,reads_s1_n_1.fastq.gz,reads_s1_n_2.fastq.gz,normal_DNA,,female"
+    log.info "sample1,reads_s1_r_1.fastq.gz,reads_s1_r_2.fastq.gz,tumor_RNA,,female"
+    log.info "sample2,reads_s2_t_1.fastq.gz,reads_s2_t_2.fastq.gz,tumor_DNA,/data/sample2_hla.txt,male"
+    log.info "sample2,reads_s2_n_1.fastq.gz,reads_s2_n_2.fastq.gz,normal_DNA,,male"
+    log.info "sample2,reads_s2_r_1.fastq.gz,,tumor_RNA,,male"
 
-    log.info "CSV-file, single-end T/N reads, single-end RNAseq reads:"
+    log.info "Note: You can not use samples that have mixed single-end and paired-end DNA reads in tumor and normal."
+    log.info "Both, tumor and normal DNA library types need to be either SE or PE for a given sample."
 
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XX"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,XY"
-    log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,Tumor1_RNAseq_reads_1.fastq,None,None,None"
+    log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample"
 
-    log.info "CSV-file, single-end T/N reads, NO RNAseq reads:"
-
-    log.info "tumorSampleName,readsTumorFWD,readsTumorREV,normalSampleName,readsNormalFWD,readsNormalREV,readsRNAseqFWD,readsRNAseqREV,HLAfile,sex"
-    log.info "sample1,Tumor1_reads_1.fastq,None,normal1,Normal1_reads_1.fastq,None,None,None,None,XX"
-    log.info "sample2,Tumor2_reads_1.fastq,None,normal2,Normal2_reads_1.fastq,None,None,None,None,XY"
-    log.info "..."
-    log.info "sampleN,TumorN_reads_1.fastq,None,normalN,NormalN_reads_1.fastq,None,None,None,None,XX"
-
-
-    log.info "Note: You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all"
-    log.info "DNA reads paired-end and all RNAseq reads single-end or vice-versa."
-
-    log.info "Note: in the HLAfile coulumn a user suppiled HLA types file may be specified for a given sample, see also --customHLA option below"
-
-    log.info "Note: sex can be XX, female or Female, XY, male or Male. If not specified or \"None\" Male is assumed"
+    log.info "Note: sex can be XX, female or Female, XY, male or Male. If not specified or \"NA\" the gender is inferred from the data"
     log.info ""
-    log.info "FASTQ files (can be zipped), if single-end reads are used put NO_FILE instead of *_reads_2.fastq in the REV fields"
     log.info ""
     log.info ""
     log.info ""
     log.info " All references, databases, software should be edited in the resources.config file"
     log.info ""
-    log.info " For further options see the README.md, the params.config and process.config files"
-    log.info "----------------------------------------------------------------------------------"
+    log.info " For further options e.g. BAM input see the README.md, the params.config and process.config files"
+    log.info "-----------------------------------------------------------------------------------------------------------------------------------------"
 }
 
 // workflow complete
