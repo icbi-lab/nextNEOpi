@@ -6146,11 +6146,7 @@ if(params.TCR) {
             cache false
 
             output:
-            path(".mixcr_install_ok.chck") into (
-                mixcr_chck_ch0,
-                mixcr_chck_ch1,
-                mixcr_chck_ch2
-            )
+            path(".mixcr_install_ok.chck") into mixcr_chck_ch
 
             script:
             """
@@ -6162,7 +6158,6 @@ if(params.TCR) {
         }
     } else {
         mixcr_chck_ch = Channel.fromPath(mixcr_chck_file)
-        (mixcr_chck_ch0, mixcr_chck_ch1, mixcr_chck_ch2) = mixcr_chck_ch.into(3)
     }
 
     process mixcr {
@@ -6180,7 +6175,7 @@ if(params.TCR) {
             path(reads),
             path(mixcr_chck_file)
         ) from reads_mixcr_ch
-            .combine(mixcr_chck_ch0)
+            .combine(mixcr_chck_ch)
 
         output:
         tuple(
