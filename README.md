@@ -293,6 +293,9 @@ nextflow run nextNEOpi.nf \
 ```--use_NetChop```            Use NetChop to generate peptides
                             Default: false
 
+```--use_NetMHCstab```      Use NetMHCstab to predict the stability of peptide binding to MHC molecules
+                            Default: true
+
 ```--TCR```                   Run mixcr for TCR prediction
                             Default: true
 
