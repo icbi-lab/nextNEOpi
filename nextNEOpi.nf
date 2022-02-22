@@ -6028,7 +6028,8 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
         cache false
 
         output:
-        path(".igs_install_ok.chck") into igs_chck_ch
+        val("OK") into igs_chck_ch
+        path(".igs_install_ok.chck")
 
         script:
         """
@@ -6050,7 +6051,8 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
         cache false
 
         output:
-        path(".igs_install_ok.chck") into igs_chck_ch
+        val("OK") into igs_chck_ch
+        path(".igs_install_ok.chck")
 
         script:
         """
@@ -6060,7 +6062,7 @@ if(( ! igs_chck_file.exists() || igs_chck_file.isEmpty()) && params.IGS == "") {
         """
     }
 } else {
-    igs_chck_ch = Channel.fromPath(igs_chck_file)
+    igs_chck_ch = Channel.value("OK")
 }
 
 
@@ -6081,7 +6083,7 @@ process immunogenicity_scoring {
         val(meta),
         path(pvacseq_file)
     ) from igs_ch
-    path(igs_install_chck_file) from igs_chck_ch
+    val (igs_install_chck) from igs_chck_ch
 
     output:
     path("${meta.sampleName}_Class_I_immunogenicity.tsv")
