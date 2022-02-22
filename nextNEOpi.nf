@@ -3296,12 +3296,12 @@ process 'VEPvcf' {
     publishDir "$params.outputDir/analyses/${meta.sampleName}/05_vep/vcf/high_confidence/",
         saveAs: {
             filename ->
-                if (filename.indexOf("_vep_pick.vcf.gz") > 0 && params.fullOutput) {
+                if (filename.indexOf("_vep_pick.vcf") > 0 && params.fullOutput) {
                     return "combined/$filename"
-                } else if (filename.indexOf("_vep_pick.vcf.gz") > 0 && ! params.fullOutput) {
+                } else if (filename.indexOf("_vep_pick.vcf") > 0 && ! params.fullOutput) {
                     return null
                 } else if (filename.endsWith(".fa")) {
-                    return "$params.outputDir/analyses/${meta.sampleName}/06_proteinseq/$filename"
+                    return "../../../06_proteinseq/$filename"
                 } else {
                     return "$filename"
                 }
