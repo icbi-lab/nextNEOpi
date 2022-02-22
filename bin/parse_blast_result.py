@@ -87,7 +87,7 @@ if __name__ == "__main__":
         header=None,
         names=[
             "peptide_id",
-            "match_protein_id",
+            "ref_match_protein_id",
             "query_len",
             "align_len",
             "number_ident",
