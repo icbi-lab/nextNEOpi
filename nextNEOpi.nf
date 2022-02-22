@@ -5969,7 +5969,7 @@ process add_blast_hits {
         .join(epitopes_protein_match_in_ch, by: [0,1,2,3])
 
     output:
-    path("*_match_protein.tsv")
+    path("*_ref_match.tsv")
 
     script:
     """
