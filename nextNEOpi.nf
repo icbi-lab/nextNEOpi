@@ -3331,21 +3331,21 @@ process 'VEPvcf' {
 
     tuple(
         val(meta),
-        path("${meta.sampleName}_tumor_vep_pick.{vcf.gz,vcf.gz.tbi}")
+        path("${meta.sampleName}_hc_vep_pick.{vcf.gz,vcf.gz.tbi}")
     ) into (
         VEPvcf_out_ch2,
     )
 
     tuple(
         val(meta),
-        path("${meta.sampleName}_tumor_vep.{vcf.gz,vcf.gz.tbi}")
+        path("${meta.sampleName}_hc_vep.{vcf.gz,vcf.gz.tbi}")
     ) into (
         VEPvcf_out_ch1, // mkPhasedVCF_out_Clonality_ch0
         VEPvcf_out_ch3,
         VEPvcf_out_ch4
     )
-    path("${meta.sampleName}_tumor_reference.fa")
-    path("${meta.sampleName}_tumor_mutated.fa")
+    path("${meta.sampleName}_hc_reference.fa")
+    path("${meta.sampleName}_hc_mutated.fa")
 
 
 
