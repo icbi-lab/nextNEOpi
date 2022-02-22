@@ -212,16 +212,16 @@ for ( row in batchCSV ) {
 
     if(row.sex) {
         if (row.sex.toLowerCase() in ["xx", "female"]) {
-           meta.sex = "female"
+           meta.sex = "XX"
         } else if (row.sex.toLowerCase() in ["xy", "male"]) {
-            meta.sex = "male"
+            meta.sex = "XY"
         } else if (row.sex.toLowerCase() in ["none", "na"]) {
             meta.sex = "None"
             println("WARNING: " + row.sampleName + " sex not specified will infer from data")
         } else {
             exit 1, "sex should be one of: XX, xx, XY, xy, Female, female, Male, male, None, none, NA, got: " + row.sex
         }
-        meta.maleRef = (meta.sex ==  "male") ? true : false
+        meta.maleRef = (meta.sex ==  "XY") ? true : false
     } else {
         println("WARNING: " + row.sampleName + " sex not specified will infer from data")
         meta.sex = "None"
