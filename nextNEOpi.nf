@@ -106,7 +106,6 @@ summary['VarScan min_cov']               = params.min_cov
 summary['VarScan min_cov_tumor']         = params.min_cov_tumor
 summary['VarScan min_cov_normal']        = params.min_cov_normal
 summary['VarScan min_freq_for_hom']      = params.min_freq_for_hom
-summary['VarScan tumor_purity']          = params.tumor_purity
 summary['VarScan somatic_pvalue']        = params.somatic_pvalue
 summary['VarScan somatic_somaticpvalue'] = params.somatic_somaticpvalue
 summary['VarScan strand_filter']         = params.strand_filter
@@ -2297,7 +2296,7 @@ process 'VarscanSomaticScattered' {
         --min-coverage-normal ${params.min_cov_normal} \\
         --min-coverage-tumor ${params.min_cov_tumor} \\
         --min-freq-for-hom ${params.min_freq_for_hom} \\
-        --tumor-purity ${params.tumor_purity} \\
+        --tumor-purity 0.95 \\
         --p-value ${params.somatic_pvalue} \\
         --somatic-p-value ${params.somatic_somaticpvalue} \\
         --strand-filter ${params.strand_filter} && \\
@@ -3683,7 +3682,7 @@ if (params.controlFREEC) {
 
     Mpileup4ControFREEC_out_ch0 = Mpileup4ControFREEC_out_ch0.groupTuple(by:[0])
 
-    // Merge scattered Varscan vcfs
+    // Merge scattered pileups
     process 'gatherMpileups' {
 
         label 'nextNEOpiENV'
@@ -4014,9 +4013,9 @@ purity_estimate = Ascat_out_Clonality_ch0.join(Sequenza_out_Clonality_ch0, by: [
         def ascatOK = true
         def sequenzaOK = true
 
-        def purity = 1.0 // default
+        def purity = 0.95 // default
         def ploidy = 2.0 // default
-        def sample_purity = 1.0 // default
+        def sample_purity = 0.95// default
 
         def fileReader = ascat_purity.newReader()
 
@@ -4058,12 +4057,21 @@ purity_estimate = Ascat_out_Clonality_ch0.join(Sequenza_out_Clonality_ch0, by: [
                 sample_purity = purity
                 log.warn "WARNING (" + meta.sampleName + "): changed from ASCAT to Sequenza purity and segments, ASCAT did not produce results"
             } else {
-                log.warn "WARNING (" + meta.sampleName + "): neither ASCAT nor Sequenza produced results, using purity of 1.0"
+                log.warn "WARNING (" + meta.sampleName + "): neither ASCAT nor Sequenza produced results, using purity of 0.95"
             }
         }
 
         return [ meta, sample_purity ]
     }
+
+(purity_estimate_ch0, purity_estimate) = purity_estimate.into(2)
+
+purity_estimate.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}.into{purity_estimate_ch1; purity_estimate_ch2}
 
 // CNVkit
 
@@ -4116,7 +4124,7 @@ process CNVkit {
         path(normalBAM),
         val(sample_purity)
     ) from MarkDuplicates_out_CNVkit_ch0
-        .join(purity_estimate, by: [0])
+        .join(purity_estimate_ch0, by: [0])
 
     path(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
 
@@ -5390,10 +5398,12 @@ process 'pVACseq' {
         path(vep_phased_vcf_gz),
         path(anno_vcf),
         val(hla_types),
+        val(tumor_purity),
         path(iedb_install_ok)
     ) from mkPhasedVCF_out_pVACseq_ch0
         .join(vcf_vep_ex_gz, by: [0])
         .combine(hlas.splitText(), by: 0)
+        .combine(purity_estimate_ch1, by: 0)
         .combine(iedb_install_out_ch)
 
     output:
@@ -5454,6 +5464,7 @@ process 'pVACseq' {
         -e1 ${params.mhci_epitope_len} \\
         -e2 ${params.mhcii_epitope_len} \\
         --normal-sample-name ${meta.sampleName}_normal \\
+        --tumor-purity ${tumor_purity} \\
         ${NetChop} \\
         ${NetMHCstab} \\
         ${filter_set} \\
@@ -5553,8 +5564,10 @@ process aggregated_reports {
     tuple(
         val(meta),
         val(mhc_class),
-        path(epitope_file)
+        path(epitope_file),
+        val(tumor_purity)
     ) from aggregated_reports_ch0
+        .combine(purity_estimate_ch2, by: 0)
 
     output:
     path("${meta.sampleName}_MHC_${mhc_class}_all_aggregated.tsv")
