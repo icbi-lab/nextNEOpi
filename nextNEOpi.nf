@@ -3022,6 +3022,10 @@ process 'mkHCsomaticVCF' {
         mkHCsomaticVCF_out_ch1,
         mkHCsomaticVCF_out_ch2
     )
+    tuple(
+        val(meta),
+        env(VARCOUNT)
+    ) into hc_var_count
 
     script:
     def callerMap = [:]
@@ -3046,7 +3050,10 @@ process 'mkHCsomaticVCF' {
         --confirming ${confirming_caller_files} \\
         --confirming_names ${confirming_caller_names} \\
         --out_vcf ${meta.sampleName}_Somatic.hc.vcf \\
-        --out_single_vcf ${meta.sampleName}_Somatic.single.vcf
+        --out_single_vcf ${meta.sampleName}_Somatic.single.vcf \\
+    > var_count.txt
+
+    VARCOUNT=\$(cut -f2 var_count.txt)
 
     bgzip -c ${meta.sampleName}_Somatic.hc.vcf > ${meta.sampleName}_Somatic.hc.vcf.gz
     tabix -p vcf ${meta.sampleName}_Somatic.hc.vcf.gz
@@ -3315,10 +3322,12 @@ process 'VEPvcf' {
         path(combinedVCF),
         _,
         path(tumorVCF),
+        val(var_count),
         path(vep_cache_chck_file),
         path(vep_plugin_chck_file)
     ) from mkCombinedVCF_out_ch
         .join(mkHCsomaticVCF_out_ch2, by: [0])
+        .join(hc_var_count)
         .combine(vep_cache_ch1)
         .combine(vep_plugins_ch1)
 
@@ -3349,6 +3358,8 @@ process 'VEPvcf' {
     path("${meta.sampleName}_hc_mutated.fa")
 
 
+    when:
+    var_count.toInteger() != 0
 
     script:
     """
