@@ -414,7 +414,7 @@ if(bamInput) {
         tuple(
             val(meta),
             path(bam)
-        ) from batch_raw_data
+        ) from batch_raw_data_ch
 
         output:
         tuple(
@@ -429,8 +429,8 @@ if(bamInput) {
         check_pe.py $bam
         """
     }
-    (bam_ch, check_seqLib_ch) = check_seqLib_ch.into(2)
-    check_seqLibTypes_ok(check_seqLib_ch)
+    (bam_ch, check_seqLib_ch) = bam_ch.into(2)
+    seqLibTypes_ok = Channel.value(check_seqLibTypes_ok(check_seqLib_ch))
 
 
     process bam2fastq {
@@ -445,8 +445,10 @@ if(bamInput) {
         tuple(
             val(meta),
             path(bam),
-            libType
+            val(libType),
+            val(libOK)
         ) from bam_ch
+            .combine(seqLibTypes_ok)
 
 
         output:
@@ -6561,8 +6563,8 @@ def check_seqLibTypes_ok(seqLib_ch) {
     def lt_map = [:]
 
     for (seqLib in seqLibs) {
-        if (lt_map[seqLib[0].sampleType] != "tumor_RNA") {
-            if (lt_map[seqLib[0].sampleName] == null) {
+        if (seqLib[0].sampleType != "tumor_RNA") {
+            if (! lt_map.containsKey(seqLib[0].sampleType)) {
                 lt_map[seqLib[0].sampleName] = seqLib[2]
             } else {
                 if (lt_map[seqLib[0].sampleName] != seqLib[2]) {
@@ -6571,13 +6573,14 @@ def check_seqLibTypes_ok(seqLib_ch) {
             }
         }
     }
-    return true
+    return "OK"
 }
 
 // This function removes all keys in key list from meta object at idx 0.
 // If keep is true then the original meta object is kept at idx 1
 // of the channel values. Note with keep true all values [1..-1] will be
 // right shifted by 1
+/* NOT working or now: need to check
 def remove_from_meta(ch, keys=[], keep=false) {
     ch = ch.map {
             meta, f ->
@@ -6589,9 +6592,11 @@ def remove_from_meta(ch, keys=[], keep=false) {
                 return [meta_new, meta.clone(), f]
             } else {
                 return [meta_new, f]
-            }    }
+            }
+        }
     return ch
 }
+*/
 
 def helpMessage() {
     log.info ""
