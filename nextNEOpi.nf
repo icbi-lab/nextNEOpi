@@ -5864,12 +5864,12 @@ process addCCF {
 
 // convert channel in to (id, file) tuples
 Neofuse_results_ch1 = Neofuse_results_ch1.map{ it ->
-                                                id = it[0]
+                                                meta = it[0]
                                                 l = []
                                                 for ( f in it[1..-1] ) {
                                                     f_type = (f.getName().indexOf("unfiltered") >= 0) ? "unfiltered" : "filtered"
-                                                    mhc_class = (f.getName().indexOf("MHCII") >= 0) ? "II" : "I"
-                                                    l.add(tuple(id, "NeoFuse", f_type, mhc_class, f))
+                                                    mhc_class = (f.getName().indexOf("MHC_Class_II") >= 0) ? "II" : "I"
+                                                    l.add(tuple(meta, "NeoFuse", f_type, mhc_class, f))
                                                 }
                                                 return l
                                             }
