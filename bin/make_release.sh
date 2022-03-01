@@ -54,6 +54,8 @@ cp bin/parse_mixMHC2pred.py ${BUILD_DIR}/bin
 cp bin/pepChopper.py ${BUILD_DIR}/bin
 cp bin/run_ascat.r ${BUILD_DIR}/bin
 cp bin/mkSampleInfo.py ${BUILD_DIR}/bin
+cp bin/parse_blast_result.py ${BUILD_DIR}/bin
+cp bin/make_peptide_fasta.py ${BUILD_DIR}/bin
 
 if [ "$ICBI" != "" ]; then
     cp conf/params_icbi.config  ${BUILD_DIR}/conf/params.config
