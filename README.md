@@ -64,7 +64,7 @@ curl -s https://get.nextflow.io | bash
 
 ### 1.2 Analysis tools and software packages
 
-The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (ont recommended, please see `Manual installation` at the end of this document)
+The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (not recommended, please see `Manual installation` at the end of this document)
 
 The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Singularity**, **Conda** (optional).
 
