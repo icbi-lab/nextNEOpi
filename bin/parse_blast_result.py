@@ -87,7 +87,7 @@ if __name__ == "__main__":
         header=None,
         names=[
             "peptide_id",
-            "match_protein_id",
+            "ref_match_protein_id",
             "query_len",
             "align_len",
             "number_ident",
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     ]
 
     blast_hits = blast_hits.groupby("peptide_seq").agg(
-        {"match_protein_id": lambda id: ";".join([i.split("|")[1] for i in id])}
+        {"ref_match_protein_id": lambda id: ";".join([i.split("|")[1] for i in id])}
     )
 
     result = pd.merge(
@@ -113,6 +113,6 @@ if __name__ == "__main__":
     )
 
     output_file = (
-        os.path.splitext(os.path.basename(epitope_file))[0] + "_match_protein.tsv"
+        os.path.splitext(os.path.basename(epitope_file))[0] + "_ref_match.tsv"
     )
     result.to_csv(output_file, sep="\t", index=False, na_rep="-")
