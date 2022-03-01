@@ -6150,11 +6150,7 @@ if(params.TCR) {
             cache false
 
             output:
-            path(".mixcr_install_ok.chck") into (
-                mixcr_chck_ch0,
-                mixcr_chck_ch1,
-                mixcr_chck_ch2
-            )
+            path(".mixcr_install_ok.chck") into mixcr_chck_ch
 
             script:
             """
