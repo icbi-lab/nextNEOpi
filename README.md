@@ -64,50 +64,12 @@ curl -s https://get.nextflow.io | bash
 
 ### 1.2 Analysis tools and software packages
 
-The pipeline will install almost all required tools via conda environments or Singularity images.
+The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (ont recommended, please see `Manual installation` at the end of this document)
 
-The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Conda**,
-**Singularity**.
+The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Singularity**, **Conda** (optional).
 
 **Optional but recommended:**
 Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
-
-_**[Manual installaton: Not recommended]:**_
-
-If you prefer local installation of the analysis tools please install the following software:
-
-* FASTQC        (Version >= 0.11.8)
-* FASTP         (Version >= v0.20.1)
-* JAVA7   (Version 1.7)
-* JAVA8   (Version 1.8)
-* BWA    (Version 0.7.17)
-* SAMTOOLS   (Version 1.9)
-* GATK3   (Version 3.8-0)
-* GATK4   (Version >= 4.1.7.0)
-* VARSCAN   (Version 2.4.3)
-* MUTECT1   (Version 1.1.7) ---- optional
-* BAMREADCOUNT  (Version 0.8.0)
-* VEP    (Version v103)
-* BGZIP
-* TABIX
-* BCFTOOLS
-* MANTA
-* STRELKA
-* SAMBAMBA
-* OPTITYPE
-* PYTHON
-* PERL
-* CONDA
-* YARA
-* HLA-HD
-* ALLELECOUNT
-* RSCRIPT (R > 3.6.1)
-* SEQUENZA (3.0)
-* CNVkit
-
-all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.
-
-_**[End manual installation: not recommended]**_
 
 ### 1.2 References
 
@@ -368,3 +330,38 @@ RESULTS
     ├── 00_prepare_Intervals
     └── 01_prepare_CNVkit
 ```
+
+**4.** _**[Manual installaton: Not recommended]:**_
+
+If you prefer local installation of the analysis tools please install the following software:
+
+* FASTQC        (Version >= 0.11.8)
+* FASTP         (Version >= v0.20.1)
+* JAVA7   (Version 1.7)
+* JAVA8   (Version 1.8)
+* BWA    (Version >= 0.7.17)
+* SAMTOOLS   (Version >= 1.9)
+* GATK3   (Version 3.8-0)
+* GATK4   (Version >= 4.2.5.0)
+* VARSCAN   (Version 2.4.3)
+* MUTECT1   (Version 1.1.7) ---- optional
+* BAMREADCOUNT  (Version 0.8.0)
+* VEP    (Version v105)
+* BGZIP
+* TABIX
+* BCFTOOLS
+* MANTA
+* STRELKA
+* SAMBAMBA
+* OPTITYPE
+* PYTHON
+* PERL
+* CONDA
+* YARA
+* HLA-HD
+* ALLELECOUNT
+* RSCRIPT (R > 3.6.1)
+* SEQUENZA (3.0)
+* CNVkit
+
+all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.
