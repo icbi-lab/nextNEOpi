@@ -77,9 +77,15 @@ The pipeline requires different reference files, indexes and databases:
 
 please see ```conf/resources.config```
 
-We prepared a bundle with all needed references, indexes and databases which can be obtained from:
+For each nextNEOpi version we prepared a bundle with all needed references, indexes and databases which can be obtained from:
 
-<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_resources.tar.gz>
+`https://apps-01.i-med.ac.at/resources/nextneopi/`
+
+the bundle is named to match the releas version `nextNEOpi_<version>_resources.tar.gz`
+
+e.g.:
+
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz>
 
 download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```conf/params.config``` file.
 
