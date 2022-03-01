@@ -81,7 +81,7 @@ For each nextNEOpi version we prepared a bundle with all needed references, inde
 
 `https://apps-01.i-med.ac.at/resources/nextneopi/`
 
-the bundle is named to match the releas version `nextNEOpi_<version>_resources.tar.gz`
+the bundle is named to match the release version `nextNEOpi_<version>_resources.tar.gz`
 
 e.g.:
 
