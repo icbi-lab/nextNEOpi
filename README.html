@@ -384,6 +384,7 @@ to predict neoepitopes.</p>
 <li>NeoFuse</li>
 <li>mixMHC2pred</li>
 <li>mixcr</li>
+<li>blastp</li>
 </ul>
 <p>It outputs a vcf file with the annotated and filtered SNPs and Indels, which
 where called with each of the callers and a high confidence vcf file (hc) in
@@ -398,12 +399,12 @@ exons.
 HLA class I and class II alleles are predicted with OptiType and HLA-HD.
 Class I and Class II neoepitopes are predicted with pVACseq using netMHCpan,
 netMHCIIpan and mhcflurry. In addition mixMHC2pred is used as complement Class II
-neoepitope predictor. Fusion neoantigens are predicted with NeoFuse.
+neoepitope predictor. Fusion neoantigens are predicted with NeoFuse. All predicted neoeptiopes are searched via BLAST against protein databases (UniProt, RefSeq) to ensure that they are not present in a &quot;non-aberrant&quot; protein.
 CSiN immunogenicity score is reported for Class I, Class II and combined neoepitopes.
 A GBM model [1] is used to predict immunogenicity scores for MHC class I single nucleotide
 variant (SNV) neoantigens 8-11 amino acid residues in length. Finally mixcr is run to predict the
 TCR and BCR repertoire.</p>
-<p>[1] https://github.com/vincentlaboratories/neoag/.</p>
+<p>[1] <a href="https://github.com/vincentlaboratories/neoag/">https://github.com/vincentlaboratories/neoag/</a>.</p>
 <p><img src="img/nextNEOpi_small.png" alt="nextNEOpi overview"></p>
 <h2 id="hardware-recommendations">Hardware recommendations</h2>
 <p>nextNEOpi is designed to run on high memory multi-core servers (recommended &gt; 16 cores, min. 64GB RAM, &gt; 5 TB of free disk space). For analysis of larger cohorts we strongly recommend running nextNEOpi on a HPC cluster with multiple compute nodes that meet these specifications.
@@ -411,55 +412,23 @@ However, by tuning the memory and CPU parameters in <code>params.config</code> a
 <h2 id="1-installation">1. Installation</h2>
 <h3 id="11-nextflow">1.1 Nextflow</h3>
 <p>The command below may be used to install Nextflow. Please see also the installation instructions at:
-https://www.nextflow.io/index.html#GetStarted</p>
+<a href="https://www.nextflow.io/index.html#GetStarted">https://www.nextflow.io/index.html#GetStarted</a></p>
 <pre class="hljs"><code><div>curl -s https://get.nextflow.io | bash
 
 </div></code></pre>
 <h3 id="12-analysis-tools-and-software-packages">1.2 Analysis tools and software packages</h3>
-<p>The pipeline will install almost all required tools via conda environments or Singularity images.</p>
-<p>The software that needs to be present on the system is <strong>Java</strong> (minimum version 8), <strong>Nextflow</strong> (see above), <strong>Conda</strong>,
-<strong>Singularity</strong>.</p>
+<p>The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (not recommended, please see <code>Manual installation</code> at the end of this document)</p>
+<p>The software that needs to be present on the system is <strong>Java</strong> (minimum version 8), <strong>Nextflow</strong> (see above), <strong>Singularity</strong>, <strong>Conda</strong> (optional).</p>
 <p><strong>Optional but recommended:</strong>
 Due to license restrictions you may also need to download and install <strong>HLA-HD</strong> by your own, and set the installation path in <code>conf/params.config</code>. <em>If HLA-HD is not available Class II neoepitopes will NOT be predicted</em></p>
-<p><em><strong>[Manual installaton: Not recommended]:</strong></em></p>
-<p>If you prefer local installation of the analysis tools please install the following software:</p>
-<ul>
-<li>FASTQC        (Version &gt;= 0.11.8)</li>
-<li>FASTP         (Version &gt;= v0.20.1)</li>
-<li>JAVA7 		(Version 1.7)</li>
-<li>JAVA8 		(Version 1.8)</li>
-<li>BWA 			(Version 0.7.17)</li>
-<li>SAMTOOLS 		(Version 1.9)</li>
-<li>GATK3 		(Version 3.8-0)</li>
-<li>GATK4 		(Version &gt;= 4.1.7.0)</li>
-<li>VARSCAN 		(Version 2.4.3)</li>
-<li>MUTECT1 		(Version 1.1.7) ---- optional</li>
-<li>BAMREADCOUNT 	(Version 0.8.0)</li>
-<li>VEP 			(Version v103)</li>
-<li>BGZIP</li>
-<li>TABIX</li>
-<li>BCFTOOLS</li>
-<li>MANTA</li>
-<li>STRELKA</li>
-<li>SAMBAMBA</li>
-<li>OPTITYPE</li>
-<li>PYTHON</li>
-<li>PERL</li>
-<li>CONDA</li>
-<li>YARA</li>
-<li>HLA-HD</li>
-<li>ALLELECOUNT</li>
-<li>RSCRIPT (R &gt; 3.6.1)</li>
-<li>SEQUENZA (3.0)</li>
-<li>CNVkit</li>
-</ul>
-<p>all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.</p>
-<p><em><strong>[End manual installation: not recommended]</strong></em></p>
 <h3 id="12-references">1.2 References</h3>
 <p>The pipeline requires different reference files, indexes and databases:</p>
 <p>please see <code>conf/resources.config</code></p>
-<p>We prepared a bundle with all needed references, indexes and databases which can be obtained from:</p>
-<p>https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_resources.tar.gz</p>
+<p>For each nextNEOpi version we prepared a bundle with all needed references, indexes and databases which can be obtained from:</p>
+<p><code>https://apps-01.i-med.ac.at/resources/nextneopi/</code></p>
+<p>the bundle is named to match the release version <code>nextNEOpi_&lt;version&gt;_resources.tar.gz</code></p>
+<p>e.g.:</p>
+<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz</a></p>
 <p>download and extract the contents of the archive into the directory you specified for <code>resourcesBaseDir</code> in the <code>conf/params.config</code> file.</p>
 <p>The structure should look as shown blow:</p>
 <pre class="hljs"><code><div>├── {resourcesBaseDir}
@@ -470,7 +439,7 @@ Due to license restrictions you may also need to download and install <strong>HL
 <p><strong>Notes</strong></p>
 <ol>
 <li>You may also provide your own versions of these files. To do so, please change the <code>conf/resources.config</code> accordingly.</li>
-<li>Due to license restriction, we do not provide a copy of the optional COSMIC database. If you also want to include COSMIC data, you may get a copy at https://cancer.sanger.ac.uk/cosmic</li>
+<li>Due to license restriction, we do not provide a copy of the optional COSMIC database. If you also want to include COSMIC data, you may get a copy at <a href="https://cancer.sanger.ac.uk/cosmic">https://cancer.sanger.ac.uk/cosmic</a></li>
 <li>We provide the region and bait files for two different Exome capturing kits from Agilent:
 <ul>
 <li>SureSelect Human All Exon V6 exome</li>
@@ -495,7 +464,7 @@ is a template for the configuration of the single processes, you may check
 the number of CPUs assigned for each process and adjust according to your systems capabilities.</p>
 <p>Most pipeline parameters can be edited in the <code>params.config</code> file or changed on run time with command line options by using <code>--NameOfTheParameter</code> given in the <code>params.config</code>.
 References, databases should be edited in the <code>resources.config</code> file.</p>
-<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --readsTumor &lt;tumorFastq&gt; --readsNormal &lt;normalFastq&gt; [--reads_RNAseq] | --batchFile &lt;batchFile_FASTQ.csv | batchFile_BAM.csv&gt; -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --batchFile &lt;batchFile_FASTQ.csv | batchFile_BAM.csv&gt; -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 </div></code></pre>
 <p><strong>Profiles:</strong> conda or singularity</p>
 <p>We highly recommend to use either the <code>singularity</code> or <code>conda</code> profile. You can specify one of the two profiles using the option <code>-profile singularity</code> or <code>-profile conda</code>. This way you do not have to care about installing all the required software including all
@@ -511,23 +480,19 @@ its dependencies.</p>
 <p><strong>Mandatory arguments:</strong></p>
 <p><code>-config</code> nextNEOpi config file, e.g. <code>-config conf/params.config</code></p>
 <p><code>--accept_license</code> accept the license terms</p>
-<p><code>--batchFile</code> <em>[recommended]</em></p>
+<p><code>--batchFile</code></p>
 <p>Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also <code>example_batchFile_FASTQ.csv</code> or <code>example_batchFile_BAM.csv</code></p>
 <p><strong>FASTQ raw reads</strong></p>
 <ul>
-<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, all paired end reads:</li>
+<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and optional RNAseq reads</li>
 </ul>
 <table>
 <thead>
 <tr>
-<th>tumorSampleName</th>
-<th>readsTumorFWD</th>
-<th>readsTumorREV</th>
-<th>normalSampleName</th>
-<th>readsNormalFWD</th>
-<th>readsNormalREV</th>
-<th>readsRNAseqFWD</th>
-<th>readsRNAseqREV</th>
+<th>sampleName</th>
+<th>reads1</th>
+<th>reads2</th>
+<th>sampleType</th>
 <th>HLAfile</th>
 <th>sex</th>
 </tr>
@@ -535,27 +500,99 @@ its dependencies.</p>
 <tbody>
 <tr>
 <td>sample1</td>
-<td>Tumor1_reads_1.fastq</td>
-<td>Tumor1_reads_2.fastq</td>
-<td>normal1</td>
-<td>Normal1_reads_1.fastq</td>
-<td>Normal1_reads_2.fastq</td>
-<td>Tumor1_RNAseq_reads_1.fastq</td>
-<td>Tumor1_RNAseq_reads_2.fastq</td>
-<td>None</td>
-<td>XX</td>
+<td>reads_s1_t_1.fastq.gz</td>
+<td>reads_s1_t_2.fastq.gz</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>female</td>
+</tr>
+<tr>
+<td>sample1</td>
+<td>reads_s1_n_1.fastq.gz</td>
+<td>reads_s1_n_2.fastq.gz</td>
+<td>normal_DNA</td>
+<td></td>
+<td>female</td>
+</tr>
+<tr>
+<td>sample1</td>
+<td>reads_s1_r_1.fastq.gz</td>
+<td>reads_s1_r_2.fastq.gz</td>
+<td>tumor_RNA</td>
+<td></td>
+<td>female</td>
 </tr>
 <tr>
 <td>sample2</td>
-<td>Tumor2_reads_1.fastq</td>
-<td>Tumor2_reads_2.fastq</td>
-<td>normal2</td>
-<td>Normal2_reads_1.fastq</td>
-<td>Normal2_reads_2.fastq</td>
-<td>Tumor2_RNAseq_reads_1.fastq</td>
-<td>Tumor2_RNAseq_reads_2.fastq</td>
-<td>None</td>
-<td>XY</td>
+<td>reads_s2_t_1.fastq.gz</td>
+<td>reads_s2_t2.fastq.gz</td>
+<td>tumor_DNA</td>
+<td>/data/sample2_hla.txt</td>
+<td>male</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>reads_s2_n_1.fastq.gz</td>
+<td>reads_s2_n_2.fastq.gz</td>
+<td>normal_DNA</td>
+<td></td>
+<td>male</td>
+</tr>
+<tr>
+<td>sample2</td>
+<td>reads_s2_r_1.fastq.gz</td>
+<td></td>
+<td>tumor_RNA</td>
+<td></td>
+<td>male</td>
+</tr>
+<tr>
+<td>sample3</td>
+<td>reads_s3_t_2.fastq.gz</td>
+<td>reads_s3_t_2.fastq.gz</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>female</td>
+</tr>
+<tr>
+<td>sample3</td>
+<td>reads_s3_n_1.fastq.gz</td>
+<td>reads_s3_n_2.fastq.gz</td>
+<td>normal_DNA</td>
+<td></td>
+<td>female</td>
+</tr>
+<tr>
+<td>sample4</td>
+<td>reads_s4_t_1_1.fastq.gz</td>
+<td>reads_s4_t_1_2.fastq.gz</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>NA</td>
+</tr>
+<tr>
+<td>sample4</td>
+<td>reads_s4_t_2_1.fastq.gz</td>
+<td>reads_s4_t_2_2.fastq.gz</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>NA</td>
+</tr>
+<tr>
+<td>sample4</td>
+<td>reads_s4_n_1.fastq.gz</td>
+<td>reads_s4_n_2.fastq.gz</td>
+<td>normal_DNA</td>
+<td></td>
+<td>NA</td>
+</tr>
+<tr>
+<td>sample4</td>
+<td>reads_s4_r_1.fastq.gz</td>
+<td>reads_s4_r_2.fastq.gz</td>
+<td>tumor_RNA</td>
+<td></td>
+<td>NA</td>
 </tr>
 <tr>
 <td>...</td>
@@ -564,182 +601,30 @@ its dependencies.</p>
 <td></td>
 <td></td>
 <td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>sampleN</td>
-<td>TumorN_reads_1.fastq</td>
-<td>TumorN_reads_2.fastq</td>
-<td>normalN</td>
-<td>NormalN_reads_1.fastq</td>
-<td>NormalN_reads_2.fastq</td>
-<td>TumorN_RNAseq_reads_1.fastq</td>
-<td>TumorN_RNAseq_reads_2.fastq</td>
-<td>custom_HLAs.txt</td>
-<td>XX</td>
 </tr>
 </tbody>
 </table>
 <ul>
-<li>e.g.:CSV-file with Tumor/Normal WES/WGS, and RNAseq reads, e.g. all single end reads:</li>
+<li>CSV fields of the <code>batchFile</code></li>
+<li>reads1: forward reads (can be fastq or gzipped fastq)</li>
+<li>reads2: reverse reads (if paired end sequencing was used, empty for single end)</li>
+<li>sampleType: one of <code>tumor_DNA, normal_DNA. tumor_RNA</code></li>
+<li>HLAfile: optional file with HLA types (default: empty)</li>
+<li>sex: gender of the sample if known (female, male, xx, xy) or NA if unknown</li>
 </ul>
-<table>
-<thead>
-<tr>
-<th>tumorSampleName</th>
-<th>readsTumorFWD</th>
-<th>readsTumorREV</th>
-<th>normalSampleName</th>
-<th>readsNormalFWD</th>
-<th>readsNormalREV</th>
-<th>readsRNAseqFWD</th>
-<th>readsRNAseqREV</th>
-<th>HLAfile</th>
-<th>sex</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>sample1</td>
-<td>Tumor1_reads_1.fastq</td>
-<td>None</td>
-<td>normal1</td>
-<td>Normal1_reads_1.fastq</td>
-<td>None</td>
-<td>Tumor1_RNAseq_reads_1.fastq</td>
-<td>None</td>
-<td>None</td>
-<td>XX</td>
-</tr>
-<tr>
-<td>sample2</td>
-<td>Tumor2_reads_1.fastq</td>
-<td>None</td>
-<td>normal2</td>
-<td>Normal2_reads_1.fastq</td>
-<td>None</td>
-<td>Tumor2_RNAseq_reads_1.fastq</td>
-<td>None</td>
-<td>None</td>
-<td>XY</td>
-</tr>
-<tr>
-<td>...</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>sampleN</td>
-<td>TumorN_reads_1.fastq</td>
-<td>None</td>
-<td>normalN</td>
-<td>NormalN_reads_1.fastq</td>
-<td>None</td>
-<td>TumorN_RNAseq_reads_1.fastq</td>
-<td>None</td>
-<td>custom_HLAs.txt</td>
-<td>XX</td>
-</tr>
-</tbody>
-</table>
-<ul>
-<li>e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq reads, e.g. all single end reads:</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th>tumorSampleName</th>
-<th>readsTumorFWD</th>
-<th>readsTumorREV</th>
-<th>normalSampleName</th>
-<th>readsNormalFWD</th>
-<th>readsNormalREV</th>
-<th>readsRNAseqFWD</th>
-<th>readsRNAseqREV</th>
-<th>HLAfile</th>
-<th>sex</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>sample1</td>
-<td>Tumor1_reads_1.fastq</td>
-<td>None</td>
-<td>normal1</td>
-<td>Normal1_reads_1.fastq</td>
-<td>None</td>
-<td>None</td>
-<td>None</td>
-<td>None</td>
-<td>XX</td>
-</tr>
-<tr>
-<td>sample2</td>
-<td>Tumor2_reads_1.fastq</td>
-<td>None</td>
-<td>normal2</td>
-<td>Normal2_reads_1.fastq</td>
-<td>None</td>
-<td>None</td>
-<td>None</td>
-<td>None</td>
-<td>XY</td>
-</tr>
-<tr>
-<td>...</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>sampleN</td>
-<td>TumorN_reads_1.fastq</td>
-<td>None</td>
-<td>normalN</td>
-<td>NormalN_reads_1.fastq</td>
-<td>None</td>
-<td>None</td>
-<td>None</td>
-<td>custom_HLAs.txt</td>
-<td>XX</td>
-</tr>
-</tbody>
-</table>
-<p>or</p>
-<p><code>--readsTumor</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped)</p>
-<p><code>--readsNormal</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTA files (may be gziped)</p>
-<p>(<em>optional but recommended</em>:
-<code>--readsRNAseq</code> reads_{1,2}.fastq or reads_1.fastq; paired-end or single-end reads; FASTQ (may be gziped))</p>
+<p>A sample may have multiple read files for a single <code>sampleType</code>, nextNEOpi will merge them accordingly. As shown in the above example <code>sample4</code> has 2 fastq files for the <code>tumor_DNA</code>, in this cases <code>reads_1_1.fastq.gz</code> will be merged with <code>reads_2_1.fastq.gz</code>. The same applies to <code>reads2</code>.</p>
 <p><strong>BAM files</strong></p>
 <p><strong>Note:</strong> If BAM files are used it is very much recommended that they also include also the unmapped and multimapping reads. These reads can be
 helpful for HLA-typing.</p>
 <ul>
-<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and RNAseq data:</li>
+<li>e.g.: CSV-file with Tumor/Normal WES/WGS, and optional RNAseq data:</li>
 </ul>
 <table>
 <thead>
 <tr>
-<th>tumorSampleName</th>
-<th>bamTumor</th>
-<th>normalSampleName</th>
-<th>bamNormal</th>
-<th>bamRNAseq</th>
+<th>sampleName</th>
+<th>bam</th>
+<th>sampleType</th>
 <th>HLAfile</th>
 <th>sex</th>
 </tr>
@@ -747,115 +632,51 @@ helpful for HLA-typing.</p>
 <tbody>
 <tr>
 <td>sample1</td>
-<td>Tumor1.bam</td>
-<td>normal1</td>
-<td>Normal1.bam</td>
-<td>Tumor1_RNAseq.bam</td>
-<td>None</td>
-<td>XX</td>
+<td>sample1_t.bam</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>female</td>
 </tr>
-<tr>
-<td>sample2</td>
-<td>Tumor2.bam</td>
-<td>normal2</td>
-<td>Normal2.bam</td>
-<td>Tumor2_RNAseq.bam</td>
-<td>None</td>
-<td>XY</td>
-</tr>
-<tr>
-<td>...</td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>sampleN</td>
-<td>TumorN.bam</td>
-<td>normalN</td>
-<td>NormalN.bam</td>
-<td>TumorN_RNAseq.bam</td>
-<td>None</td>
-<td>XX</td>
-</tr>
-</tbody>
-</table>
-<ul>
-<li>e.g.:CSV-file with Tumor/Normal WES/WGS, NO RNAseq data:</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th>tumorSampleName</th>
-<th>bamTumor</th>
-<th>normalSampleName</th>
-<th>bamNormal</th>
-<th>bamRNAseq</th>
-<th>HLAfile</th>
-<th>sex</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td>sample1</td>
-<td>Tumor1.bam</td>
-<td>normal1</td>
-<td>Normal1.bam</td>
-<td>None</td>
-<td>None</td>
-<td>XX</td>
+<td>sample1_n.bam</td>
+<td>normal_DNA</td>
+<td></td>
+<td>female</td>
+</tr>
+<tr>
+<td>sample1</td>
+<td>sample1_r.bam</td>
+<td>tumor_RNA</td>
+<td></td>
+<td>female</td>
 </tr>
 <tr>
 <td>sample2</td>
-<td>Tumor2.bam</td>
-<td>normal2</td>
-<td>Normal2.bam</td>
-<td>None</td>
-<td>None</td>
-<td>XY</td>
+<td>sample2_t.bam</td>
+<td>tumor_DNA</td>
+<td></td>
+<td>male</td>
 </tr>
 <tr>
-<td>...</td>
+<td>sample2</td>
+<td>sample2_n.bam</td>
+<td>normal_DNA</td>
 <td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td>sampleN</td>
-<td>TumorN.bam</td>
-<td>normalN</td>
-<td>NormalN.bam</td>
-<td>None</td>
-<td>None</td>
-<td>XX</td>
+<td>male</td>
 </tr>
 </tbody>
 </table>
-<p>or</p>
-<p><code>--tumorBam</code> tumor_1.bam</p>
-<p><code>--normalBam</code> normal_1.bam</p>
-<p>(<em>optional but recommended</em>:
-<code>--rnaBam</code> tumor_1_RNAseq.bam</p>
 <p><strong>Notes</strong></p>
 <ul>
 <li>
-<p><em>You must not mix samples with single-end and paired-end reads in a batch file. Though, it is possible to have for e.g. all
-DNA reads paired-end and all RNAseq reads single-end or vice-versa.</em></p>
+<p><em>You can not use samples that have mixed single-end and paired-end DNA reads in tumor and normal. Both, tumor and normal DNA library types need to be either SE or PE for a given sample</em></p>
 </li>
 <li>
-<p>in the <code>HLAfile</code> coulumn a user suppiled HLA types file may be specified for a given sample, see also <code>--customHLA</code> option below</p>
+<p>in the <code>HLAfile</code> coulumn a user suppiled HLA types file may be specified for a given sample</p>
 </li>
 <li>
-<p>the <code>sex</code> column can be &quot;XX&quot;, &quot;female&quot; or &quot;Female&quot;, &quot;XY&quot;, &quot;male&quot; or &quot;Male&quot;. If not specified or &quot;None&quot; Male is assumed</p>
-</li>
-<li>
-<p>when providing paired end fastq files via commandline options (<code>--readsTumor, --readsNormal, --readsRNA</code>), please make sure you put the filename pattern into qoutes: e.g. <code>--readsTumor &quot;reads_{1,2}.fastq.gz&quot;</code></p>
+<p>the <code>sex</code> column can be &quot;XX&quot;, &quot;female&quot; or &quot;Female&quot;, &quot;XY&quot;, &quot;male&quot; or &quot;Male&quot;. If not specified or &quot;NA&quot; the gender is inferred from the data.</p>
 </li>
 <li>
 <p>Please make sure your <strong><code>/tmp</code> (or the directory set as <code>$TMPDIR</code>) has a lot of free space (&gt; 50GB, depending on input data size)</strong>. You may change the tmp dir used by nextNEOpi by setting the parameter <code>tmpDir</code> in <code>params.config</code> or on the command line <code>--tmpDir</code> to a directory of your choice.</p>
@@ -869,24 +690,23 @@ DNA reads paired-end and all RNAseq reads single-end or vice-versa.</em></p>
     --trim_adapters true \
     --trim_adapters_RNAseq true \
     --use_NetChop false \
+    --tmpDir /my/huge/tmpDir \
     -profile singularity,cluster \
     -resume
 </div></code></pre>
 <p><strong>Optional argument:</strong></p>
-<p><code>--tumorSampleName</code>       tumor sample name. If not specified samples will be named according to the fastq filenames.</p>
-<p><code>--normalSampleName</code>      normal sample name. If not specified samples will be named according to the fastq filenames.</p>
-<p><code>--trim_adapters</code>         If true adpter sequences are automatically determined and will be trimmed from reads. If
-<code>--adapterSeq</code> (string of atapter sequence) or <code>--adapterSeqFile</code> (fasta file with adapter sequences) is provided then adapters will be used as specified (no automatic detection).
+<p><code>--trim_adapters</code>         If true adapter sequences are automatically determined and will be trimmed from reads. If
+<code>--adapterSeq</code> (string of adapter sequence) or <code>--adapterSeqFile</code> (fasta file with adapter sequences) is provided then adapters will be used as specified (no automatic detection).
 Default: false</p>
-<p><code>--trim_adapters_RNAseq</code>  If true adpter sequences are automatically determined and will be trimmed from RNAseq reads. If
-<code>--adapterSeqRNAseq</code> (string of atapter sequence) or <code>--adapterSeqFileRNAseq</code> (fasta file with adapter
+<p><code>--trim_adapters_RNAseq</code>  If true adapter sequences are automatically determined and will be trimmed from RNAseq reads. If
+<code>--adapterSeqRNAseq</code> (string of adapter sequence) or <code>--adapterSeqFileRNAseq</code> (fasta file with adapter
 sequences) is provided then adapters will be used as specified (no automatic detection).
 Default: false</p>
-<p><code>--adapterSeq</code>            String of atapter sequence (see <code>--trim_adapers</code>)
-<code>--adapterSeqFile</code>        Fasta file with atapter sequence(s) (see <code>--trim_adapers</code>)</p>
-<p><code>--adapterSeqRNAseq</code>      String of atapter sequence (see <code>--trim_adapers_RNAseq</code>)
-<code>--adapterSeqFileRNAseq</code>  Fasta file with atapter sequence(s) (see <code>--trim_adapers_RNAseq</code>)</p>
-<p><code>--mutect2ponFile</code>        Panel of Normals file for Mutect2 (https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON-)
+<p><code>--adapterSeq</code>            String of adapter sequence (see <code>--trim_adapters</code>)
+<code>--adapterSeqFile</code>        Fasta file with adapter sequence(s) (see <code>--trim_adapters</code>)</p>
+<p><code>--adapterSeqRNAseq</code>      String of adapter sequence (see <code>--trim_adapters_RNAseq</code>)
+<code>--adapterSeqFileRNAseq</code>  Fasta file with adapter sequence(s) (see <code>--trim_adapers_RNAseq</code>)</p>
+<p><code>--mutect2ponFile</code>        Panel of Normals file for Mutect2 (<a href="https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON">https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON</a>-)
 Default: false</p>
 <p><code>--priorityCaller</code>        Set the variant caller used as base for the hc variants. Only variants that are confirmed by any of the two confirming
 callers (e..g. mutect1, varscan) will be retained. M2 = mutect2, M1 = mutect1, VS = varscan, ST = strelka
@@ -895,16 +715,16 @@ Default: M2</p>
 Default: 5</p>
 <p><code>--use_NetChop</code>            Use NetChop to generate peptides
 Default: false</p>
+<p><code>--use_NetMHCstab</code>      Use NetMHCstab to predict the stability of peptide binding to MHC molecules
+Default: true</p>
 <p><code>--TCR</code>                   Run mixcr for TCR prediction
 Default: true</p>
-<p><code>--customHLA</code>             Provide a custom HLA types file. The HLA types in this file will be used in addition to those derived from the sequencing data in the WES/WGS/RNAseq fastq files. One type per line in 4 digit format (e.g. HLA-A*01:01)</p>
 <p><code>--HLAHD_DIR</code> Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.</p>
 <p><code>--HLA_force_RNA</code> Use only RNAseq for HLA typing. Default: false</p>
 <p><code>--HLA_force_DNA</code> Use only WES/WGS for HLA typing. Default: false</p>
 <p><code>--run_HLAHD_RNA</code> Run HLA-HD also on RNAseq. Highly accurate but can be very slow
 on larger fastq files. Default: false</p>
-<p><code>--disable_OptiType</code> Disable OptiType for HLA typing. If set, <strong>HLA-HD</strong> or a user supplied <strong>custom HLA file</strong> must be available (see <code>--HLAHD_DIR</code> and/or <code>--customHLA</code>)</p>
-<p><code>--sex</code>                Provide the sex of the sample (XX or Female, XY or Male, None)</p>
+<p><code>--disable_OptiType</code> Disable OptiType for HLA typing. If set, <strong>HLA-HD</strong> or a user supplied <strong>custom HLA file</strong> must be available (see <code>--HLAHD_DIR</code> and/or <code>HLAfile</code> field in the batchFile)</p>
 <p><code>--pVACseq_filter_set</code>   Can be one of [standard, relaxed, custom]. The <code>standard</code> filter set is using the pVACseq default filters. The <code>relaxed</code> filter set is filtering only for ic50 &lt; 500 &amp; rank &lt; 2 &amp; expn-val &gt; 2. With filter set <code>custom</code> users can define a custom set of filters by providing the desired filters (space separated) using the <code>--pVACseq_custom_filters</code> option. E.g. <code>--pVACseq_filter_set custom --pVACseq_custom_filters &quot;--binding-threshold 250 --percentile-threshold 1&quot;</code>. For filter options please see also the pVACseq manual. Default: standard</p>
 <p><code>--pVACseq_custom_filters</code> See <code>--pVACseq_filter_set</code></p>
 <p><strong>Further options:</strong>        There are many more options that can be set in the params.conf file or specified on the commandline
@@ -957,6 +777,39 @@ on larger fastq files. Default: false</p>
     ├── 00_prepare_Intervals
     └── 01_prepare_CNVkit
 </div></code></pre>
+<p><strong>4.</strong> <em><strong>[Manual installaton: Not recommended]:</strong></em></p>
+<p>If you prefer local installation of the analysis tools please install the following software:</p>
+<ul>
+<li>FASTQC        (Version &gt;= 0.11.8)</li>
+<li>FASTP         (Version &gt;= v0.20.1)</li>
+<li>JAVA7   (Version 1.7)</li>
+<li>JAVA8   (Version 1.8)</li>
+<li>BWA    (Version &gt;= 0.7.17)</li>
+<li>SAMTOOLS   (Version &gt;= 1.9)</li>
+<li>GATK3   (Version 3.8-0)</li>
+<li>GATK4   (Version &gt;= 4.2.5.0)</li>
+<li>VARSCAN   (Version 2.4.3)</li>
+<li>MUTECT1   (Version 1.1.7) ---- optional</li>
+<li>BAMREADCOUNT  (Version 0.8.0)</li>
+<li>VEP    (Version v105)</li>
+<li>BGZIP</li>
+<li>TABIX</li>
+<li>BCFTOOLS</li>
+<li>MANTA</li>
+<li>STRELKA</li>
+<li>SAMBAMBA</li>
+<li>OPTITYPE</li>
+<li>PYTHON</li>
+<li>PERL</li>
+<li>CONDA</li>
+<li>YARA</li>
+<li>HLA-HD</li>
+<li>ALLELECOUNT</li>
+<li>RSCRIPT (R &gt; 3.6.1)</li>
+<li>SEQUENZA (3.0)</li>
+<li>CNVkit</li>
+</ul>
+<p>all these tools need be available via the $PATH environment variable. However, you still need Java, Nextflow, Conda and Singularity installed on your system.</p>
 
 </body>
 </html>
