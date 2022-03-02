@@ -1,6 +1,6 @@
 sampleName,bam,sampleType,HLAfile,sex
-sample1,sample1_t.bam,tumor_DNA,female
-sample1,sample1_n.bam,normal_DNA,female
-sample1,sample1_r.bam,tumor_RNA,female
-sample2,sample2_t.bam,tumor_DNA,male
-sample2,sample2_n.bam,normal_DNA,male
+sample1,sample1_t.bam,tumor_DNA,,female
+sample1,sample1_n.bam,normal_DNA,,female
+sample1,sample1_r.bam,tumor_RNA,,female
+sample2,sample2_t.bam,tumor_DNA,,male
+sample2,sample2_n.bam,normal_DNA,,male
