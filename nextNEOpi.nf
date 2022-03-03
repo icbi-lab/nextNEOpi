@@ -6610,7 +6610,7 @@ def remove_from_meta(ch, keys=[], keep=false) {
 */
 
 def get_publishMode(d, mode) {
-    dev req_mode = mode
+    def req_mode = mode
 
     if (req_mode != "auto" && req_mode != "link") {
         return mode
