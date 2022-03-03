@@ -6,8 +6,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - icu==58.2
-  - r-base=3.6.1
+  - r-base=3.6.3
   - r-reshape2
   - r-caret
   - r-peptides
