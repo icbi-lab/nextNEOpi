@@ -1,6 +1,7 @@
 #!/usr/bin/env nextflow
 
 import org.yaml.snakeyaml.Yaml
+import java.nio.file.Files
 
 log.info ""
 log.info " NEXTFLOW ~  version ${workflow.nextflow.version} ${workflow.nextflow.build}"
@@ -153,6 +154,9 @@ ${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style
    return yaml_file
 }
 // End Summary
+
+// determine the publishDirMode
+def publishDirMode = get_publishMode(params.outputDir, params.publishDirMode)
 
 // Check if we got a batch file
 params.batchFile = null
@@ -439,7 +443,7 @@ if(bamInput) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "${params.outputDir}/analyses/${meta.sampleName}/01_preprocessing",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -494,7 +498,7 @@ process merge_fastq {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "${params.outputDir}/${meta.sampleName}/01_preprocessing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -535,7 +539,7 @@ if (params.WES) {
         tag 'RegionsBedToIntervalList'
 
         publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -570,7 +574,7 @@ if (params.WES) {
         tag 'BaitsBedToIntervalList'
 
         publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -607,7 +611,7 @@ process 'preprocessIntervalList' {
     tag 'preprocessIntervalList'
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -664,7 +668,7 @@ process 'SplitIntervals' {
     tag "SplitIntervals"
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/SplitIntervals/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -727,7 +731,7 @@ process 'IntervalListToBed' {
     tag 'BedFromIntervalList'
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     path(paddedIntervalList) from preprocessIntervalList_out_ch1
@@ -757,7 +761,7 @@ process 'ScatteredIntervalListToBed' {
     tag 'ScatteredIntervalListToBed'
 
     publishDir "$params.outputDir/supplemental/00_prepare_Intervals/SplitIntervals/${IntervalName}",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -794,7 +798,7 @@ process FastQC {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
 
@@ -839,7 +843,7 @@ if (params.trim_adapters) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             saveAs: {
                 filename ->
                     if(filename.indexOf(".json") > 0) {
@@ -922,7 +926,7 @@ if (params.trim_adapters) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC/fastqc",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             saveAs: { filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
 
@@ -977,7 +981,7 @@ process 'make_uBAM' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/01_preprocessing/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple val(meta), path(reads) from reads_uBAM_ch
@@ -1014,7 +1018,7 @@ process 'Bwa' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple val(meta), path(reads) from reads_BAM_ch
@@ -1066,7 +1070,7 @@ process 'merge_uBAM_BAM' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1126,7 +1130,7 @@ process 'MarkDuplicates' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/02_alignments/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple val(meta), path(bam) from uBAM_BAM_out_ch
@@ -1216,7 +1220,7 @@ if(params.WES) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/alignments/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple val(meta), path(bam) from MarkDuplicates_out_ch0
@@ -1339,7 +1343,7 @@ process 'gatherGATK4scsatteredBQSRtables' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/${meta.sampleName}/03_baserecalibration/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1438,7 +1442,7 @@ process 'GatherRecalBamFiles' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/03_baserecalibration/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -1493,7 +1497,7 @@ process 'GetPileup' {
     tag "$meta.sampleName : $meta.sampleType"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1618,7 +1622,7 @@ process 'Mutect2' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1690,7 +1694,7 @@ process 'gatherMutect2VCFs' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         saveAs: {
             filename ->
                 if(filename.indexOf("_read-orientation-model.tar.gz") > 0 && params.fullOutput) {
@@ -1773,7 +1777,7 @@ process 'FilterMutect2' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect2/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -1845,7 +1849,7 @@ process 'HaploTypeCaller' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1909,7 +1913,7 @@ process 'CNNScoreVariants' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -1964,7 +1968,7 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/raw/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -2003,7 +2007,7 @@ process 'FilterGermlineVariantTranches' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/haplotypecaller/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -2068,7 +2072,7 @@ if (have_GATK3) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/03_realignment/processing/",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             enabled: params.fullOutput
 
         input:
@@ -2145,7 +2149,7 @@ if (have_GATK3) {
         tag "$meta.sampleName : $meta.sampleType"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/03_realignment/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -2247,7 +2251,7 @@ process 'VarscanSomaticScattered' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -2322,7 +2326,7 @@ process 'gatherVarscanVCFs' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -2382,7 +2386,7 @@ process 'ProcessVarscan' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/raw/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -2439,7 +2443,7 @@ process 'FilterVarscan' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -2521,7 +2525,7 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/varscan/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     path(RefDict) from Channel.value(reference.RefDict)
@@ -2587,7 +2591,7 @@ if(have_Mutect1) {
         tag "$meta.sampleName"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/mutect1/processing/",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             enabled: params.fullOutput
 
         input:
@@ -2665,7 +2669,7 @@ if(have_Mutect1) {
                     }
                     return targetFile
             },
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -2765,7 +2769,7 @@ process 'MantaSomaticIndels' {
                     return "$filename"
                 }
         },
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -2849,7 +2853,7 @@ process StrelkaSomatic {
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/strelka/",
         saveAs: { filename -> filename.indexOf("_runStats") > 0 ? "stats/$filename" : "raw/$filename"},
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -2910,7 +2914,7 @@ process 'finalizeStrelkaVCF' {
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/strelka/",
         saveAs: { filename -> filename.indexOf("_strelka_combined_somatic.vcf.gz") > 0 ? "raw/$filename" : "$filename"},
-        mode: params.publishDirMode
+        mode: publishDirMode
 
 
     input:
@@ -2992,7 +2996,7 @@ process 'mkHCsomaticVCF' {
     tag "$meta.sampleName"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     path(RefDict) from Channel.value(reference.RefDict)
@@ -3176,7 +3180,7 @@ process 'VepTab' {
                 ? "$CallerName/$filename"
                 : "high_confidence/$filename"
         },
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -3234,7 +3238,7 @@ process 'mkCombinedVCF' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/processing/",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -3314,7 +3318,7 @@ process 'VEPvcf' {
                     return "$filename"
                 }
         },
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -3451,7 +3455,7 @@ if(have_GATK3) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -3578,7 +3582,7 @@ process ConvertAlleleCounts {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/ASCAT/processing",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -3615,7 +3619,7 @@ process 'Ascat' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/ASCAT/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -3745,7 +3749,7 @@ if (params.controlFREEC) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/controlFREEC/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -3840,7 +3844,7 @@ if (params.controlFREEC) {
         errorStrategy 'ignore'
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/controlFREEC/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
 
         input:
@@ -3936,7 +3940,7 @@ process gatherSequenzaInput {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/Sequenza/processing",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -3981,7 +3985,7 @@ process Sequenza {
     errorStrategy "ignore"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/Sequenza/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -4095,7 +4099,7 @@ process make_CNVkit_access_file {
     tag 'mkCNVkitaccess'
 
     publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -4128,7 +4132,7 @@ process CNVkit {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -4316,7 +4320,7 @@ process 'Clonality' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/09_CCF/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     cache 'lenient'
 
@@ -4390,7 +4394,7 @@ process 'MutationalBurden' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/07_MutationalBurden/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 3
@@ -4445,7 +4449,7 @@ process 'MutationalBurdenCoding' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/07_MutationalBurden/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 3
@@ -4508,7 +4512,7 @@ process 'mhc_extract' {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/mhc_extract",
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         saveAs: {
             filename ->
                 if(filename.indexOf("NO_FILE") >= 0) {
@@ -4612,7 +4616,7 @@ if (run_OptiType) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/processing/",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             enabled: params.fullOutput
 
         input:
@@ -4676,7 +4680,7 @@ if (run_OptiType) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -4709,7 +4713,7 @@ if (run_OptiType) {
             tag "${meta.sampleName}"
 
             publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/processing/",
-                mode: params.publishDirMode,
+                mode: publishDirMode,
                 enabled: params.fullOutput
 
             input:
@@ -4766,7 +4770,7 @@ if (run_OptiType) {
             tag "${meta.sampleName}"
 
             publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/Optitype/",
-                mode: params.publishDirMode
+                mode: publishDirMode
 
             input:
             tuple(
@@ -4835,7 +4839,7 @@ if (have_HLAHD) {
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/HLA_HD/",
             saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName() : null },
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -4886,7 +4890,7 @@ if (have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/HLA_HD/",
             saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName().replace(".txt", ".RNA.txt") : null },
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -4983,7 +4987,7 @@ process get_vhla {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/neoantigens/${meta.sampleName}/Final_HLAcalls/",
-    mode: params.publishDirMode
+    mode: publishDirMode
 
     input:
     tuple(
@@ -5096,7 +5100,7 @@ process Neofuse {
                 }
                 return "$targetFile"
         },
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -5514,7 +5518,7 @@ process concat_pVACseq_files {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -5571,7 +5575,7 @@ process aggregated_reports {
     label 'pVACtools'
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -5608,7 +5612,7 @@ process 'pVACtools_generate_protein_seq' {
     label 'pVACtools'
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/06_proteinseq/",
-    mode: params.publishDirMode,
+    mode: publishDirMode,
     enabled: params.fullOutput
 
     input:
@@ -5662,7 +5666,7 @@ if(have_HLAHD) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/${meta.sampleName}/13_mixMHC2pred/processing/",
-            mode: params.publishDirMode,
+            mode: publishDirMode,
             enabled: params.fullOutput
 
         input:
@@ -5749,7 +5753,7 @@ if(have_HLAHD) {
         tag "${meta.sampleName}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/13_mixMHC2pred",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -5822,7 +5826,7 @@ process addCCF {
                 }
                 return "$targetFile"
         },
-        mode: params.publishDirMode,
+        mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
@@ -5981,7 +5985,7 @@ process add_blast_hits {
 
                 return "$targetFile"
         },
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -6018,7 +6022,7 @@ process csin {
     tag "${meta.sampleName}"
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/14_CSiN/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -6106,7 +6110,7 @@ process immunogenicity_scoring {
     errorStrategy 'ignore'
 
     publishDir "$params.outputDir/analyses/${meta.sampleName}/14_IGS/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -6193,7 +6197,7 @@ if(params.TCR) {
         tag "${meta.sampleName} : ${meta.sampleType}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
-            mode: params.publishDirMode
+            mode: publishDirMode
 
         input:
         tuple(
@@ -6246,7 +6250,7 @@ process collectSampleInfo {
     tag "${meta.sampleName}"
 
     publishDir "${params.outputDir}/neoantigens/${meta.sampleName}/",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
     input:
     tuple(
@@ -6314,7 +6318,7 @@ process multiQC {
     tag "${meta.sampleName}"
 
     publishDir "${params.outputDir}/analyses/${meta.sampleName}/QC",
-        mode: params.publishDirMode
+        mode: publishDirMode
 
    input:
     tuple(
@@ -6604,6 +6608,39 @@ def remove_from_meta(ch, keys=[], keep=false) {
     return ch
 }
 */
+
+def get_publishMode(d, mode) {
+    dev req_mode = mode
+
+    if (req_mode != "auto" && req_mode != "link") {
+        return mode
+    }
+
+    // default to copy
+    mode = "copy"
+
+    file(d).mkdirs()
+
+    testFile = file(workflow.workDir + "/.test")
+    testFile.write("test")
+
+    testLink = file(d + "/.test")
+
+    // let's see if we can create hard links
+    try {
+        Files.createLink(testLink, testFile);
+        mode = "link"
+    } catch (IOException e) {
+        if (req_mode == "link") {
+            System.err.println("WARNING: using copy as publish mode, reason: " + e)
+        }
+    }
+
+    testLink.delete()
+    testFile.delete()
+
+    return mode
+ }
 
 def helpMessage() {
     log.info ""
