@@ -35,6 +35,8 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
     """Picks the given VARs from the priority vcf to a new
     VCF if they are confirmed by one of the others."""
 
+    var_count = 0
+
     primary_reader = vcf.Reader(f_primary)
 
     confirming_reader = []
@@ -74,6 +76,9 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
 
             if confirmed:
                 out_writer.write_record(primary_rec)
+                var_count += 1
+
+    return var_count
 
 
 if __name__ == "__main__":
@@ -129,6 +134,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    make_hc_somatic_vars(
+    var_count = make_hc_somatic_vars(
         args.primary, args.primary_name, args.confirming, args.confirming_names, args.out_vcf, args.out_single_vcf
     )
+
+    print("Total confirmed:\t" + str(var_count))
