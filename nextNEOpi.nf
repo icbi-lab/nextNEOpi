@@ -834,8 +834,47 @@ process FastQC {
 }
 
 
-// adapter trimming Tumor
-if (params.trim_adapters) {
+// adapter trimming
+//
+// We first check if we need to trim DNA and RNA or only one of them.
+// If it is only one of them we need to combine the trimmed and raw
+// reads again
+
+def trim_adapters = false
+
+if (params.trim_adapters || params.trim_adapters_RNAseq) {
+    trim_adapters = true
+    reads_to_trim = raw_reads_ch
+
+    if (params.trim_adapters && params.trim_adapters_RNAseq) {
+        reads_to_trim_ch = raw_reads_ch
+        reads_to_keep_ch = Channel.empty()
+    }
+
+    if (params.trim_adapters && ! params.trim_adapters_RNAseq) {
+        raw_reads_ch.branch {
+            DNA: it[0].sampleType != "tumor_RNA"
+            RNA: it[0].sampleType == "tumor_RNA"
+        }
+        .set{ raw_reads_ch }
+
+        reads_to_trim_ch = raw_reads_ch.DNA
+        reads_to_keep_ch = raw_reads_ch.RNA
+    }
+
+    if (! params.trim_adapters && params.trim_adapters_RNAseq) {
+        raw_reads_ch.branch {
+            DNA: it[0].sampleType != "tumor_RNA"
+            RNA: it[0].sampleType == "tumor_RNA"
+        }
+        .set{ raw_reads_ch }
+
+        reads_to_trim_ch = raw_reads_ch.RNA
+        reads_to_keep_ch = raw_reads_ch.DNA
+    }
+}
+
+if (trim_adapters) {
     process fastp {
 
         label 'nextNEOpiENV'
@@ -856,10 +895,10 @@ if (params.trim_adapters) {
             }
 
         input:
-        tuple val(meta), path(reads) from raw_reads_ch
+        tuple val(meta), path(reads) from reads_to_trim_ch
 
         output:
-        tuple val(meta), path("*_trimmed_R{1,2}.fastq.gz") into reads_ch, fastqc_reads_trimmed_ch
+        tuple val(meta), path("*_trimmed_R{1,2}.fastq.gz") into reads_trimmed_ch, fastqc_reads_trimmed_ch
         tuple val(meta), path("*.json") into ch_fastp // multiQC
 
 
@@ -945,9 +984,15 @@ if (params.trim_adapters) {
             ${reads_R1} ${reads_R2}
         """
     }
+
+    // combine trimmed reads ch with reads channel of reads that
+    // did not need trimming
+    reads_ch = reads_trimmed_ch.mix(reads_to_keep_ch)
+
 } else { // no adapter trimming
     ch_fastqc_trimmed = Channel.empty()
     reads_ch = raw_reads_ch
+    ch_fastp = Channel.empty()
 }
 
 // get DNA/RNA reads
@@ -2748,6 +2793,8 @@ if(have_Mutect1) {
 // Will only run with PE libraries
 
 MantaSomaticIndels_out_ch0 = Channel.create()
+MantaSomaticIndels_out_NeoFuse_in_ch0 = Channel.create()
+
 process 'MantaSomaticIndels' {
 
     label 'Manta'
@@ -2794,37 +2841,42 @@ process 'MantaSomaticIndels' {
     output:
     tuple(
         val(meta),
-        path("${meta.sampleName}_candidateSmallIndels.{vcf.gz,vcf.gz.tbi}")
+        path(indel_vcf)
     ) into MantaSomaticIndels_out_ch0
 
     tuple(
         val(meta),
-        path("${meta.sampleName}_somaticSV.{vcf.gz,vcf.gz.tbi}")
+        path(sv_vcf)
     ) into MantaSomaticIndels_out_NeoFuse_in_ch0
 
-    path("${meta.sampleName}_*.{vcf.gz,vcf.gz.tbi}")
-
-    when:
-    meta.libType == "PE"
+    path("${meta.sampleName}_*.{vcf.gz,vcf.gz.tbi}") optional true
 
     script:
+    indel_vcf = (meta.libType == "PE") ? meta.sampleName + "_candidateSmallIndels.{vcf.gz,vcf.gz.tbi}" : []
+    sv_vcf = (meta.libType == "PE") ? meta.sampleName + "_somaticSV.{vcf.gz,vcf.gz.tbi}" : []
+
     def exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
 
-    """
-    configManta.py --tumorBam ${Tumorbam[0]} --normalBam  ${Normalbam[0]} \\
-        --referenceFasta ${RefFasta} \\
-        --runDir manta_${meta.sampleName} ${exome_options}
-    manta_${meta.sampleName}/runWorkflow.py -m local -j ${task.cpus}
-    cp manta_${meta.sampleName}/results/variants/diploidSV.vcf.gz ${meta.sampleName}_diploidSV.vcf.gz
-    cp manta_${meta.sampleName}/results/variants/diploidSV.vcf.gz.tbi ${meta.sampleName}_diploidSV.vcf.gz.tbi
-    cp manta_${meta.sampleName}/results/variants/candidateSV.vcf.gz ${meta.sampleName}_candidateSV.vcf.gz
-    cp manta_${meta.sampleName}/results/variants/candidateSV.vcf.gz.tbi ${meta.sampleName}_candidateSV.vcf.gz.tbi
-    cp manta_${meta.sampleName}/results/variants/candidateSmallIndels.vcf.gz ${meta.sampleName}_candidateSmallIndels.vcf.gz
-    cp manta_${meta.sampleName}/results/variants/candidateSmallIndels.vcf.gz.tbi ${meta.sampleName}_candidateSmallIndels.vcf.gz.tbi
-    cp manta_${meta.sampleName}/results/variants/somaticSV.vcf.gz ${meta.sampleName}_somaticSV.vcf.gz
-    cp manta_${meta.sampleName}/results/variants/somaticSV.vcf.gz.tbi ${meta.sampleName}_somaticSV.vcf.gz.tbi
-    cp manta_${meta.sampleName}/results/stats/svCandidateGenerationStats.tsv ${meta.sampleName}_svCandidateGenerationStats.tsv
-    """
+    // only run with PE samples, Manta is not working with SE samples
+    if(meta.libType == "PE")
+        """
+        configManta.py --tumorBam ${Tumorbam[0]} --normalBam  ${Normalbam[0]} \\
+            --referenceFasta ${RefFasta} \\
+            --runDir manta_${meta.sampleName} ${exome_options}
+        manta_${meta.sampleName}/runWorkflow.py -m local -j ${task.cpus}
+        cp manta_${meta.sampleName}/results/variants/diploidSV.vcf.gz ${meta.sampleName}_diploidSV.vcf.gz
+        cp manta_${meta.sampleName}/results/variants/diploidSV.vcf.gz.tbi ${meta.sampleName}_diploidSV.vcf.gz.tbi
+        cp manta_${meta.sampleName}/results/variants/candidateSV.vcf.gz ${meta.sampleName}_candidateSV.vcf.gz
+        cp manta_${meta.sampleName}/results/variants/candidateSV.vcf.gz.tbi ${meta.sampleName}_candidateSV.vcf.gz.tbi
+        cp manta_${meta.sampleName}/results/variants/candidateSmallIndels.vcf.gz ${meta.sampleName}_candidateSmallIndels.vcf.gz
+        cp manta_${meta.sampleName}/results/variants/candidateSmallIndels.vcf.gz.tbi ${meta.sampleName}_candidateSmallIndels.vcf.gz.tbi
+        cp manta_${meta.sampleName}/results/variants/somaticSV.vcf.gz ${meta.sampleName}_somaticSV.vcf.gz
+        cp manta_${meta.sampleName}/results/variants/somaticSV.vcf.gz.tbi ${meta.sampleName}_somaticSV.vcf.gz.tbi
+        cp manta_${meta.sampleName}/results/stats/svCandidateGenerationStats.tsv ${meta.sampleName}_svCandidateGenerationStats.tsv
+        """
+    else
+        """
+        """
 }
 
 // combine bam/bai with manta indel vcf/idx
@@ -2888,7 +2940,7 @@ process StrelkaSomatic {
     path("${meta.sampleName}_runStats.xml")
 
     script:
-    def manta_indel_candidates = (manta_indel == null) ? "" : "--indelCandidates " + manta_indel[0]
+    def manta_indel_candidates = (manta_indel[0] == null) ? "" : "--indelCandidates " + manta_indel[0]
     def exome_options = params.WES ? "--callRegions ${RegionsBedGz} --exome" : ""
 
     """
