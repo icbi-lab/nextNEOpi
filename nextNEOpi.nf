@@ -71,6 +71,12 @@ if (params.enable_conda) {
     checkCondaChannels()
 }
 
+// check IEDB dir
+check_iedb_dir(params.databases.IEDB_dir)
+
+// check MHCflurry dir
+check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
+
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
 
@@ -824,7 +830,7 @@ process FastQC {
         ln -s ${reads[0]} ${reads_R1}
     fi
 
-    if [ ${reads_R2} != "_missing_" ] && [ ! -e ${reads_R2} ]; then
+    if [ "${reads_R2}" != "_missing_" ] && [ ! -e ${reads_R2} ]; then
         ln -s ${reads[1]} ${reads_R2}
     fi
 
@@ -6408,15 +6414,27 @@ ________________________________________________________________________________
 
 */
 
-def mkTmpDir(d) {
-    myTmpDir = file(d)
-    result = myTmpDir.mkdirs()
+def checkDir(d, description) {
+    myDir = file(d)
+    result = myDir.mkdirs()
     if (result) {
-        println("tmpDir: " + myTmpDir.toRealPath())
+        println(description + ": " + myDir.toRealPath())
     } else {
-        exit 1, "Cannot create directory: " + myTmpDir
+        exit 1, "Cannot create directory: " + myDir
     }
-    return myTmpDir.toRealPath()
+    return myDir.toRealPath()
+}
+
+def mkTmpDir(d) {
+   return checkDir(d, "tmpDir")
+}
+
+def check_iedb_dir(d) {
+    checkDir(d, "IEDB_dir")
+}
+
+def check_mhcflurry_dir(d) {
+    checkDir(d, "MHCFLURRY_dir")
 }
 
 def checkParamReturnFileReferences(item) {
