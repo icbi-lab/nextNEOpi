@@ -330,7 +330,6 @@ pon_file = file(params.mutect2ponFile)
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
-MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
 // check HLAHD & OptiType
@@ -399,6 +398,13 @@ if (params.GATK3 != "" && file(params.GATK3) && params.JAVA8 != "" && file(param
     have_GATK3 = true
 }
 
+
+// check MIXCR licence
+if (params.TCR && params.MIXCR_lic != "") {
+    checkToolAvailable(params.MIXCR_lic, "exists", "error")
+} else if (params.TCR && params.MIXCR_lic == "") {
+    exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option. If you do not have a MiXCR license, please run nextNEOpi with --TCR false"
+}
 
 /*
 ________________________________________________________________________________
@@ -6221,6 +6227,7 @@ if(params.TCR) {
             chmod +x mixcr*/mixcr && \\
             cp -f mixcr*/mixcr ${mixcr_target} && \\
             cp -f mixcr*/mixcr.jar ${mixcr_target} && \\
+            cp -f ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
             """
@@ -6240,6 +6247,7 @@ if(params.TCR) {
             """
             ln -s ${params.MIXCR}/mixcr ${mixcr_target} && \\
             ln -s ${params.MIXCR}/mixcr.jar ${mixcr_target} && \\
+            ln -s ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
             """
@@ -6249,8 +6257,6 @@ if(params.TCR) {
     }
 
     process mixcr {
-
-        label 'nextNEOpiENV'
 
         tag "${meta.sampleName} : ${meta.sampleType}"
 
