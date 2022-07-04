@@ -6224,9 +6224,9 @@ if(params.TCR) {
             """
             curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
             unzip -o mixcr.zip && \\
-            chmod +x mixcr*/mixcr && \\
-            cp -f mixcr*/mixcr ${mixcr_target} && \\
-            cp -f mixcr*/mixcr.jar ${mixcr_target} && \\
+            chmod +x mixcr && \\
+            cp -f mixcr ${mixcr_target} && \\
+            cp -f mixcr.jar ${mixcr_target} && \\
             cp -f ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
