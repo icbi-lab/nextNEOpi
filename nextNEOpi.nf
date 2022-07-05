@@ -1,5 +1,8 @@
 #!/usr/bin/env nextflow
 
+// enable DSL 1
+nextflow.enable.dsl = 1
+
 import org.yaml.snakeyaml.Yaml
 import java.nio.file.Files
 
