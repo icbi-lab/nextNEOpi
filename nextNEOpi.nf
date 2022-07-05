@@ -406,7 +406,7 @@ if (params.GATK3 != "" && file(params.GATK3) && params.JAVA8 != "" && file(param
 if (params.TCR && params.MIXCR_lic != "") {
     checkToolAvailable(params.MIXCR_lic, "exists", "error")
 } else if (params.TCR && params.MIXCR_lic == "") {
-    exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option. If you do not have a MiXCR license, please run nextNEOpi with --TCR false"
+    exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option.\nIf you do not have a MiXCR license you may:\n\ta) run nextNEOpi with --TCR false\n\tb) request one at https://licensing.milaboratories.com"
 }
 
 /*
