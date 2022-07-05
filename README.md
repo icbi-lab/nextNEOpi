@@ -158,6 +158,8 @@ Besides raw reads in **FASTQ** fromated files, input data may also be provided i
 
 ```--accept_license``` accept the license terms
 
+```--MIXCR_lic /path/to/mi.license``` OR ```--TCR false``` : a MiXCR license may be requested at https://licensing.milaboratories.com
+
 ```--batchFile```
 
 Make sure that your batchFile CSV includes the column names as shown in the examples below as header line. See also `example_batchFile_FASTQ.csv` or `example_batchFile_BAM.csv`
