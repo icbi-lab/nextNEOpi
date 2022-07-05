@@ -1,5 +1,8 @@
 #!/usr/bin/env nextflow
 
+// enable DSL 1
+nextflow.enable.dsl = 1
+
 import org.yaml.snakeyaml.Yaml
 import java.nio.file.Files
 
@@ -70,6 +73,12 @@ database = defineDatabases()
 if (params.enable_conda) {
     checkCondaChannels()
 }
+
+// check IEDB dir
+check_iedb_dir(params.databases.IEDB_dir)
+
+// check MHCflurry dir
+check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
 
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
@@ -324,7 +333,6 @@ pon_file = file(params.mutect2ponFile)
 scatter_count = Channel.from(params.scatter_count)
 padding = params.readLength + 100
 
-MIXCR         = ( params.MIXCR != "" ) ? file(params.MIXCR) : ""
 MiXMHC2PRED   = ( params.MiXMHC2PRED != "" ) ? file(params.MiXMHC2PRED) : ""
 
 // check HLAHD & OptiType
@@ -368,7 +376,7 @@ if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singula
 // check if we have mutect1 installed
 have_Mutect1 = false
 if (params.MUTECT1 != "" && file(params.MUTECT1) && params.JAVA7 != "" && file(params.JAVA7)) {
-    if(checkToolAvailable(params.JAVA7, "inPath", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
+    if(checkToolAvailable(params.JAVA7, "exists", "warn") && checkToolAvailable(params.MUTECT1, "exists", "warn")) {
         JAVA7 = file(params.JAVA7)
         MUTECT1 = file(params.MUTECT1)
         have_Mutect1 = true
@@ -393,6 +401,13 @@ if (params.GATK3 != "" && file(params.GATK3) && params.JAVA8 != "" && file(param
     have_GATK3 = true
 }
 
+
+// check MIXCR licence
+if (params.TCR && params.MIXCR_lic != "") {
+    checkToolAvailable(params.MIXCR_lic, "exists", "error")
+} else if (params.TCR && params.MIXCR_lic == "") {
+    exit 1, "ERROR: no MiXCR license file specified, please provide a MiXCR license file in params.config or by using the --MIXCR_lic option. If you do not have a MiXCR license, please run nextNEOpi with --TCR false"
+}
 
 /*
 ________________________________________________________________________________
@@ -824,7 +839,7 @@ process FastQC {
         ln -s ${reads[0]} ${reads_R1}
     fi
 
-    if [ ${reads_R2} != "_missing_" ] && [ ! -e ${reads_R2} ]; then
+    if [ "${reads_R2}" != "_missing_" ] && [ ! -e ${reads_R2} ]; then
         ln -s ${reads[1]} ${reads_R2}
     fi
 
@@ -6212,9 +6227,10 @@ if(params.TCR) {
             """
             curl -sLk ${params.MIXCR_url} -o mixcr.zip && \\
             unzip -o mixcr.zip && \\
-            chmod +x mixcr*/mixcr && \\
-            cp -f mixcr*/mixcr ${mixcr_target} && \\
-            cp -f mixcr*/mixcr.jar ${mixcr_target} && \\
+            chmod +x mixcr && \\
+            cp -f mixcr ${mixcr_target} && \\
+            cp -f mixcr.jar ${mixcr_target} && \\
+            cp -f ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
             """
@@ -6234,6 +6250,7 @@ if(params.TCR) {
             """
             ln -s ${params.MIXCR}/mixcr ${mixcr_target} && \\
             ln -s ${params.MIXCR}/mixcr.jar ${mixcr_target} && \\
+            ln -s ${params.MIXCR_lic} ${mixcr_target}/mi.license && \\
             touch .mixcr_install_ok.chck && \\
             cp -f .mixcr_install_ok.chck ${mixcr_chck_file}
             """
@@ -6243,8 +6260,6 @@ if(params.TCR) {
     }
 
     process mixcr {
-
-        label 'nextNEOpiENV'
 
         tag "${meta.sampleName} : ${meta.sampleType}"
 
@@ -6408,15 +6423,27 @@ ________________________________________________________________________________
 
 */
 
-def mkTmpDir(d) {
-    myTmpDir = file(d)
-    result = myTmpDir.mkdirs()
+def checkDir(d, description) {
+    myDir = file(d)
+    result = myDir.mkdirs()
     if (result) {
-        println("tmpDir: " + myTmpDir.toRealPath())
+        println(description + ": " + myDir.toRealPath())
     } else {
-        exit 1, "Cannot create directory: " + myTmpDir
+        exit 1, "Cannot create directory: " + myDir
     }
-    return myTmpDir.toRealPath()
+    return myDir.toRealPath()
+}
+
+def mkTmpDir(d) {
+   return checkDir(d, "tmpDir")
+}
+
+def check_iedb_dir(d) {
+    checkDir(d, "IEDB_dir")
+}
+
+def check_mhcflurry_dir(d) {
+    checkDir(d, "MHCFLURRY_dir")
 }
 
 def checkParamReturnFileReferences(item) {
