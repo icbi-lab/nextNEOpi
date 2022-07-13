@@ -24,4 +24,8 @@ make_nextNEOpi_release/
 README_tmp.html
 README.pdf
 nextNEOpiGDC.nf
+conf/process_icbi.config
+conf/params_icbi.config
+assets/hlahdenv.yml
+bin/make_release.sh
 test.nf
