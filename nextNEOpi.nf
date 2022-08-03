@@ -5433,6 +5433,7 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         """
         CWD=`pwd`
         cd /opt/iedb/
+        rm -f $mhci_file
         wget $iedb_MHCI_url
         tar -xzvf $mhci_file
         cd mhc_i
@@ -5440,6 +5441,7 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         cd /opt/iedb/
         rm -f $mhci_file
 
+        rm -f $mhcii_file
         wget $iedb_MHCII_url
         tar -xzvf $mhcii_file
         cd mhc_ii
