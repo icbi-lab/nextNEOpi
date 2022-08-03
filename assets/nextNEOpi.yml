@@ -8,7 +8,7 @@ channels:
 dependencies:
   - bwa
   - samtools
-  - gatk4=4.2.5.0
+  - gatk4=4.2.6.1
   - fastp
   - fastqc
   - multiqc
@@ -19,7 +19,7 @@ dependencies:
   - yara
   - optitype
 
-  # core python dependencies for GATK4 (4.2.5.0)
+  # core python dependencies for GATK4 (4.2.6.1)
   - conda-forge::python=3.6.10 # do not update
   - pip=20.0.2 # specifying channel may cause a warning to be emitted by conda
   - conda-forge::mkl=2019.5 # MKL typically provides dramatic performance increases for theano, tensorflow, and other key dependencies

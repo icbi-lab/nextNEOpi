@@ -76,6 +76,8 @@ def parse_vcf(vep_vcf, sample_name, normal_name):
         enst = CSQ[6]
         variant = CSQ[14] + CSQ[15]
 
+        gene_symbol = gene_symbol if gene_symbol else ensg
+
         vcf_record = {
             "chrom": chrom,
             "pos": pos,
@@ -93,6 +95,7 @@ def parse_vcf(vep_vcf, sample_name, normal_name):
             "variant_type": variant_type,
             "variant": variant,
         }
+
 
         if "frameshift_variant" in variant_type.split("&"):
             key = gene_symbol + "_" + enst + "_" + CSQ[14] + ref + "/" + alt
