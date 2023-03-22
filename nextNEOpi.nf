@@ -614,7 +614,7 @@ if (params.WES) {
         """
     }
 } else {
-    RegionsBedToIntervalList_out_ch0 = Channel.of('NO_FILE')
+    RegionsBedToIntervalList_out_ch0 = Channel.fromPath('NO_FILE')
     RegionsBedToIntervalList_out_ch1 = Channel.empty()
     BaitsBedToIntervalList_out_ch0 = Channel.empty()
 }
@@ -642,7 +642,7 @@ process 'preprocessIntervalList' {
 
     output:
     path(
-        "${interval_list.baseName}_merged_padded.interval_list"
+        outFileName
     ) into (
         preprocessIntervalList_out_ch0,
         preprocessIntervalList_out_ch1,
@@ -656,6 +656,7 @@ process 'preprocessIntervalList' {
     )
 
     script:
+    outFileName = (params.WES) ? interval_list.baseName + "_merged_padded.interval_list" : "wgs_ScatterIntervalsByNs.interval_list"
     if(params.WES)
         """
         gatk PreprocessIntervals \\
@@ -664,14 +665,14 @@ process 'preprocessIntervalList' {
             --bin-length 0 \\
             --padding ${padding} \\
             --interval-merging-rule OVERLAPPING_ONLY \\
-            -O ${interval_list.baseName}_merged_padded.interval_list
+            -O ${outFileName}
         """
     else
         """
         gatk --java-options ${params.JAVA_Xmx} ScatterIntervalsByNs \\
             --REFERENCE $RefFasta \\
             --OUTPUT_TYPE ACGT \\
-            --OUTPUT ${interval_list.baseName}_merged_padded.interval_list
+            --OUTPUT ${outFileName}
         """
 }
 
@@ -4222,7 +4223,7 @@ process CNVkit {
           reference.AnnoFile ]
     )
 
-    path(BaitsBed) from Channel.value(reference.BaitsBed)
+    path(BaitsBed) from Channel.fromPath(reference.BaitsBed)
 
     output:
     tuple(
@@ -6505,7 +6506,7 @@ def defineReference() {
             'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
             'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
             'VepFasta'          : params.references.VepFasta,
-            'BaitsBed'          : "",
+            'BaitsBed'          : 'NO_FILE',
             'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
             'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
             'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
