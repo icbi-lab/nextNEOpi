@@ -5715,6 +5715,7 @@ process 'pVACtools_generate_protein_seq' {
         ${phased_vcf_opt} \\
         -s ${meta.sampleName}_tumor \\
         ${vep_tumor_vcf_gz[0]} \\
+        -d full \\
         31 \\
         ${meta.sampleName}_long_peptideSeq.fasta
     """
