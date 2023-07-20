@@ -65,10 +65,6 @@ have_RNA_tag_seq = params.RNA_tag_seq
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
 
-// set and check references and databases
-reference = defineReference()
-database = defineDatabases()
-
 // check conda channels
 if (params.enable_conda) {
     checkCondaChannels()
@@ -79,6 +75,10 @@ check_iedb_dir(params.databases.IEDB_dir)
 
 // check MHCflurry dir
 check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
+
+// set and check references and databases
+reference = defineResources('references', params.WES, params.HLAHD_DIR)
+database = defineResources('databases', params.WES, params.HLAHD_DIR)
 
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
@@ -6450,104 +6450,75 @@ def check_mhcflurry_dir(d) {
     checkDir(d, "MHCFLURRY_dir")
 }
 
-def checkParamReturnFileReferences(item) {
-    params."${item}" = params.references."${item}"
-    return file(params."${item}")
-}
-
-def checkParamReturnFileDatabases(item) {
-    params."${item}" = params.databases."${item}"
-    return file(params."${item}")
-}
-
 def setExomeCaptureKit(captureKit) {
+    resources = ['BaitsBed', 'RegionsBed']
+    for (r in resources) {
+        if (params.exomeCaptureKits[ captureKit ][r] == null) {
+            exit 1, "ERROR: \"" + r + "\" file not set for: " + captureKit + "\nPlease check the \"exomeCaptureKits\" resource file settings in conf/resources.config"
+        }
+    }
+
     params.references.BaitsBed = params.exomeCaptureKits[ captureKit ].BaitsBed
     params.references.RegionsBed = params.exomeCaptureKits[ captureKit ].RegionsBed
 }
 
-def defineReference() {
-    if(params.WES) {
-        if (params.references.size() != 22) exit 1, """
-        ERROR: Not all References needed found in configuration
-        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
-        """
-        return [
-            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
-            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
-            'RefDict'           : checkParamReturnFileReferences("RefDict"),
-            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
-            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
-            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : params.references.VepFasta,
-            'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
-            'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
-            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
-            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
-            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
-            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
-            'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
-            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
-        ]
+def check_resource(resource, resource_type) {
+
+    resource_file = params[resource_type][resource]
+
+    if (resource_file == null) {
+        exit 1, "ERROR: Resource file not set for: " + resource + "\nPlease check the \"" + resource_type + "\" resource file settings in conf/resources.config"
+    }
+
+    rp = file(resource_file)
+
+    if (rp instanceof java.util.LinkedList) {
+        rf = rp
     } else {
-        if (params.references.size() < 20) exit 1, """
-        ERROR: Not all References needed found in configuration
-        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
-        """
-        return [
-            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
-            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
-            'RefDict'           : checkParamReturnFileReferences("RefDict"),
-            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
-            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
-            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : params.references.VepFasta,
-            'BaitsBed'          : 'NO_FILE',
-            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
-            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
-            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
-            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
-            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
-            'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
-            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
-        ]
+        rf = [rp]
+    }
+
+    err = 0
+    if (rf[0] != null) {
+        for (f in rf) {
+            err += file(f).exists() ? 0 : 1
+        }
+    }
+
+    if (err == 0) {
+        return(rp)
+    } else {
+        exit 1, "ERROR: Resource file does not exist: " + resource_file + "\nPlease check the " + resource_type + " resource file settings in conf/resources.config"
     }
 }
 
-def defineDatabases() {
-    if (params.databases.size() < 16) exit 1, """
-    ERROR: Not all Databases needed found in configuration
-    Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
-    """
-    return [
-        'MillsGold'      : checkParamReturnFileDatabases("MillsGold"),
-        'MillsGoldIdx'   : checkParamReturnFileDatabases("MillsGoldIdx"),
-        'hcSNPS1000G'    : checkParamReturnFileDatabases("hcSNPS1000G"),
-        'hcSNPS1000GIdx' : checkParamReturnFileDatabases("hcSNPS1000GIdx"),
-        'HapMap'         : checkParamReturnFileDatabases("HapMap"),
-        'HapMapIdx'      : checkParamReturnFileDatabases("HapMapIdx"),
-        'DBSNP'          : checkParamReturnFileDatabases("DBSNP"),
-        'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
-        'GnomAD'         : checkParamReturnFileDatabases("GnomAD"),
-        'GnomADIdx'      : checkParamReturnFileDatabases("GnomADIdx"),
-        'GnomADfull'     : checkParamReturnFileDatabases("GnomADfull"),
-        'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
-        'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
-        'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx"),
-        'vep_cache'      : params.databases.vep_cache,
-        'iedb_dir'       : checkParamReturnFileDatabases("IEDB_dir"),
-        'mhcflurry_dir'  : checkParamReturnFileDatabases("MHCFLURRY_dir"),
-    ]
+def defineResources(resource_type, wes, hlahd) {
+
+    // define references
+    references = ['RefFasta', 'RefIdx', 'RefDict', 'RefChrLen', 'RefChrDir', 'BwaRef', 'VepFasta',
+                  'YaraIndexDNA', 'YaraIndexRNA', 'STARidx', 'AnnoFile', 'ExonsBED', 'acLoci',
+                  'acLociGC', 'SequenzaGC', 'ProteinBlastDBdir']
+    if (wes) {
+        references.addAll(['BaitsBed', 'RegionsBed'])
+    }
+    if (hlahd != "") {
+        references.addAll(['HLAHDFreqData', 'HLAHDGeneSplit', 'HLAHDDict'])
+    }
+
+    // define databases
+    databases = ['MillsGold', 'MillsGoldIdx', 'hcSNPS1000G', 'hcSNPS1000GIdx', 'HapMap',
+                 'HapMap', 'DBSNP', 'DBSNPIdx', 'GnomAD', 'GnomADIdx', 'GnomADfull', 'GnomADfullIdx',
+                 'KnownIndels', 'KnownIndelsIdx', 'vep_cache', 'IEDB_dir', 'MHCFLURRY_dir']
+
+    resources = ['references' : references, 'databases' : databases ]
+    resources_files = [:]
+
+    for (r in resources[resource_type]) {
+        println(r)
+        resources_files[r] = check_resource(r, resource_type)
+    }
+
+    return(resources_files)
 }
 
 def checkToolAvailable(tool, check, errMode) {
