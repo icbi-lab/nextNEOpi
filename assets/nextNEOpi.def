@@ -1,8 +1,9 @@
 Bootstrap: docker
-From: mambaorg/micromamba
+From: mambaorg/micromamba:0.24.0
 
 %files
     nextNEOpi.yml /nextNEOpi.yml
+    ./.mambarc /root/.mambarc
 
 %post
  apt-get update && apt-get install -y \
