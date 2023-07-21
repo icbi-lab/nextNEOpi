@@ -6285,7 +6285,7 @@ if(params.TCR) {
         def libtype = (meta.sampleType == "tumor_RNA") ? "rna-seq" : "exome-seq"
         procSampleName = meta.sampleName + "_" + meta.sampleType + "_mixcr"
         """
-        mixcr analyze ${libtype} \\
+        ${baseDir}/bin/mixcr analyze ${libtype} \\
             --threads ${task.cpus} \\
             --species hsa \\
             --${starting_material} \\
