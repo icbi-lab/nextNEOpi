@@ -5415,6 +5415,8 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         def mhci_file = iedb_MHCI_url.split("/")[-1]
         def mhcii_file = iedb_MHCII_url.split("/")[-1]
         """
+        export TMPDIR=${params.tmpDir}
+
         CWD=`pwd`
         cd /opt/iedb/
         rm -f $mhci_file
