@@ -1385,7 +1385,7 @@ process 'gatherGATK4scsatteredBQSRtables' {
 
     tag "$meta.sampleName : $meta.sampleType"
 
-    publishDir "$params.outputDir/${meta.sampleName}/03_baserecalibration/",
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/03_baserecalibration/",
         mode: publishDirMode,
         enabled: params.fullOutput
 
@@ -5718,7 +5718,7 @@ if(have_HLAHD) {
 
         tag "${meta.sampleName}"
 
-        publishDir "$params.outputDir/${meta.sampleName}/13_mixMHC2pred/processing/",
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/13_mixMHC2pred/processing/",
             mode: publishDirMode,
             enabled: params.fullOutput
 
@@ -6250,6 +6250,16 @@ if(params.TCR) {
         tag "${meta.sampleName} : ${meta.sampleType}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
+            saveAs: {
+                filename ->
+                    if (filename.indexOf(".tsv") == -1 && params.fullOutput) {
+                        return "extra_output/$filename"
+                    } else if (filename.indexOf(".tsv") == -1 && ! params.fullOutput) {
+                        return null
+                    } else {
+                        return "$filename"
+                    }
+            },
             mode: publishDirMode
 
         input:
@@ -6263,20 +6273,20 @@ if(params.TCR) {
         output:
         tuple(
             val(meta),
-            path("${procSampleName}_mixcr.clonotypes.ALL.txt"),
+            path("${procSampleName}*.tsv"),
         )
 
         script:
         def starting_material = (meta.sampleType == "tumor_RNA") ? "rna" : "dna"
-        procSampleName = meta.sampleName + "_" + meta.sampleType
+        def libtype = (meta.sampleType == "tumor_RNA") ? "rna-seq" : "exome-seq"
+        procSampleName = meta.sampleName + "_" + meta.sampleType + "_mixcr"
         """
-        mixcr analyze shotgun \\
+        mixcr analyze ${libtype} \\
             --threads ${task.cpus} \\
-            --species hs \\
-            --starting-material ${starting_material} \\
-            --only-productive \\
+            --species hsa \\
+            ${starting_material} \\
             $reads \\
-            ${procSampleName}_mixcr
+            ${procSampleName}
         """
     }
 }
