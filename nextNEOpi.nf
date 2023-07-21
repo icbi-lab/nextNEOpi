@@ -26,7 +26,7 @@ log.info "----------------------------------------------------------------------
 log.info "C O N F I G U R A T I O N"
 log.info ""
 log.info "Command Line: \t\t " + workflow.commandLine
-log.info "Working Directory: \t " + params.workDir
+log.info "Working Directory: \t " + workflow.workDir
 log.info "Output Directory: \t " + params.outputDir
 log.info ""
 log.info "I N P U T"
@@ -144,24 +144,6 @@ if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(30)}: $v" }.join("\n")
 log.info "-------------------------------------------------------------------------"
 
-
-def create_workflow_summary(summary) {
-
-    def yaml_file = workDir.resolve('workflow_summary_mqc.yaml')
-    yaml_file.text  = """
-    id: 'nextNEOpi-summary'
-    description: " - this information is collected when the pipeline is started."
-    section_name: 'nextNEOpi Workflow Summary'
-    section_href: 'https://github.com/icbi-lab/nextNEOpi'
-    plot_type: 'html'
-    data: |
-        <dl class=\"dl-horizontal\">
-${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style=\"color:#999999;\">N/A</a>'}</samp></dd>" }.join("\n")}
-        </dl>
-    """.stripIndent()
-
-   return yaml_file
-}
 // End Summary
 
 // determine the publishDirMode
