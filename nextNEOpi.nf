@@ -6496,6 +6496,9 @@ def defineResources(resource_type, wes, hlahd) {
     if (hlahd != "") {
         references.addAll(['HLAHDFreqData', 'HLAHDGeneSplit', 'HLAHDDict'])
     }
+    if(vep_cache_chck_file.exists() && !vep_cache_chck_file.isEmpty()) {
+        references.addAll(['VepFasta'])
+    }
 
     // define databases
     databases = ['MillsGold', 'MillsGoldIdx', 'hcSNPS1000G', 'hcSNPS1000GIdx', 'HapMap',
