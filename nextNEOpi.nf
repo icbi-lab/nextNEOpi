@@ -6288,7 +6288,7 @@ if(params.TCR) {
         mixcr analyze ${libtype} \\
             --threads ${task.cpus} \\
             --species hsa \\
-            ${starting_material} \\
+            --${starting_material} \\
             $reads \\
             ${procSampleName}
         """
