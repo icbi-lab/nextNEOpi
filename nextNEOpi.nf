@@ -6491,7 +6491,7 @@ def defineResources(resource_type, wes, hlahd) {
     vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
 
     // define references
-    references = ['RefFasta', 'RefIdx', 'RefDict', 'RefChrLen', 'RefChrDir', 'BwaRef', 'VepFasta',
+    references = ['RefFasta', 'RefIdx', 'RefDict', 'RefChrLen', 'RefChrDir', 'BwaRef',
                   'YaraIndexDNA', 'YaraIndexRNA', 'STARidx', 'AnnoFile', 'ExonsBED', 'acLoci',
                   'acLociGC', 'SequenzaGC', 'ProteinBlastDBdir']
     if (wes) {
@@ -6513,7 +6513,6 @@ def defineResources(resource_type, wes, hlahd) {
     resources_files = [:]
 
     for (r in resources[resource_type]) {
-        println(r)
         resources_files[r] = check_resource(r, resource_type)
     }
 
