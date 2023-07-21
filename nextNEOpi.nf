@@ -5427,7 +5427,7 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
 
         rm -f $mhcii_file
         wget $iedb_MHCII_url
-        tar -xzvf $mhcii_fil
+        tar -xzvf $mhcii_file
         #### ATTENTION: IEDB_MHC_II-3.1.8.tar.gz "python configure.py"
         ####            returns an assertion error in the unittest needs
         ####            to be fixed, skip unittests for now
