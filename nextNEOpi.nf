@@ -6486,6 +6486,10 @@ def check_resource(resource, resource_type) {
 
 def defineResources(resource_type, wes, hlahd) {
 
+    // vep check file
+    vep_cache_chck_file_name = "." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck"
+    vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
+
     // define references
     references = ['RefFasta', 'RefIdx', 'RefDict', 'RefChrLen', 'RefChrDir', 'BwaRef', 'VepFasta',
                   'YaraIndexDNA', 'YaraIndexRNA', 'STARidx', 'AnnoFile', 'ExonsBED', 'acLoci',
