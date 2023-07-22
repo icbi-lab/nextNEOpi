@@ -8,7 +8,7 @@ channels:
 dependencies:
   - bwa
   - samtools
-  - gatk4=4.2.6.1
+  - gatk4=4.4.0.0
   - fastp
   - fastqc
   - multiqc
