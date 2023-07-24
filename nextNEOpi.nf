@@ -6512,7 +6512,7 @@ def defineResources(resource_type, wes, hlahd) {
 
     // define databases
     databases = ['MillsGold', 'MillsGoldIdx', 'hcSNPS1000G', 'hcSNPS1000GIdx', 'HapMap',
-                 'HapMap', 'DBSNP', 'DBSNPIdx', 'GnomAD', 'GnomADIdx', 'GnomADfull', 'GnomADfullIdx',
+                 'HapMapIdx', 'DBSNP', 'DBSNPIdx', 'GnomAD', 'GnomADIdx', 'GnomADfull', 'GnomADfullIdx',
                  'KnownIndels', 'KnownIndelsIdx', 'vep_cache', 'IEDB_dir', 'MHCFLURRY_dir']
 
     resources = ['references' : references, 'databases' : databases ]
