@@ -71,7 +71,7 @@ The software that needs to be present on the system is **Java** (minimum version
 **Optional but recommended:**
 Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
 
-### 1.2 References
+### 1.3 References
 
 The pipeline requires different reference files, indexes and databases:
 
@@ -79,7 +79,7 @@ please see ```conf/resources.config```
 
 For each nextNEOpi version we prepared a bundle with all needed references, indexes and databases which can be obtained from:
 
-`https://apps-01.i-med.ac.at/resources/nextneopi/`
+<https://apps-01.i-med.ac.at/resources/nextneopi/>
 
 the bundle is named to match the release version `nextNEOpi_<version>_resources.tar.gz`
 
@@ -116,6 +116,15 @@ Refs:
 * <ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/>
 * <https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files>
 * <https://www.gencodegenes.org/human/>
+
+### 1.4 Testdata
+
+If you want to test the pipeline using a working minimal test dataset you may download one from
+
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_testdata.tar.gz>
+
+Please note that due to the limited read coverage `CNVkit` will not run successfully using this test dataset. Please run the
+pipeline using the parameter `--CNVkit false` when testing with this dataset.
 
 ## 2. Usage
 
