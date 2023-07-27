@@ -43,8 +43,8 @@ def convert_to_df(pvacseq_1_tsv, pvacseq_2_tsv):
         # Rename columns in order for the merge to work properly
         pvacseq_2_df.rename(
             columns={
-                "NetMHCIIpan WT Score": "NetMHCpan WT Score",
-                "NetMHCIIpan MT Score": "NetMHCpan MT Score",
+                "NetMHCIIpan WT IC50 Score": "NetMHCpan WT IC50 Score",
+                "NetMHCIIpan MT IC50 Score": "NetMHCpan MT IC50 Score",
                 "NetMHCIIpan WT Percentile": "NetMHCpan WT Percentile",
                 "NetMHCIIpan MT Percentile": "NetMHCpan MT Percentile",
             },
@@ -63,7 +63,7 @@ def sub_csin(c, IC50_cutoff, xp_cutoff, filtered_df):
             # Filter dataframe
             filtered_df_tmp = filtered_df
             filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["NetMHCpan MT Percentile"] < rank]
-            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Best MT Score"] < IC50_cutoff]
+            filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Best MT IC50 Score"] < IC50_cutoff]
             filtered_df_tmp = filtered_df_tmp[filtered_df_tmp["Gene Expression"] > xp_cutoff]
             # Get the VAF and mean VAF, then normilize
             vaf_mean = filtered_df_tmp["Tumor DNA VAF"].mean()
