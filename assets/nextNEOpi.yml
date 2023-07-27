@@ -8,10 +8,6 @@ channels:
 dependencies:
   - bwa
   - samtools
-  - gatk4=4.4.0.0
-  - fastp
-  - fastqc
-  - multiqc
   - sambamba
   - bcftools
   - varscan
@@ -42,9 +38,12 @@ dependencies:
   - conda-forge::scikit-learn=0.23.1
   - conda-forge::matplotlib=3.2.1
   - conda-forge::pandas=1.0.3
+  - conda-forge::typing_extensions=4.1.1   # see https://github.com/broadinstitute/gatk/issues/7800 and linked PRs
+  - conda-forge::dill=0.3.4                # used for pickling lambdas in TrainVariantAnnotationsModel
+  - conda-forge::joblib=1.1.1
 
   # core R dependencies; these should only be used for plotting and do not take precedence over core python dependencies!
-  - r-base=3.6.2
+  - r-base>=3.6.2
   - r-data.table
   - r-dplyr=0.8.5
   - r-getopt=1.20.3
