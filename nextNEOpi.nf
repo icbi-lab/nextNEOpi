@@ -4141,153 +4141,154 @@ purity_estimate.map{
 }.into{purity_estimate_ch1; purity_estimate_ch2}
 
 // CNVkit
+if (parmas.CNVkit) {
+    process make_CNVkit_access_file {
 
-process make_CNVkit_access_file {
+        label 'CNVkit'
 
-    label 'CNVkit'
+        tag 'mkCNVkitaccess'
 
-    tag 'mkCNVkitaccess'
+        publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
+            mode: publishDirMode
 
-    publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
-        mode: publishDirMode
+        input:
+        tuple(
+            path(RefFasta),
+            path(RefIdx),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx ]
+        )
 
-    input:
-    tuple(
-        path(RefFasta),
-        path(RefIdx),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx ]
-    )
+        output:
+        path(
+            "access-5kb.${RefFasta.simpleName}.bed"
+        ) into make_CNVkit_access_file_out_ch0
 
-    output:
-    path(
-        "access-5kb.${RefFasta.simpleName}.bed"
-    ) into make_CNVkit_access_file_out_ch0
+        script:
+        """
+        cnvkit.py \\
+            access \\
+            ${RefFasta} \\
+            -s 5000 \\
+            -o access-5kb.${RefFasta.simpleName}.bed
+        """
+    }
 
-    script:
-    """
-    cnvkit.py \\
-        access \\
-        ${RefFasta} \\
-        -s 5000 \\
-        -o access-5kb.${RefFasta.simpleName}.bed
-    """
-}
+    process CNVkit {
 
-process CNVkit {
+        label 'CNVkit'
 
-    label 'CNVkit'
+        tag "${meta.sampleName}"
 
-    tag "${meta.sampleName}"
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
+            mode: publishDirMode
 
-    publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
-        mode: publishDirMode
+        input:
+        tuple(
+            val(meta),
+            path(tumorBAM),
+            path(normalBAM),
+            val(sample_purity)
+        ) from MarkDuplicates_out_CNVkit_ch0
+            .join(purity_estimate_ch0, by: [0])
 
-    input:
-    tuple(
-        val(meta),
-        path(tumorBAM),
-        path(normalBAM),
-        val(sample_purity)
-    ) from MarkDuplicates_out_CNVkit_ch0
-        .join(purity_estimate_ch0, by: [0])
+        path(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
 
-    path(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
+        tuple(
+            path(RefFasta),
+            path(RefIdx),
+            path(AnnoFile),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.AnnoFile ]
+        )
 
-    tuple(
-        path(RefFasta),
-        path(RefIdx),
-        path(AnnoFile),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.AnnoFile ]
-    )
+        path(BaitsBed) from Channel.fromPath(reference.BaitsBed)
 
-    path(BaitsBed) from Channel.fromPath(reference.BaitsBed)
+        output:
+        tuple(
+            val(meta),
+            path("${meta.sampleName}*")
+        ) into CNVkit_out_ch0
 
-    output:
-    tuple(
-        val(meta),
-        path("${meta.sampleName}*")
-    ) into CNVkit_out_ch0
+        script:
+        def gender = (meta.sex == "None") ? "" : "--sample-sex " + ((meta.sex == "XX") ? "female" : "male")
+        def maleRef = (meta.maleRef == "true") ? "-y" : ""
+        def method = (params.WES) ? "--method hybrid" : "--method wgs"
+        def targets = (params.WES) ? "--targets ${BaitsBed}" : ""
 
-    script:
-    def gender = (meta.sex == "None") ? "" : "--sample-sex " + ((meta.sex == "XX") ? "female" : "male")
-    def maleRef = (meta.maleRef == "true") ? "-y" : ""
-    def method = (params.WES) ? "--method hybrid" : "--method wgs"
-    def targets = (params.WES) ? "--targets ${BaitsBed}" : ""
+        """
+        # set Agg as backend for matplotlib
+        export MATPLOTLIBRC="./matplotlibrc"
+        echo "backend : Agg" > \$MATPLOTLIBRC
 
-    """
-    # set Agg as backend for matplotlib
-    export MATPLOTLIBRC="./matplotlibrc"
-    echo "backend : Agg" > \$MATPLOTLIBRC
+        cnvkit.py \\
+            batch \\
+            ${tumorBAM[0]} \\
+            --normal ${normalBAM[0]} \\
+            ${method} \\
+            ${targets} \\
+            --fasta ${RefFasta} \\
+            --annotate ${AnnoFile} \\
+            --access ${CNVkit_accessFile} \\
+            ${maleRef} \\
+            -p ${task.cpus} \\
+            --output-reference output_reference.cnn \\
+            --output-dir ./
 
-    cnvkit.py \\
-        batch \\
-        ${tumorBAM[0]} \\
-        --normal ${normalBAM[0]} \\
-        ${method} \\
-        ${targets} \\
-        --fasta ${RefFasta} \\
-        --annotate ${AnnoFile} \\
-        --access ${CNVkit_accessFile} \\
-        ${maleRef} \\
-        -p ${task.cpus} \\
-        --output-reference output_reference.cnn \\
-        --output-dir ./
+        cnvkit.py segmetrics \\
+            -s ${tumorBAM[0].baseName}.cn{s,r} \\
+            --ci \\
+            --pi
 
-    cnvkit.py segmetrics \\
-        -s ${tumorBAM[0].baseName}.cn{s,r} \\
-        --ci \\
-        --pi
+        cnvkit.py call \\
+            ${tumorBAM[0].baseName}.cns \\
+            --filter ci \\
+            -m clonal \\
+            --purity ${sample_purity} \\
+            ${gender} \\
+            ${maleRef} \\
+            -o ${tumorBAM[0].baseName}.call.cns
 
-    cnvkit.py call \\
-        ${tumorBAM[0].baseName}.cns \\
-        --filter ci \\
-        -m clonal \\
-        --purity ${sample_purity} \\
-        ${gender} \\
-        ${maleRef} \\
-        -o ${tumorBAM[0].baseName}.call.cns
+        cnvkit.py \\
+            scatter \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            -o ${tumorBAM[0].baseName}_scatter.png
 
-    cnvkit.py \\
-        scatter \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        -o ${tumorBAM[0].baseName}_scatter.png
+        cnvkit.py \\
+            diagram \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            ${gender} \\
+            ${maleRef} \\
+            -o ${tumorBAM[0].baseName}_diagram.pdf
 
-    cnvkit.py \\
-        diagram \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        ${gender} \\
-        ${maleRef} \\
-        -o ${tumorBAM[0].baseName}_diagram.pdf
+        cnvkit.py \\
+            breaks \\
+            ${tumorBAM[0].baseName}.cnr ${tumorBAM[0].baseName}.cns \\
+            -o ${tumorBAM[0].baseName}_breaks.tsv
 
-    cnvkit.py \\
-        breaks \\
-        ${tumorBAM[0].baseName}.cnr ${tumorBAM[0].baseName}.cns \\
-        -o ${tumorBAM[0].baseName}_breaks.tsv
+        cnvkit.py \\
+            genemetrics \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            ${gender} \\
+            ${maleRef} \\
+            -t 0.2 -m 5 \\
+            -o ${tumorBAM[0].baseName}_gainloss.tsv
 
-    cnvkit.py \\
-        genemetrics \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        ${gender} \\
-        ${maleRef} \\
-        -t 0.2 -m 5 \\
-        -o ${tumorBAM[0].baseName}_gainloss.tsv
+        # run PDF to PNG conversion if mogrify and gs is installed
+        mogrify -version > /dev/null 2>&1 && \\
+        gs -v > /dev/null 2>&1 && \\
+            mogrify -density 600 -resize 2000 -format png *.pdf
 
-    # run PDF to PNG conversion if mogrify and gs is installed
-    mogrify -version > /dev/null 2>&1 && \\
-    gs -v > /dev/null 2>&1 && \\
-        mogrify -density 600 -resize 2000 -format png *.pdf
-
-    # clean up
-    rm -f \$MATPLOTLIBRC
-    """
+        # clean up
+        rm -f \$MATPLOTLIBRC
+        """
+    }
 }
 
 
