@@ -66,7 +66,7 @@ curl -s https://get.nextflow.io | bash
 
 The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (not recommended, please see `Manual installation` at the end of this document)
 
-The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Singularity**, **Conda** (optional).
+The software that needs to be present on the system is **Java** (minimum version 8, if running conda java version 17 or higher is needed), **Nextflow** (see above), **Singularity**, **Conda** (optional).
 
 **Optional but recommended:**
 Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
@@ -85,7 +85,7 @@ the bundle is named to match the release version `nextNEOpi_<version>_resources.
 
 e.g.:
 
-<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz>
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz>
 
 download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```conf/params.config``` file.
 
@@ -126,6 +126,9 @@ the number of CPUs assigned for each process and adjust according to your system
 
 Most pipeline parameters can be edited in the ```params.config``` file or changed on run time with command line options by using ```--NameOfTheParameter``` given in the ```params.config```.
 References, databases should be edited in the ```resources.config``` file.
+
+**Note**: nextNEOpi is currently written in nextflow DSL 1, which is only supported up to nextflow version 22.10.8, this means you need to pin the nextflow
+version by setting the environment variable `NXF_VER=22.10.8`, in case you have installed a newer nextflow version.
 
 ```
 NXF_VER=22.10.8 nextflow run nextNEOpi.nf --batchFile <batchFile_FASTQ.csv | batchFile_BAM.csv> -profile singularity|conda,[cluster] [-resume] -config conf/params.config
