@@ -398,6 +398,58 @@ ________________________________________________________________________________
 ________________________________________________________________________________
 */
 
+gatk4_chck_file = file(baseDir + "/assets/.gatk4_install_ok.chck")
+if (params.enable_conda && !gatk4_chck_file.exists()) {
+
+    process download_GATK4 {
+        tag "download GATK4"
+
+        output:
+        path("gatk-${params.gatk4version}.zip") into (
+             download_GATK4_ch0
+        )
+
+        script:
+        """
+        mkdir -p ${baseDir}/assets/gatk4 && \\
+        curl -L -o gatk-${params.gatk4version}.zip https://github.com/broadinstitute/gatk/releases/download/${params.gatk4version}/gatk-${params.gatk4version}.zip && \\
+        unzip -j gatk-${params.gatk4version}.zip gatk-${params.gatk4version}/gatkPythonPackageArchive.zip -d ${baseDir}/assets/
+        """
+    }
+
+    process setup_nextNEOpi_ENV {
+        label 'nextNEOpiENV'
+
+        tag "setup nextNEOpiENV"
+
+        input:
+        path(gatk4_archive) from download_GATK4_ch0
+
+        output:
+        val("OK") into nextNEOpiENV_setup_ch0
+
+        script:
+        if (params.enable_conda)
+            """
+            mkdir -p ${baseDir}/assets/gatk4 && \\
+            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk-package-${params.gatk4version}-local.jar -d ${baseDir}/assets/gatk4 && \\
+            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk -d ${baseDir}/assets/gatk4 && \\
+            chmod +x ${baseDir}/assets/gatk4/gatk && \\
+            ln -s ${baseDir}/assets/gatk4/gatk ${baseDir}/bin/gatk && \\
+            touch nextNEOpiENV_setup.ok
+            touch ${gatk4_chck_file}
+            """
+        else
+            """
+            touch nextNEOpiENV_setup.ok
+            touch ${gatk4_chck_file}
+            """
+    }
+} else {
+    gatk4_chck_file.append()
+    nextNEOpiENV_setup_ch0 = Channel.value("OK")
+}
+
 /*
 *********************************************
 **       P R E P R O C E S S I N G         **
@@ -416,6 +468,8 @@ if(bamInput) {
             val(meta),
             path(bam)
         ) from batch_raw_data_ch
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -451,6 +505,7 @@ if(bamInput) {
         ) from bam_ch
             .combine(seqLibTypes_ok)
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -547,6 +602,8 @@ if (params.WES) {
             reference.RegionsBed ]
         )
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         path(
             "${RegionsBed.baseName}.interval_list"
@@ -581,6 +638,8 @@ if (params.WES) {
             [ reference.RefDict,
             reference.BaitsBed ]
         )
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         path(
@@ -621,6 +680,8 @@ process 'preprocessIntervalList' {
           reference.RefDict ]
     )
     path(interval_list) from RegionsBedToIntervalList_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path(
@@ -683,6 +744,7 @@ process 'SplitIntervals' {
     path(IntervalsList) from preprocessIntervalList_out_ch0
 
     val x from scatter_count
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path(
@@ -733,6 +795,7 @@ process 'IntervalListToBed' {
 
     input:
     path(paddedIntervalList) from preprocessIntervalList_out_ch1
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path("${paddedIntervalList.baseName}.{bed.gz,bed.gz.tbi}") into (
@@ -771,6 +834,8 @@ process 'ScatteredIntervalListToBed' {
             SplitIntervals_out_ch0.flatten()
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
 
     output:
     path(
@@ -791,7 +856,7 @@ process 'ScatteredIntervalListToBed' {
 // FastQC
 process FastQC {
 
-    label 'nextNEOpiENV'
+    label 'fastqc'
 
     tag "$meta.sampleName : $meta.sampleType"
 
@@ -875,7 +940,7 @@ if (params.trim_adapters || params.trim_adapters_RNAseq) {
 if (trim_adapters) {
     process fastp {
 
-        label 'nextNEOpiENV'
+        label 'fastp'
 
         tag "$meta.sampleName : $meta.sampleType"
 
@@ -958,7 +1023,7 @@ if (trim_adapters) {
     // FastQC after adapter trimming
     process FastQC_trimmed {
 
-        label 'nextNEOpiENV'
+        label 'fastqc'
 
         tag "$meta.sampleName : $meta.sampleType"
 
@@ -1029,6 +1094,8 @@ process 'make_uBAM' {
     input:
     tuple val(meta), path(reads) from reads_uBAM_ch
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple val(meta), path(ubam) into uBAM_out_ch0
 
@@ -1077,6 +1144,8 @@ process 'Bwa' {
           reference.RefDict,
           reference.BwaRef ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path(bam) into BWA_out_ch0
@@ -1128,6 +1197,8 @@ process 'merge_uBAM_BAM' {
           reference.RefIdx,
           reference.RefDict ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_aligned_uBAM_merged.bam") into uBAM_BAM_out_ch
@@ -1187,6 +1258,8 @@ process 'MarkDuplicates' {
           reference.RefIdx,
           reference.RefDict ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1279,6 +1352,8 @@ if(params.WES) {
         path(BaitIntervalsList) from BaitsBedToIntervalList_out_ch0
         path(IntervalsList) from RegionsBedToIntervalList_out_ch1
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_ch // multiQC
 
@@ -1357,6 +1432,7 @@ process 'scatterBaseRecalGATK4' {
           database.KnownIndelsIdx ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_${intervals}_bqsr.table") into scatterBaseRecalGATK4_out_ch0
@@ -1391,6 +1467,7 @@ process 'gatherGATK4scsatteredBQSRtables' {
 
     input:
     tuple val(meta), path(bqsr_table) from scatterBaseRecalGATK4_out_ch0.groupTuple(by: [0])
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_bqsr.table") into gatherBQSRtables_out_ch0
@@ -1453,6 +1530,7 @@ process 'scatterGATK4applyBQSRS' {
           database.KnownIndelsIdx ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1497,6 +1575,8 @@ process 'GatherRecalBamFiles' {
         .flatten()
         .collate(3)
         .groupTuple(by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1561,6 +1641,8 @@ process 'GetPileup' {
             preprocessIntervalList_out_ch3
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple val(meta), path("${procSampleName}_pileup.table") into GetPileup_out_ch0
 
@@ -1604,35 +1686,6 @@ BaseRecalGATK4_out.branch {
 }.set{ BaseRecalGATK4_out }
 
 BaseRecalGATK4_out = BaseRecalGATK4_out.tumor.join(BaseRecalGATK4_out.normal, by: [0])
-
-
-// Install GATK 3 from conda and register jar
-if (have_GATK3) {
-    process install_conda_GATK3 {
-        label 'GATK3'
-
-        tag "install GATK3"
-
-        output:
-        path("gatk3_install.ok") into (
-            install_conda_GATK3_ch0,
-            install_conda_GATK3_ch1
-        )
-
-        script:
-        if (params.enable_conda)
-            """
-            curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
-            tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            touch gatk3_install.ok
-            """
-        else
-            """
-            touch gatk3_install.ok
-            """
-    }
-}
 
 if (have_GATK3) {
     (
@@ -1693,6 +1746,8 @@ process 'Mutect2' {
         .combine(
             SplitIntervals_out_ch2.flatten()
         )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1760,6 +1815,7 @@ process 'gatherMutect2VCFs' {
     ) from Mutect2_out_ch0
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1843,6 +1899,8 @@ process 'FilterMutect2' {
     ) from GetPileup_out
         .join(gatherMutect2VCFs_out_ch0, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -1919,6 +1977,8 @@ process 'HaploTypeCaller' {
             SplitIntervals_out_ch5.flatten()
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -1976,6 +2036,8 @@ process 'CNNScoreVariants' {
         path(Normalbam)
     ) from HaploTypeCaller_out_ch0
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2020,6 +2082,8 @@ process 'MergeHaploTypeCallerGermlineVCF' {
         path(filtered_germline_vcf_tbi)
     ) from CNNScoreVariants_out_ch0
         .groupTuple(by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2073,6 +2137,8 @@ process 'FilterGermlineVariantTranches' {
         val(meta),
         path(scored_germline_vcf)
     ) from MergeHaploTypeCallerGermlineVCF_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2145,7 +2211,6 @@ if (have_GATK3) {
             database.MillsGold,
             database.MillsGoldIdx ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch0
 
         each path(interval) from SplitIntervals_out_ch3.flatten()
 
@@ -2204,6 +2269,8 @@ if (have_GATK3) {
             .flatten()
             .collate(3)
             .groupTuple(by: [0])
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -2318,6 +2385,8 @@ process 'VarscanSomaticScattered' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2393,6 +2462,7 @@ process 'gatherVarscanVCFs' {
         .collate(3)
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2437,6 +2507,8 @@ process 'ProcessVarscan' {
         path(snp),
         path(indel)
     ) from gatherVarscanVCFs_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2519,6 +2591,8 @@ process 'FilterVarscan' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2578,6 +2652,8 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
         path(VarScanSNP_VCF),
         path(VarScanINDEL_VCF)
     ) from FilterVarscan_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2736,6 +2812,7 @@ if(have_Mutect1) {
             .collate(4)
             .groupTuple(by: [0])
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         path("${meta.sampleName}_mutect1_raw.{vcf.gz,vcg.gz.tbi}")
@@ -2984,6 +3061,8 @@ process 'finalizeStrelkaVCF' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -3065,6 +3144,8 @@ process 'mkHCsomaticVCF' {
         .join(Mutect1_out_ch1, by: [0])
         .join(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0])
         .join(StrelkaSomaticFinal_out_ch0, by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3310,6 +3391,8 @@ process 'mkCombinedVCF' {
     ) from FilterGermlineVariantTranches_out_ch0
         .join(mkHCsomaticVCF_out_ch1, by: [0])          // uses confirmed mutect2 variants
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -3524,7 +3607,6 @@ if(have_GATK3) {
             reference.RefIdx,
             reference.RefDict ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch1
 
         output:
         tuple(
@@ -3642,6 +3724,7 @@ process ConvertAlleleCounts {
         path(alleleCountNormal),
     ) from AlleleCounter_out_ch
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3681,6 +3764,8 @@ process 'Ascat' {
     ) from ConvertAlleleCounts_out_ch
 
     path(acLociGC) from Channel.value(reference.acLociGC)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3728,6 +3813,8 @@ if (params.controlFREEC) {
             reference.RefDict ]
         )
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -3761,6 +3848,8 @@ if (params.controlFREEC) {
             val(meta),
             path(mpileup)
         ) from Mpileup4ControFREEC_out_ch0
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -3956,6 +4045,8 @@ process 'SequenzaUtils' {
           reference.SequenzaGC ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -4000,6 +4091,7 @@ process gatherSequenzaInput {
     ) from SequenzaUtils_out_ch0
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4042,6 +4134,8 @@ process Sequenza {
         val(meta),
         path(seqz_file),
     ) from gatherSequenzaInput_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4141,7 +4235,7 @@ purity_estimate.map{
 }.into{purity_estimate_ch1; purity_estimate_ch2}
 
 // CNVkit
-if (parmas.CNVkit) {
+if (params.CNVkit) {
     process make_CNVkit_access_file {
 
         label 'CNVkit'
@@ -4291,7 +4385,6 @@ if (parmas.CNVkit) {
     }
 }
 
-
 clonality_input = Ascat_out_Clonality_ch1.join(Sequenza_out_Clonality_ch1, by: [0])
     .map {
 
@@ -4388,6 +4481,7 @@ process 'Clonality' {
     ) from VEPvcf_out_ch1 // mkPhasedVCF_out_Clonality_ch0
         .join(clonality_input, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4465,6 +4559,7 @@ process 'MutationalBurden' {
         .join(VEPvcf_out_ch3, by: [0])
         .join(ccf_ch0, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4521,6 +4616,7 @@ process 'MutationalBurdenCoding' {
         .join(ccf_ch1, by: [0])
     path (exons) from Channel.value(reference.ExonsBED)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4580,6 +4676,7 @@ process 'mhc_extract' {
         path(tumor_BAM_aligned_sort_mkdp)
     ) from MarkDuplicatesTumor_out_ch0
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4679,6 +4776,8 @@ if (run_OptiType) {
         path yaraIdx_files from Channel.value(reference.YaraIndexDNA)
         val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -4739,6 +4838,8 @@ if (run_OptiType) {
             path(reads)
         ) from fished_reads
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -4775,6 +4876,8 @@ if (run_OptiType) {
 
             path yaraIdx_files from Channel.value(reference.YaraIndexRNA)
             val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+
+            val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
             output:
             tuple(
@@ -4828,6 +4931,8 @@ if (run_OptiType) {
                 val(meta),
                 path(reads)
             ) from fished_reads_RNA
+
+            val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
             output:
             tuple(
@@ -5054,6 +5159,8 @@ process get_vhla {
         .join(hlahd_output_RNA, by: 0)
         .join(batch_custom_HLA_data_ch, by: 0)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -5277,6 +5384,8 @@ process add_geneID {
         path(tpm)
     ) from tpm_file
     path AnnoFile from file(reference.AnnoFile)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -5737,6 +5846,8 @@ if(have_HLAHD) {
         ) from pVACtools_generate_protein_seq
             .join(hlahd_mixMHC2_pred_ch0, by:0)
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -5826,6 +5937,8 @@ if(have_HLAHD) {
             .combine(mixmhc2pred_chck_ch)
         val allelesFile from pepare_mixMHC2_seq_out_ch1
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         path("${meta.sampleName}_mixMHC2pred_all.tsv") optional true
         path("${meta.sampleName}_mixMHC2pred_filtered.tsv") optional true
@@ -5899,6 +6012,8 @@ process addCCF {
     ) from add_CCF_ch
         .combine(Clonality_out_ch0, by: 0)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -5959,6 +6074,8 @@ process make_epitopes_fasta {
         val(mhc_class),
         path(epitopes)
     ) from epitopes_fasta_in_ch
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -6058,6 +6175,8 @@ process add_blast_hits {
     ) from blast_epitopes_out_ch
         .join(epitopes_protein_match_in_ch, by: [0,1,2,3])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     path("*_ref_match.tsv")
 
@@ -6091,6 +6210,8 @@ process csin {
         path(all_epitopes),
     ) from csin_ch0
         .groupTuple()
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -6332,6 +6453,8 @@ process collectSampleInfo {
         .join(sample_info_tmb, by: 0)
         .join(sample_info_tmb_coding, by: 0)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     path("${meta.sampleName}_sample_info.tsv")
 
@@ -6383,7 +6506,7 @@ alignmentMetrics_ch = alignmentMetrics_ch.map{
 
 process multiQC {
 
-    label 'nextNEOpiENV'
+    label 'multiqc'
 
     tag "${meta.sampleName}"
 
