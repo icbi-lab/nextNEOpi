@@ -272,6 +272,8 @@ nextflow run nextNEOpi.nf \
 ```--TCR```                   Run mixcr for TCR prediction
                             Default: true
 
+```--CNVkit```              Run CNVkit for detecting CNAs. Default: true
+
 ```--HLAHD_DIR``` Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.
 
 ```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
@@ -353,11 +355,11 @@ If you prefer local installation of the analysis tools please install the follow
 * BWA    (Version >= 0.7.17)
 * SAMTOOLS   (Version >= 1.9)
 * GATK3   (Version 3.8-0)
-* GATK4   (Version >= 4.2.5.0)
-* VARSCAN   (Version 2.4.3)
+* GATK4   (Version >= 4.4.0.0)
+* VARSCAN   (Version 2.4.6)
 * MUTECT1   (Version 1.1.7) ---- optional
 * BAMREADCOUNT  (Version 0.8.0)
-* VEP    (Version v105)
+* VEP    (Version v110)
 * BGZIP
 * TABIX
 * BCFTOOLS
@@ -371,7 +373,7 @@ If you prefer local installation of the analysis tools please install the follow
 * YARA
 * HLA-HD
 * ALLELECOUNT
-* RSCRIPT (R > 3.6.1)
+* RSCRIPT (R > 3.6.2)
 * SEQUENZA (3.0)
 * CNVkit
 
