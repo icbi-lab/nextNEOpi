@@ -66,12 +66,15 @@ curl -s https://get.nextflow.io | bash
 
 The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (not recommended, please see `Manual installation` at the end of this document)
 
-The software that needs to be present on the system is **Java** (minimum version 8), **Nextflow** (see above), **Singularity**, **Conda** (optional).
+The software that needs to be present on the system is **Java** (minimum version 8, if running conda java version 17 or higher is needed), **Nextflow** (see above), **Singularity**, **Conda** (optional).
+
+If you intend to run the pipeline with the `conda` profile instead of singularity, we recommend to install `mamba` (<https://github.com/mamba-org/mamba>)
+to speed up the creation of conda environments. If you can not install `mamba` please set `conda.useMamba = false` for the `conda` profile in `conf/profiles.config`
 
 **Optional but recommended:**
 Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
 
-### 1.2 References
+### 1.3 References
 
 The pipeline requires different reference files, indexes and databases:
 
@@ -79,13 +82,13 @@ please see ```conf/resources.config```
 
 For each nextNEOpi version we prepared a bundle with all needed references, indexes and databases which can be obtained from:
 
-`https://apps-01.i-med.ac.at/resources/nextneopi/`
+<https://apps-01.i-med.ac.at/resources/nextneopi/>
 
 the bundle is named to match the release version `nextNEOpi_<version>_resources.tar.gz`
 
 e.g.:
 
-<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz>
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz>
 
 download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```conf/params.config``` file.
 
@@ -117,6 +120,15 @@ Refs:
 * <https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files>
 * <https://www.gencodegenes.org/human/>
 
+### 1.4 Testdata
+
+If you want to test the pipeline using a working minimal test dataset you may download one from
+
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_testdata.tar.gz>
+
+Please note that due to the limited read coverage `CNVkit` will not run successfully using this test dataset. Please run the
+pipeline using the parameter `--CNVkit false` when testing with this dataset.
+
 ## 2. Usage
 
 Before running the pipeline, the config files in the ```conf/``` directory may need to be edited. In the
@@ -127,8 +139,11 @@ the number of CPUs assigned for each process and adjust according to your system
 Most pipeline parameters can be edited in the ```params.config``` file or changed on run time with command line options by using ```--NameOfTheParameter``` given in the ```params.config```.
 References, databases should be edited in the ```resources.config``` file.
 
+**Note**: nextNEOpi is currently written in nextflow DSL 1, which is only supported up to nextflow version 22.10.8, this means you need to pin the nextflow
+version by setting the environment variable `NXF_VER=22.10.8`, in case you have installed a newer nextflow version.
+
 ```
-nextflow run nextNEOpi.nf --batchFile <batchFile_FASTQ.csv | batchFile_BAM.csv> -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+NXF_VER=22.10.8 nextflow run nextNEOpi.nf --batchFile <batchFile_FASTQ.csv | batchFile_BAM.csv> -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 ```
 
 **Profiles:** conda or singularity
@@ -269,6 +284,8 @@ nextflow run nextNEOpi.nf \
 ```--TCR```                   Run mixcr for TCR prediction
                             Default: true
 
+```--CNVkit```              Run CNVkit for detecting CNAs. Default: true
+
 ```--HLAHD_DIR``` Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.
 
 ```--HLA_force_RNA``` Use only RNAseq for HLA typing. Default: false
@@ -350,11 +367,11 @@ If you prefer local installation of the analysis tools please install the follow
 * BWA    (Version >= 0.7.17)
 * SAMTOOLS   (Version >= 1.9)
 * GATK3   (Version 3.8-0)
-* GATK4   (Version >= 4.2.5.0)
-* VARSCAN   (Version 2.4.3)
+* GATK4   (Version >= 4.4.0.0)
+* VARSCAN   (Version 2.4.6)
 * MUTECT1   (Version 1.1.7) ---- optional
 * BAMREADCOUNT  (Version 0.8.0)
-* VEP    (Version v105)
+* VEP    (Version v110)
 * BGZIP
 * TABIX
 * BCFTOOLS
@@ -368,7 +385,7 @@ If you prefer local installation of the analysis tools please install the follow
 * YARA
 * HLA-HD
 * ALLELECOUNT
-* RSCRIPT (R > 3.6.1)
+* RSCRIPT (R > 3.6.2)
 * SEQUENZA (3.0)
 * CNVkit
 

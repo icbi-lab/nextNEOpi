@@ -6,7 +6,8 @@ From: mambaorg/micromamba
 
 %post
  apt-get update && apt-get install -y \
-    procps
+    procps \
+    patch
 
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
     export PATH=/opt/conda/bin:$PATH

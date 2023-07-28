@@ -3,4 +3,4 @@ channels:
   - bioconda
   - defaults
 always_yes: true
-
+channel_priority: flexible

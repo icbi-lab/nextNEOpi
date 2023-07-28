@@ -83,11 +83,7 @@ From: continuumio/miniconda3:4.9.2
     pip install protobuf==3.20.1
     pip install tensorflow>=2.2.2
 
-    # need to pin pandas version see: https://github.com/griffithlab/pVACtools/issues/779
-    # will not be required in pVACtools versions > 3.0.0
-    # pip install pandas==0.25.2
-
-    pip install pvactools==3.0.2
+    pip install pvactools==4.0.1
 
     cd /opt
     mkdir tmp_src
