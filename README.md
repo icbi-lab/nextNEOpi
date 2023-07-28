@@ -68,6 +68,9 @@ The pipeline will install almost all required tools via Singularity images or co
 
 The software that needs to be present on the system is **Java** (minimum version 8, if running conda java version 17 or higher is needed), **Nextflow** (see above), **Singularity**, **Conda** (optional).
 
+If you intend to run the pipeline with the `conda` profile instead of singularity, we recommend to install `mamba` (<https://github.com/mamba-org/mamba>)
+to speed up the creation of conda environments. If you can not install `mamba` please set `conda.useMamba = false` for the `conda` profile in `conf/profiles.config`
+
 **Optional but recommended:**
 Due to license restrictions you may also need to download and install **HLA-HD** by your own, and set the installation path in ```conf/params.config```. _If HLA-HD is not available Class II neoepitopes will NOT be predicted_
 
