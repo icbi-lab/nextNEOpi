@@ -12,26 +12,26 @@ import os
 import sys
 import csv
 
+def filter_tsv(sample, input_file, output_file):
+    # Open the input TSV file and create a CSV reader
+    with open(input_file, 'r', newline='') as infile:
+        reader = csv.DictReader(infile, delimiter='\t')
 
-def parse_mhcI(inFile, epitopes=[]):
-    with open(inFile) as in_file:
-        csv_reader = csv.reader(in_file, delimiter="\t")
-        in_file.readline()
-        for line in csv_reader:
-            if line[19] == "NA" or line[18] == "NA":
-                pass
-            else:
-                # 	print("%s\t%s\t%s" % (line[18], line[19], line[17]))
-                epitopes.append("%s\t%s\t%s" % (line[18], line[19], line[17]))
-    return epitopes
+        # Open the output TSV file and create a CSV writer
+        with open(output_file, 'w', newline='') as outfile:
+            fieldnames = ['Sample_ID', 'mut_peptide', 'Reference', 'peptide_variant_position']
+            writer = csv.DictWriter(outfile, fieldnames=fieldnames, delimiter='\t')
 
+            # Write the header
+            writer.writeheader()
 
-def write_output(outFile, sample_id, epitopes=[]):
-    with open(outFile, "w") as out_file:
-        out_file.write("Sample_ID\tmut_peptide\tReference\tpeptide_variant_position\n")
-        for epitope in epitopes:
-            out_file.write("%s\t%s\n" % (sample_id, epitope))
-    return outFile
+            # Filter rows and write selected columns to the output TSV file
+            for row in reader:
+                if row['WT Epitope Seq'] and row['MT Epitope Seq']:
+                    writer.writerow({'Sample_ID': sample,
+                                     'mut_peptide': row['MT Epitope Seq'],
+                                     'Reference': row['WT Epitope Seq'],
+                                     'peptide_variant_position': row['Mutation Position']})
 
 
 if __name__ == "__main__":
@@ -45,5 +45,4 @@ if __name__ == "__main__":
     sample = args.sample_id
     epitope_array = []
 
-    parse_mhcI(infile, epitope_array)
-    write_output(outfile, sample, epitope_array)
+    filter_tsv(sample, infile, outfile)

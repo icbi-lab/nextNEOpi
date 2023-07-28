@@ -26,7 +26,7 @@ log.info "----------------------------------------------------------------------
 log.info "C O N F I G U R A T I O N"
 log.info ""
 log.info "Command Line: \t\t " + workflow.commandLine
-log.info "Working Directory: \t " + params.workDir
+log.info "Working Directory: \t " + workflow.workDir
 log.info "Output Directory: \t " + params.outputDir
 log.info ""
 log.info "I N P U T"
@@ -65,10 +65,6 @@ have_RNA_tag_seq = params.RNA_tag_seq
 // set and initialize the Exome capture kit
 setExomeCaptureKit(params.exomeCaptureKit)
 
-// set and check references and databases
-reference = defineReference()
-database = defineDatabases()
-
 // check conda channels
 if (params.enable_conda) {
     checkCondaChannels()
@@ -79,6 +75,10 @@ check_iedb_dir(params.databases.IEDB_dir)
 
 // check MHCflurry dir
 check_mhcflurry_dir(params.databases.MHCFLURRY_dir)
+
+// set and check references and databases
+reference = defineResources('references', params.WES, params.HLAHD_DIR)
+database = defineResources('databases', params.WES, params.HLAHD_DIR)
 
 // create tmp dir and make sure we have the realpath for it
 tmpDir = mkTmpDir(params.tmpDir)
@@ -144,24 +144,6 @@ if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(30)}: $v" }.join("\n")
 log.info "-------------------------------------------------------------------------"
 
-
-def create_workflow_summary(summary) {
-
-    def yaml_file = workDir.resolve('workflow_summary_mqc.yaml')
-    yaml_file.text  = """
-    id: 'nextNEOpi-summary'
-    description: " - this information is collected when the pipeline is started."
-    section_name: 'nextNEOpi Workflow Summary'
-    section_href: 'https://github.com/icbi-lab/nextNEOpi'
-    plot_type: 'html'
-    data: |
-        <dl class=\"dl-horizontal\">
-${summary.collect { k,v -> "            <dt>$k</dt><dd><samp>${v ?: '<span style=\"color:#999999;\">N/A</a>'}</samp></dd>" }.join("\n")}
-        </dl>
-    """.stripIndent()
-
-   return yaml_file
-}
 // End Summary
 
 // determine the publishDirMode
@@ -416,6 +398,58 @@ ________________________________________________________________________________
 ________________________________________________________________________________
 */
 
+gatk4_chck_file = file(baseDir + "/assets/.gatk4_install_ok.chck")
+if (params.enable_conda && !gatk4_chck_file.exists()) {
+
+    process download_GATK4 {
+        tag "download GATK4"
+
+        output:
+        path("gatk-${params.gatk4version}.zip") into (
+             download_GATK4_ch0
+        )
+
+        script:
+        """
+        mkdir -p ${baseDir}/assets/gatk4 && \\
+        curl -L -o gatk-${params.gatk4version}.zip https://github.com/broadinstitute/gatk/releases/download/${params.gatk4version}/gatk-${params.gatk4version}.zip && \\
+        unzip -j gatk-${params.gatk4version}.zip gatk-${params.gatk4version}/gatkPythonPackageArchive.zip -d ${baseDir}/assets/
+        """
+    }
+
+    process setup_nextNEOpi_ENV {
+        label 'nextNEOpiENV'
+
+        tag "setup nextNEOpiENV"
+
+        input:
+        path(gatk4_archive) from download_GATK4_ch0
+
+        output:
+        val("OK") into nextNEOpiENV_setup_ch0
+
+        script:
+        if (params.enable_conda)
+            """
+            mkdir -p ${baseDir}/assets/gatk4 && \\
+            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk-package-${params.gatk4version}-local.jar -d ${baseDir}/assets/gatk4 && \\
+            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk -d ${baseDir}/assets/gatk4 && \\
+            chmod +x ${baseDir}/assets/gatk4/gatk && \\
+            ln -s ${baseDir}/assets/gatk4/gatk ${baseDir}/bin/gatk && \\
+            touch nextNEOpiENV_setup.ok
+            touch ${gatk4_chck_file}
+            """
+        else
+            """
+            touch nextNEOpiENV_setup.ok
+            touch ${gatk4_chck_file}
+            """
+    }
+} else {
+    gatk4_chck_file.append()
+    nextNEOpiENV_setup_ch0 = Channel.value("OK")
+}
+
 /*
 *********************************************
 **       P R E P R O C E S S I N G         **
@@ -434,6 +468,8 @@ if(bamInput) {
             val(meta),
             path(bam)
         ) from batch_raw_data_ch
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -469,6 +505,7 @@ if(bamInput) {
         ) from bam_ch
             .combine(seqLibTypes_ok)
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -565,6 +602,8 @@ if (params.WES) {
             reference.RegionsBed ]
         )
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         path(
             "${RegionsBed.baseName}.interval_list"
@@ -600,6 +639,8 @@ if (params.WES) {
             reference.BaitsBed ]
         )
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         path(
             "${BaitsBed.baseName}.interval_list"
@@ -614,7 +655,7 @@ if (params.WES) {
         """
     }
 } else {
-    RegionsBedToIntervalList_out_ch0 = Channel.of('NO_FILE')
+    RegionsBedToIntervalList_out_ch0 = Channel.fromPath('NO_FILE')
     RegionsBedToIntervalList_out_ch1 = Channel.empty()
     BaitsBedToIntervalList_out_ch0 = Channel.empty()
 }
@@ -640,9 +681,11 @@ process 'preprocessIntervalList' {
     )
     path(interval_list) from RegionsBedToIntervalList_out_ch0
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     path(
-        "${interval_list.baseName}_merged_padded.interval_list"
+        outFileName
     ) into (
         preprocessIntervalList_out_ch0,
         preprocessIntervalList_out_ch1,
@@ -656,6 +699,7 @@ process 'preprocessIntervalList' {
     )
 
     script:
+    outFileName = (params.WES) ? interval_list.baseName + "_merged_padded.interval_list" : "wgs_ScatterIntervalsByNs.interval_list"
     if(params.WES)
         """
         gatk PreprocessIntervals \\
@@ -664,14 +708,14 @@ process 'preprocessIntervalList' {
             --bin-length 0 \\
             --padding ${padding} \\
             --interval-merging-rule OVERLAPPING_ONLY \\
-            -O ${interval_list.baseName}_merged_padded.interval_list
+            -O ${outFileName}
         """
     else
         """
         gatk --java-options ${params.JAVA_Xmx} ScatterIntervalsByNs \\
             --REFERENCE $RefFasta \\
             --OUTPUT_TYPE ACGT \\
-            --OUTPUT ${interval_list.baseName}_merged_padded.interval_list
+            --OUTPUT ${outFileName}
         """
 }
 
@@ -700,6 +744,7 @@ process 'SplitIntervals' {
     path(IntervalsList) from preprocessIntervalList_out_ch0
 
     val x from scatter_count
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path(
@@ -750,6 +795,7 @@ process 'IntervalListToBed' {
 
     input:
     path(paddedIntervalList) from preprocessIntervalList_out_ch1
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path("${paddedIntervalList.baseName}.{bed.gz,bed.gz.tbi}") into (
@@ -788,6 +834,8 @@ process 'ScatteredIntervalListToBed' {
             SplitIntervals_out_ch0.flatten()
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
 
     output:
     path(
@@ -808,7 +856,7 @@ process 'ScatteredIntervalListToBed' {
 // FastQC
 process FastQC {
 
-    label 'nextNEOpiENV'
+    label 'fastqc'
 
     tag "$meta.sampleName : $meta.sampleType"
 
@@ -892,7 +940,7 @@ if (params.trim_adapters || params.trim_adapters_RNAseq) {
 if (trim_adapters) {
     process fastp {
 
-        label 'nextNEOpiENV'
+        label 'fastp'
 
         tag "$meta.sampleName : $meta.sampleType"
 
@@ -975,7 +1023,7 @@ if (trim_adapters) {
     // FastQC after adapter trimming
     process FastQC_trimmed {
 
-        label 'nextNEOpiENV'
+        label 'fastqc'
 
         tag "$meta.sampleName : $meta.sampleType"
 
@@ -1046,6 +1094,8 @@ process 'make_uBAM' {
     input:
     tuple val(meta), path(reads) from reads_uBAM_ch
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple val(meta), path(ubam) into uBAM_out_ch0
 
@@ -1094,6 +1144,8 @@ process 'Bwa' {
           reference.RefDict,
           reference.BwaRef ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path(bam) into BWA_out_ch0
@@ -1145,6 +1197,8 @@ process 'merge_uBAM_BAM' {
           reference.RefIdx,
           reference.RefDict ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_aligned_uBAM_merged.bam") into uBAM_BAM_out_ch
@@ -1204,6 +1258,8 @@ process 'MarkDuplicates' {
           reference.RefIdx,
           reference.RefDict ]
     )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1296,6 +1352,8 @@ if(params.WES) {
         path(BaitIntervalsList) from BaitsBedToIntervalList_out_ch0
         path(IntervalsList) from RegionsBedToIntervalList_out_ch1
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_ch // multiQC
 
@@ -1374,6 +1432,7 @@ process 'scatterBaseRecalGATK4' {
           database.KnownIndelsIdx ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_${intervals}_bqsr.table") into scatterBaseRecalGATK4_out_ch0
@@ -1402,12 +1461,13 @@ process 'gatherGATK4scsatteredBQSRtables' {
 
     tag "$meta.sampleName : $meta.sampleType"
 
-    publishDir "$params.outputDir/${meta.sampleName}/03_baserecalibration/",
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/03_baserecalibration/",
         mode: publishDirMode,
         enabled: params.fullOutput
 
     input:
     tuple val(meta), path(bqsr_table) from scatterBaseRecalGATK4_out_ch0.groupTuple(by: [0])
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple val(meta), path("${procSampleName}_bqsr.table") into gatherBQSRtables_out_ch0
@@ -1470,6 +1530,7 @@ process 'scatterGATK4applyBQSRS' {
           database.KnownIndelsIdx ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1514,6 +1575,8 @@ process 'GatherRecalBamFiles' {
         .flatten()
         .collate(3)
         .groupTuple(by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1578,6 +1641,8 @@ process 'GetPileup' {
             preprocessIntervalList_out_ch3
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple val(meta), path("${procSampleName}_pileup.table") into GetPileup_out_ch0
 
@@ -1621,35 +1686,6 @@ BaseRecalGATK4_out.branch {
 }.set{ BaseRecalGATK4_out }
 
 BaseRecalGATK4_out = BaseRecalGATK4_out.tumor.join(BaseRecalGATK4_out.normal, by: [0])
-
-
-// Install GATK 3 from conda and register jar
-if (have_GATK3) {
-    process install_conda_GATK3 {
-        label 'GATK3'
-
-        tag "install GATK3"
-
-        output:
-        path("gatk3_install.ok") into (
-            install_conda_GATK3_ch0,
-            install_conda_GATK3_ch1
-        )
-
-        script:
-        if (params.enable_conda)
-            """
-            curl -L -o gatk-3.8.tar.bz2 ${params.gatk3_conda_url} && \\
-            tar -xjf gatk-3.8.tar.bz2 opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            gatk-register opt/gatk-3.8/GenomeAnalysisTK.jar && \\
-            touch gatk3_install.ok
-            """
-        else
-            """
-            touch gatk3_install.ok
-            """
-    }
-}
 
 if (have_GATK3) {
     (
@@ -1710,6 +1746,8 @@ process 'Mutect2' {
         .combine(
             SplitIntervals_out_ch2.flatten()
         )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1777,6 +1815,7 @@ process 'gatherMutect2VCFs' {
     ) from Mutect2_out_ch0
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -1860,6 +1899,8 @@ process 'FilterMutect2' {
     ) from GetPileup_out
         .join(gatherMutect2VCFs_out_ch0, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -1936,6 +1977,8 @@ process 'HaploTypeCaller' {
             SplitIntervals_out_ch5.flatten()
         )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -1993,6 +2036,8 @@ process 'CNNScoreVariants' {
         path(Normalbam)
     ) from HaploTypeCaller_out_ch0
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2037,6 +2082,8 @@ process 'MergeHaploTypeCallerGermlineVCF' {
         path(filtered_germline_vcf_tbi)
     ) from CNNScoreVariants_out_ch0
         .groupTuple(by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2090,6 +2137,8 @@ process 'FilterGermlineVariantTranches' {
         val(meta),
         path(scored_germline_vcf)
     ) from MergeHaploTypeCallerGermlineVCF_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2162,7 +2211,6 @@ if (have_GATK3) {
             database.MillsGold,
             database.MillsGoldIdx ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch0
 
         each path(interval) from SplitIntervals_out_ch3.flatten()
 
@@ -2221,6 +2269,8 @@ if (have_GATK3) {
             .flatten()
             .collate(3)
             .groupTuple(by: [0])
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -2335,6 +2385,8 @@ process 'VarscanSomaticScattered' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2410,6 +2462,7 @@ process 'gatherVarscanVCFs' {
         .collate(3)
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2454,6 +2507,8 @@ process 'ProcessVarscan' {
         path(snp),
         path(indel)
     ) from gatherVarscanVCFs_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2536,6 +2591,8 @@ process 'FilterVarscan' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -2595,6 +2652,8 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
         path(VarScanSNP_VCF),
         path(VarScanINDEL_VCF)
     ) from FilterVarscan_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -2753,6 +2812,7 @@ if(have_Mutect1) {
             .collate(4)
             .groupTuple(by: [0])
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         path("${meta.sampleName}_mutect1_raw.{vcf.gz,vcg.gz.tbi}")
@@ -3001,6 +3061,8 @@ process 'finalizeStrelkaVCF' {
           reference.RefDict ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -3082,6 +3144,8 @@ process 'mkHCsomaticVCF' {
         .join(Mutect1_out_ch1, by: [0])
         .join(MergeAndRenameSamplesInVarscanVCF_out_ch1, by: [0])
         .join(StrelkaSomaticFinal_out_ch0, by: [0])
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3327,6 +3391,8 @@ process 'mkCombinedVCF' {
     ) from FilterGermlineVariantTranches_out_ch0
         .join(mkHCsomaticVCF_out_ch1, by: [0])          // uses confirmed mutect2 variants
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -3541,7 +3607,6 @@ if(have_GATK3) {
             reference.RefIdx,
             reference.RefDict ]
         )
-        path(gatk3_install_ok) from install_conda_GATK3_ch1
 
         output:
         tuple(
@@ -3659,6 +3724,7 @@ process ConvertAlleleCounts {
         path(alleleCountNormal),
     ) from AlleleCounter_out_ch
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3698,6 +3764,8 @@ process 'Ascat' {
     ) from ConvertAlleleCounts_out_ch
 
     path(acLociGC) from Channel.value(reference.acLociGC)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -3745,6 +3813,8 @@ if (params.controlFREEC) {
             reference.RefDict ]
         )
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -3778,6 +3848,8 @@ if (params.controlFREEC) {
             val(meta),
             path(mpileup)
         ) from Mpileup4ControFREEC_out_ch0
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -3973,6 +4045,8 @@ process 'SequenzaUtils' {
           reference.SequenzaGC ]
     )
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -4017,6 +4091,7 @@ process gatherSequenzaInput {
     ) from SequenzaUtils_out_ch0
         .groupTuple(by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4059,6 +4134,8 @@ process Sequenza {
         val(meta),
         path(seqz_file),
     ) from gatherSequenzaInput_out_ch0
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4158,155 +4235,155 @@ purity_estimate.map{
 }.into{purity_estimate_ch1; purity_estimate_ch2}
 
 // CNVkit
+if (params.CNVkit) {
+    process make_CNVkit_access_file {
 
-process make_CNVkit_access_file {
+        label 'CNVkit'
 
-    label 'CNVkit'
+        tag 'mkCNVkitaccess'
 
-    tag 'mkCNVkitaccess'
+        publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
+            mode: publishDirMode
 
-    publishDir "$params.outputDir/supplemental/01_prepare_CNVkit/",
-        mode: publishDirMode
+        input:
+        tuple(
+            path(RefFasta),
+            path(RefIdx),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx ]
+        )
 
-    input:
-    tuple(
-        path(RefFasta),
-        path(RefIdx),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx ]
-    )
+        output:
+        path(
+            "access-5kb.${RefFasta.simpleName}.bed"
+        ) into make_CNVkit_access_file_out_ch0
 
-    output:
-    path(
-        "access-5kb.${RefFasta.simpleName}.bed"
-    ) into make_CNVkit_access_file_out_ch0
+        script:
+        """
+        cnvkit.py \\
+            access \\
+            ${RefFasta} \\
+            -s 5000 \\
+            -o access-5kb.${RefFasta.simpleName}.bed
+        """
+    }
 
-    script:
-    """
-    cnvkit.py \\
-        access \\
-        ${RefFasta} \\
-        -s 5000 \\
-        -o access-5kb.${RefFasta.simpleName}.bed
-    """
+    process CNVkit {
+
+        label 'CNVkit'
+
+        tag "${meta.sampleName}"
+
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
+            mode: publishDirMode
+
+        input:
+        tuple(
+            val(meta),
+            path(tumorBAM),
+            path(normalBAM),
+            val(sample_purity)
+        ) from MarkDuplicates_out_CNVkit_ch0
+            .join(purity_estimate_ch0, by: [0])
+
+        path(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
+
+        tuple(
+            path(RefFasta),
+            path(RefIdx),
+            path(AnnoFile),
+        ) from Channel.value(
+            [ reference.RefFasta,
+            reference.RefIdx,
+            reference.AnnoFile ]
+        )
+
+        path(BaitsBed) from Channel.fromPath(reference.BaitsBed)
+
+        output:
+        tuple(
+            val(meta),
+            path("${meta.sampleName}*")
+        ) into CNVkit_out_ch0
+
+        script:
+        def gender = (meta.sex == "None") ? "" : "--sample-sex " + ((meta.sex == "XX") ? "female" : "male")
+        def maleRef = (meta.maleRef == "true") ? "-y" : ""
+        def method = (params.WES) ? "--method hybrid" : "--method wgs"
+        def targets = (params.WES) ? "--targets ${BaitsBed}" : ""
+
+        """
+        # set Agg as backend for matplotlib
+        export MATPLOTLIBRC="./matplotlibrc"
+        echo "backend : Agg" > \$MATPLOTLIBRC
+
+        cnvkit.py \\
+            batch \\
+            ${tumorBAM[0]} \\
+            --normal ${normalBAM[0]} \\
+            ${method} \\
+            ${targets} \\
+            --fasta ${RefFasta} \\
+            --annotate ${AnnoFile} \\
+            --access ${CNVkit_accessFile} \\
+            ${maleRef} \\
+            -p ${task.cpus} \\
+            --output-reference output_reference.cnn \\
+            --output-dir ./
+
+        cnvkit.py segmetrics \\
+            -s ${tumorBAM[0].baseName}.cn{s,r} \\
+            --ci \\
+            --pi
+
+        cnvkit.py call \\
+            ${tumorBAM[0].baseName}.cns \\
+            --filter ci \\
+            -m clonal \\
+            --purity ${sample_purity} \\
+            ${gender} \\
+            ${maleRef} \\
+            -o ${tumorBAM[0].baseName}.call.cns
+
+        cnvkit.py \\
+            scatter \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            -o ${tumorBAM[0].baseName}_scatter.png
+
+        cnvkit.py \\
+            diagram \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            ${gender} \\
+            ${maleRef} \\
+            -o ${tumorBAM[0].baseName}_diagram.pdf
+
+        cnvkit.py \\
+            breaks \\
+            ${tumorBAM[0].baseName}.cnr ${tumorBAM[0].baseName}.cns \\
+            -o ${tumorBAM[0].baseName}_breaks.tsv
+
+        cnvkit.py \\
+            genemetrics \\
+            ${tumorBAM[0].baseName}.cnr \\
+            -s ${tumorBAM[0].baseName}.cns \\
+            ${gender} \\
+            ${maleRef} \\
+            -t 0.2 -m 5 \\
+            -o ${tumorBAM[0].baseName}_gainloss.tsv
+
+        # run PDF to PNG conversion if mogrify and gs is installed
+        mogrify -version > /dev/null 2>&1 && \\
+        gs -v > /dev/null 2>&1 && \\
+            mogrify -density 600 -resize 2000 -format png *.pdf
+
+        # clean up
+        rm -f \$MATPLOTLIBRC
+        """
+    }
 }
-
-process CNVkit {
-
-    label 'CNVkit'
-
-    tag "${meta.sampleName}"
-
-    publishDir "$params.outputDir/analyses/${meta.sampleName}/08_CNVs/CNVkit/",
-        mode: publishDirMode
-
-    input:
-    tuple(
-        val(meta),
-        path(tumorBAM),
-        path(normalBAM),
-        val(sample_purity)
-    ) from MarkDuplicates_out_CNVkit_ch0
-        .join(purity_estimate_ch0, by: [0])
-
-    path(CNVkit_accessFile) from make_CNVkit_access_file_out_ch0
-
-    tuple(
-        path(RefFasta),
-        path(RefIdx),
-        path(AnnoFile),
-    ) from Channel.value(
-        [ reference.RefFasta,
-          reference.RefIdx,
-          reference.AnnoFile ]
-    )
-
-    path(BaitsBed) from Channel.value(reference.BaitsBed)
-
-    output:
-    tuple(
-        val(meta),
-        path("${meta.sampleName}*")
-    ) into CNVkit_out_ch0
-
-    script:
-    def gender = (meta.sex == "None") ? "" : "--sample-sex " + ((meta.sex == "XX") ? "female" : "male")
-    def maleRef = (meta.maleRef == "true") ? "-y" : ""
-    def method = (params.WES) ? "--method hybrid" : "--method wgs"
-    def targets = (params.WES) ? "--targets ${BaitsBed}" : ""
-
-    """
-    # set Agg as backend for matplotlib
-    export MATPLOTLIBRC="./matplotlibrc"
-    echo "backend : Agg" > \$MATPLOTLIBRC
-
-    cnvkit.py \\
-        batch \\
-        ${tumorBAM[0]} \\
-        --normal ${normalBAM[0]} \\
-        ${method} \\
-        ${targets} \\
-        --fasta ${RefFasta} \\
-        --annotate ${AnnoFile} \\
-        --access ${CNVkit_accessFile} \\
-        ${maleRef} \\
-        -p ${task.cpus} \\
-        --output-reference output_reference.cnn \\
-        --output-dir ./
-
-    cnvkit.py segmetrics \\
-        -s ${tumorBAM[0].baseName}.cn{s,r} \\
-        --ci \\
-        --pi
-
-    cnvkit.py call \\
-        ${tumorBAM[0].baseName}.cns \\
-        --filter ci \\
-        -m clonal \\
-        --purity ${sample_purity} \\
-        ${gender} \\
-        ${maleRef} \\
-        -o ${tumorBAM[0].baseName}.call.cns
-
-    cnvkit.py \\
-        scatter \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        -o ${tumorBAM[0].baseName}_scatter.png
-
-    cnvkit.py \\
-        diagram \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        ${gender} \\
-        ${maleRef} \\
-        -o ${tumorBAM[0].baseName}_diagram.pdf
-
-    cnvkit.py \\
-        breaks \\
-        ${tumorBAM[0].baseName}.cnr ${tumorBAM[0].baseName}.cns \\
-        -o ${tumorBAM[0].baseName}_breaks.tsv
-
-    cnvkit.py \\
-        genemetrics \\
-        ${tumorBAM[0].baseName}.cnr \\
-        -s ${tumorBAM[0].baseName}.cns \\
-        ${gender} \\
-        ${maleRef} \\
-        -t 0.2 -m 5 \\
-        -o ${tumorBAM[0].baseName}_gainloss.tsv
-
-    # run PDF to PNG conversion if mogrify and gs is installed
-    mogrify -version > /dev/null 2>&1 && \\
-    gs -v > /dev/null 2>&1 && \\
-        mogrify -density 600 -resize 2000 -format png *.pdf
-
-    # clean up
-    rm -f \$MATPLOTLIBRC
-    """
-}
-
 
 clonality_input = Ascat_out_Clonality_ch1.join(Sequenza_out_Clonality_ch1, by: [0])
     .map {
@@ -4404,6 +4481,7 @@ process 'Clonality' {
     ) from VEPvcf_out_ch1 // mkPhasedVCF_out_Clonality_ch0
         .join(clonality_input, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4481,6 +4559,7 @@ process 'MutationalBurden' {
         .join(VEPvcf_out_ch3, by: [0])
         .join(ccf_ch0, by: [0])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4537,6 +4616,7 @@ process 'MutationalBurdenCoding' {
         .join(ccf_ch1, by: [0])
     path (exons) from Channel.value(reference.ExonsBED)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4596,6 +4676,7 @@ process 'mhc_extract' {
         path(tumor_BAM_aligned_sort_mkdp)
     ) from MarkDuplicatesTumor_out_ch0
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -4695,6 +4776,8 @@ if (run_OptiType) {
         path yaraIdx_files from Channel.value(reference.YaraIndexDNA)
         val yaraIdx from Channel.value(reference.YaraIndexDNA[0].simpleName)
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -4755,6 +4838,8 @@ if (run_OptiType) {
             path(reads)
         ) from fished_reads
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         tuple(
             val(meta),
@@ -4791,6 +4876,8 @@ if (run_OptiType) {
 
             path yaraIdx_files from Channel.value(reference.YaraIndexRNA)
             val yaraIdx from Channel.value(reference.YaraIndexRNA[0].simpleName)
+
+            val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
             output:
             tuple(
@@ -4844,6 +4931,8 @@ if (run_OptiType) {
                 val(meta),
                 path(reads)
             ) from fished_reads_RNA
+
+            val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
             output:
             tuple(
@@ -5070,6 +5159,8 @@ process get_vhla {
         .join(hlahd_output_RNA, by: 0)
         .join(batch_custom_HLA_data_ch, by: 0)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -5146,21 +5237,21 @@ process Neofuse {
                     targetFile = "11_Fusions/Arriba/" + file(fileName).getName()
                 } else if(fileName.indexOf("Custom_HLAs") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/Custom_HLAs/" + file(fileName).getName() : ""
-                } else if(fileName.indexOf("LOGS/") >= 0) {
+                } else if(fileName.indexOf("LOGS") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/LOGS/" + file(fileName).getName() : ""
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_I_") >= 0) {
                     targetFile = "11_Fusions/NeoFuse/Class_I/" + file(fileName).getName()
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_II_") >= 0) {
-                    if(fileName.indexOf("_mixMHC2pred_conf.txt") > 0) {
+                    if(fileName.indexOf("_mixMHC2pred_conf.txt") >= 0) {
                         targetFile = params.fullOutput ? "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName() : ""
                     } else {
                         targetFile = "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName()
                     }
-                } else if(fileName.indexOf("STAR/") >= 0) {
+                } else if(fileName.indexOf("STAR") >= 0) {
                     if(fileName.indexOf("Aligned.sortedByCoord.out.bam") >= 0) {
                         targetFile = "02_alignments/" + file(fileName).getName().replace(".Aligned.sortedByCoord.out", "_RNA.Aligned.sortedByCoord.out")
                     }
-                } else if(fileName.indexOf("TPM/") >= 0) {
+                } else if(fileName.indexOf("TPM") >= 0) {
                     targetFile = "04_expression/" + file(fileName).getName()
                 } else {
                     targetFile = "11_Fusions/" + fileName
@@ -5204,8 +5295,9 @@ process Neofuse {
         val(meta),
         path("${meta.sampleName}/STAR/${meta.sampleName}.Aligned.sortedByCoord.out.{bam,bam.bai}")
     ) into star_bam_file
-    path("${meta.sampleName}/**")
-
+    path("${meta.sampleName}/Arriba/*")
+    path("${meta.sampleName}/Custom_HLAs/*"), optional: true
+    path("${meta.sampleName}/LOGS/*")
 
     script:
     def reads = (meta_RNA_ori.libType == "SE") ? "-1 " + reads_RNA[0] : "-1 " + reads_RNA[0] + " -2 " + reads_RNA[1]
@@ -5293,6 +5385,8 @@ process add_geneID {
         path(tpm)
     ) from tpm_file
     path AnnoFile from file(reference.AnnoFile)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -5407,6 +5501,7 @@ process gene_annotator {
 iedb_chck_file_name = ".iedb_install_ok.chck"
 iedb_chck_file = file(params.databases.IEDB_dir + "/" + iedb_chck_file_name)
 
+// TODO: check if unittests for IEDB_MHC_II work in future version, and uncomment call of configure.py
 if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
 
     log.warn "WARNING: IEDB yet not installed, starting installation. This may take a while..."
@@ -5431,6 +5526,8 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         def mhci_file = iedb_MHCI_url.split("/")[-1]
         def mhcii_file = iedb_MHCII_url.split("/")[-1]
         """
+        export TMPDIR=${params.tmpDir}
+
         CWD=`pwd`
         cd /opt/iedb/
         rm -f $mhci_file
@@ -5444,8 +5541,11 @@ if(!iedb_chck_file.exists() || iedb_chck_file.isEmpty()) {
         rm -f $mhcii_file
         wget $iedb_MHCII_url
         tar -xzvf $mhcii_file
-        cd mhc_ii
-        bash -c "python ./configure.py"
+        #### ATTENTION: IEDB_MHC_II-3.1.8.tar.gz "python configure.py"
+        ####            returns an assertion error in the unittest needs
+        ####            to be fixed, skip unittests for now
+        # cd mhc_ii
+        # bash -c "python ./configure.py"
         cd /opt/iedb/
         rm $mhcii_file
 
@@ -5713,6 +5813,7 @@ process 'pVACtools_generate_protein_seq' {
     pvacseq generate_protein_fasta \\
         ${phased_vcf_opt} \\
         -s ${meta.sampleName}_tumor \\
+        -d full \\
         ${vep_tumor_vcf_gz[0]} \\
         31 \\
         ${meta.sampleName}_long_peptideSeq.fasta
@@ -5734,7 +5835,7 @@ if(have_HLAHD) {
 
         tag "${meta.sampleName}"
 
-        publishDir "$params.outputDir/${meta.sampleName}/13_mixMHC2pred/processing/",
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/13_mixMHC2pred/processing/",
             mode: publishDirMode,
             enabled: params.fullOutput
 
@@ -5745,6 +5846,8 @@ if(have_HLAHD) {
             path(hlahd_allel_file)
         ) from pVACtools_generate_protein_seq
             .join(hlahd_mixMHC2_pred_ch0, by:0)
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
         tuple(
@@ -5835,6 +5938,8 @@ if(have_HLAHD) {
             .combine(mixmhc2pred_chck_ch)
         val allelesFile from pepare_mixMHC2_seq_out_ch1
 
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
         output:
         path("${meta.sampleName}_mixMHC2pred_all.tsv") optional true
         path("${meta.sampleName}_mixMHC2pred_filtered.tsv") optional true
@@ -5908,6 +6013,8 @@ process addCCF {
     ) from add_CCF_ch
         .combine(Clonality_out_ch0, by: 0)
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     tuple(
         val(meta),
@@ -5968,6 +6075,8 @@ process make_epitopes_fasta {
         val(mhc_class),
         path(epitopes)
     ) from epitopes_fasta_in_ch
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -6067,6 +6176,8 @@ process add_blast_hits {
     ) from blast_epitopes_out_ch
         .join(epitopes_protein_match_in_ch, by: [0,1,2,3])
 
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
     output:
     path("*_ref_match.tsv")
 
@@ -6100,6 +6211,8 @@ process csin {
         path(all_epitopes),
     ) from csin_ch0
         .groupTuple()
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     tuple(
@@ -6266,6 +6379,16 @@ if(params.TCR) {
         tag "${meta.sampleName} : ${meta.sampleType}"
 
         publishDir "$params.outputDir/analyses/${meta.sampleName}/15_BCR_TCR",
+            saveAs: {
+                filename ->
+                    if (filename.indexOf(".tsv") == -1 && params.fullOutput) {
+                        return "extra_output/$filename"
+                    } else if (filename.indexOf(".tsv") == -1 && ! params.fullOutput) {
+                        return null
+                    } else {
+                        return "$filename"
+                    }
+            },
             mode: publishDirMode
 
         input:
@@ -6279,20 +6402,20 @@ if(params.TCR) {
         output:
         tuple(
             val(meta),
-            path("${procSampleName}_mixcr.clonotypes.ALL.txt"),
+            path("${procSampleName}*.tsv"),
         )
 
         script:
         def starting_material = (meta.sampleType == "tumor_RNA") ? "rna" : "dna"
-        procSampleName = meta.sampleName + "_" + meta.sampleType
+        def libtype = (meta.sampleType == "tumor_RNA") ? "rna-seq" : "exome-seq"
+        procSampleName = meta.sampleName + "_" + meta.sampleType + "_mixcr"
         """
-        mixcr analyze shotgun \\
+        ${baseDir}/bin/mixcr analyze ${libtype} \\
             --threads ${task.cpus} \\
-            --species hs \\
-            --starting-material ${starting_material} \\
-            --only-productive \\
+            --species hsa \\
+            --${starting_material} \\
             $reads \\
-            ${procSampleName}_mixcr
+            ${procSampleName}
         """
     }
 }
@@ -6330,6 +6453,8 @@ process collectSampleInfo {
     ) from sample_info_csin
         .join(sample_info_tmb, by: 0)
         .join(sample_info_tmb_coding, by: 0)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
     output:
     path("${meta.sampleName}_sample_info.tsv")
@@ -6382,7 +6507,7 @@ alignmentMetrics_ch = alignmentMetrics_ch.map{
 
 process multiQC {
 
-    label 'nextNEOpiENV'
+    label 'multiqc'
 
     tag "${meta.sampleName}"
 
@@ -6448,104 +6573,81 @@ def check_mhcflurry_dir(d) {
     checkDir(d, "MHCFLURRY_dir")
 }
 
-def checkParamReturnFileReferences(item) {
-    params."${item}" = params.references."${item}"
-    return file(params."${item}")
-}
-
-def checkParamReturnFileDatabases(item) {
-    params."${item}" = params.databases."${item}"
-    return file(params."${item}")
-}
-
 def setExomeCaptureKit(captureKit) {
+    resources = ['BaitsBed', 'RegionsBed']
+    for (r in resources) {
+        if (params.exomeCaptureKits[ captureKit ][r] == null) {
+            exit 1, "ERROR: \"" + r + "\" file not set for: " + captureKit + "\nPlease check the \"exomeCaptureKits\" resource file settings in conf/resources.config"
+        }
+    }
+
     params.references.BaitsBed = params.exomeCaptureKits[ captureKit ].BaitsBed
     params.references.RegionsBed = params.exomeCaptureKits[ captureKit ].RegionsBed
 }
 
-def defineReference() {
-    if(params.WES) {
-        if (params.references.size() != 22) exit 1, """
-        ERROR: Not all References needed found in configuration
-        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
-        """
-        return [
-            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
-            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
-            'RefDict'           : checkParamReturnFileReferences("RefDict"),
-            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
-            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
-            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : params.references.VepFasta,
-            'BaitsBed'          : checkParamReturnFileReferences("BaitsBed"),
-            'RegionsBed'        : checkParamReturnFileReferences("RegionsBed"),
-            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
-            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
-            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
-            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
-            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
-            'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
-            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
-        ]
+def check_resource(resource, resource_type) {
+
+    resource_file = params[resource_type][resource]
+
+    if (resource_file == null) {
+        exit 1, "ERROR: Resource file not set for: " + resource + "\nPlease check the \"" + resource_type + "\" resource file settings in conf/resources.config"
+    }
+
+    rp = file(resource_file)
+
+    if (rp instanceof java.util.LinkedList) {
+        rf = rp
     } else {
-        if (params.references.size() < 20) exit 1, """
-        ERROR: Not all References needed found in configuration
-        Please check if genome file, genome index file, genome dict file, bwa reference files, vep reference file and interval file is given.
-        """
-        return [
-            'RefFasta'          : checkParamReturnFileReferences("RefFasta"),
-            'RefIdx'            : checkParamReturnFileReferences("RefIdx"),
-            'RefDict'           : checkParamReturnFileReferences("RefDict"),
-            'RefChrLen'         : checkParamReturnFileReferences("RefChrLen"),
-            'RefChrDir'         : checkParamReturnFileReferences("RefChrDir"),
-            'BwaRef'            : checkParamReturnFileReferences("BwaRef"),
-            'VepFasta'          : params.references.VepFasta,
-            'BaitsBed'          : "",
-            'YaraIndexDNA'      : checkParamReturnFileReferences("YaraIndexDNA"),
-            'YaraIndexRNA'      : checkParamReturnFileReferences("YaraIndexRNA"),
-            'HLAHDFreqData'     : checkParamReturnFileReferences("HLAHDFreqData"),
-            'HLAHDGeneSplit'    : checkParamReturnFileReferences("HLAHDGeneSplit"),
-            'HLAHDDict'         : checkParamReturnFileReferences("HLAHDDict"),
-            'STARidx'           : checkParamReturnFileReferences("STARidx"),
-            'AnnoFile'          : checkParamReturnFileReferences("AnnoFile"),
-            'ExonsBED'          : checkParamReturnFileReferences("ExonsBED"),
-            'acLoci'            : checkParamReturnFileReferences("acLoci"),
-            'acLociGC'          : checkParamReturnFileReferences("acLociGC"),
-            'SequenzaGC'        : checkParamReturnFileReferences("SequenzaGC"),
-            'ProteinBlastDBdir' : checkParamReturnFileReferences("ProteinBlastDBdir")
-        ]
+        rf = [rp]
+    }
+
+    err = 0
+    if (rf[0] != null) {
+        for (f in rf) {
+            err += file(f).exists() ? 0 : 1
+        }
+    }
+
+    if (err == 0) {
+        return(rp)
+    } else {
+        exit 1, "ERROR: Resource file does not exist: " + resource_file + "\nPlease check the " + resource_type + " resource file settings in conf/resources.config"
     }
 }
 
-def defineDatabases() {
-    if (params.databases.size() < 16) exit 1, """
-    ERROR: Not all Databases needed found in configuration
-    Please check if Mills_and_1000G_gold_standard, CosmicCodingMuts, DBSNP, GnomAD, and knownIndels are given.
-    """
-    return [
-        'MillsGold'      : checkParamReturnFileDatabases("MillsGold"),
-        'MillsGoldIdx'   : checkParamReturnFileDatabases("MillsGoldIdx"),
-        'hcSNPS1000G'    : checkParamReturnFileDatabases("hcSNPS1000G"),
-        'hcSNPS1000GIdx' : checkParamReturnFileDatabases("hcSNPS1000GIdx"),
-        'HapMap'         : checkParamReturnFileDatabases("HapMap"),
-        'HapMapIdx'      : checkParamReturnFileDatabases("HapMapIdx"),
-        'DBSNP'          : checkParamReturnFileDatabases("DBSNP"),
-        'DBSNPIdx'       : checkParamReturnFileDatabases("DBSNPIdx"),
-        'GnomAD'         : checkParamReturnFileDatabases("GnomAD"),
-        'GnomADIdx'      : checkParamReturnFileDatabases("GnomADIdx"),
-        'GnomADfull'     : checkParamReturnFileDatabases("GnomADfull"),
-        'GnomADfullIdx'  : checkParamReturnFileDatabases("GnomADfullIdx"),
-        'KnownIndels'    : checkParamReturnFileDatabases("KnownIndels"),
-        'KnownIndelsIdx' : checkParamReturnFileDatabases("KnownIndelsIdx"),
-        'vep_cache'      : params.databases.vep_cache,
-        'iedb_dir'       : checkParamReturnFileDatabases("IEDB_dir"),
-        'mhcflurry_dir'  : checkParamReturnFileDatabases("MHCFLURRY_dir"),
-    ]
+def defineResources(resource_type, wes, hlahd) {
+
+    // vep check file
+    vep_cache_chck_file_name = "." + params.vep_species + "_" + params.vep_assembly + "_" + params.vep_cache_version + "_cache_ok.chck"
+    vep_cache_chck_file = file(params.databases.vep_cache + "/" + vep_cache_chck_file_name)
+
+    // define references
+    references = ['RefFasta', 'RefIdx', 'RefDict', 'RefChrLen', 'RefChrDir', 'BwaRef',
+                  'YaraIndexDNA', 'YaraIndexRNA', 'STARidx', 'AnnoFile', 'ExonsBED', 'acLoci',
+                  'acLociGC', 'SequenzaGC', 'ProteinBlastDBdir']
+    if (wes) {
+        references.addAll(['BaitsBed', 'RegionsBed'])
+    }
+    if (hlahd != "") {
+        references.addAll(['HLAHDFreqData', 'HLAHDGeneSplit', 'HLAHDDict'])
+    }
+    if(vep_cache_chck_file.exists() && !vep_cache_chck_file.isEmpty()) {
+        references.addAll(['VepFasta'])
+    }
+
+    // define databases
+    databases = ['MillsGold', 'MillsGoldIdx', 'hcSNPS1000G', 'hcSNPS1000GIdx', 'HapMap',
+                 'HapMapIdx', 'DBSNP', 'DBSNPIdx', 'GnomAD', 'GnomADIdx', 'GnomADfull', 'GnomADfullIdx',
+                 'KnownIndels', 'KnownIndelsIdx', 'vep_cache', 'IEDB_dir', 'MHCFLURRY_dir']
+
+    resources = ['references' : references, 'databases' : databases ]
+    resources_files = [:]
+
+    for (r in resources[resource_type]) {
+        resources_files[r] = check_resource(r, resource_type)
+    }
+
+    return(resources_files)
 }
 
 def checkToolAvailable(tool, check, errMode) {

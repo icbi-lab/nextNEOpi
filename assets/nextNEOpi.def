@@ -1,25 +1,39 @@
 Bootstrap: docker
-From: mambaorg/micromamba
+From: mambaorg/micromamba:0.24.0
 
 %files
     nextNEOpi.yml /nextNEOpi.yml
+    ./.mambarc /root/.mambarc
 
 %post
- apt-get update && apt-get install -y \
-    procps \
-    curl \
-    unzip
+    apt-get --allow-releaseinfo-change update && apt-get install -y \
+        procps \
+        curl \
+        unzip \
+        libgomp1 \
+        openjdk-17-jdk
+
+    # set jdk-17 as default
+    update-java-alternatives -s java-1.17.0-openjdk-amd64
 
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
     export PATH=/opt/conda/bin:$PATH
 
-    curl -L -o gatk-4.2.6.1.zip https://github.com/broadinstitute/gatk/releases/download/4.2.6.1/gatk-4.2.6.1.zip
-    unzip -j gatk-4.2.6.1.zip gatk-4.2.6.1/gatkPythonPackageArchive.zip -d ./
+    mkdir -p /opt/gatk
+    mkdir -p /opt/conda/bin
+
+    curl -L -o gatk-4.4.0.0.zip https://github.com/broadinstitute/gatk/releases/download/4.4.0.0/gatk-4.4.0.0.zip
+    unzip -j gatk-4.4.0.0.zip gatk-4.4.0.0/gatkPythonPackageArchive.zip -d ./
+    unzip -j gatk-4.4.0.0.zip gatk-4.4.0.0/gatk-package-4.4.0.0-local.jar -d ./opt/gatk/
+    unzip -j gatk-4.4.0.0.zip gatk-4.4.0.0/gatk -d ./opt/gatk/
+
+    chmod +x /opt/gatk/gatk
+    ln -s /opt/gatk/gatk /opt/conda/bin/gatk
 
     micromamba install --yes --name base --file /nextNEOpi.yml
 
     rm -f /nextNEOpi.yml
-    rm -f gatk-4.2.6.1.zip
+    rm -f gatk-4.4.0.0.zip
     rm -f gatkPythonPackageArchive.zip
 
     apt-get clean
@@ -27,4 +41,4 @@ From: mambaorg/micromamba
 
 %environment
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
-    export PATH=/opt/conda/bin:$PATH
+    export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin/:/opt/conda/bin:$PATH
