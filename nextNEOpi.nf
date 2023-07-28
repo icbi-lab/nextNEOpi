@@ -5295,7 +5295,9 @@ process Neofuse {
         val(meta),
         path("${meta.sampleName}/STAR/${meta.sampleName}.Aligned.sortedByCoord.out.{bam,bam.bai}")
     ) into star_bam_file
-
+    path("${meta.sampleName}/Arriba/*")
+    path("${meta.sampleName}/Custom_HLAs/*"), optional: true
+    path("${meta.sampleName}/LOGS/*")
 
     script:
     def reads = (meta_RNA_ori.libType == "SE") ? "-1 " + reads_RNA[0] : "-1 " + reads_RNA[0] + " -2 " + reads_RNA[1]
