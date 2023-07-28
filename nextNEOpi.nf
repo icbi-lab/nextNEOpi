@@ -5237,21 +5237,21 @@ process Neofuse {
                     targetFile = "11_Fusions/Arriba/" + file(fileName).getName()
                 } else if(fileName.indexOf("Custom_HLAs") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/Custom_HLAs/" + file(fileName).getName() : ""
-                } else if(fileName.indexOf("LOGS/") >= 0) {
+                } else if(fileName.indexOf("LOGS") >= 0) {
                     targetFile = params.fullOutput ? "11_Fusions/LOGS/" + file(fileName).getName() : ""
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_I_") >= 0) {
                     targetFile = "11_Fusions/NeoFuse/Class_I/" + file(fileName).getName()
                 } else if(fileName.indexOf("_NeoFuse_MHC_Class_II_") >= 0) {
-                    if(fileName.indexOf("_mixMHC2pred_conf.txt") > 0) {
+                    if(fileName.indexOf("_mixMHC2pred_conf.txt") >= 0) {
                         targetFile = params.fullOutput ? "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName() : ""
                     } else {
                         targetFile = "11_Fusions/NeoFuse/Class_II/" + file(fileName).getName()
                     }
-                } else if(fileName.indexOf("STAR/") >= 0) {
+                } else if(fileName.indexOf("STAR") >= 0) {
                     if(fileName.indexOf("Aligned.sortedByCoord.out.bam") >= 0) {
                         targetFile = "02_alignments/" + file(fileName).getName().replace(".Aligned.sortedByCoord.out", "_RNA.Aligned.sortedByCoord.out")
                     }
-                } else if(fileName.indexOf("TPM/") >= 0) {
+                } else if(fileName.indexOf("TPM") >= 0) {
                     targetFile = "04_expression/" + file(fileName).getName()
                 } else {
                     targetFile = "11_Fusions/" + fileName
@@ -5295,7 +5295,6 @@ process Neofuse {
         val(meta),
         path("${meta.sampleName}/STAR/${meta.sampleName}.Aligned.sortedByCoord.out.{bam,bam.bai}")
     ) into star_bam_file
-    path("${meta.sampleName}/**")
 
 
     script:
