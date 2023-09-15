@@ -1,0 +1,4 @@
+sampleName,reads1,reads2,sampleType,HLAfile,sex
+test_sample,./testdata/tumor_DNA_R1.fastq.gz,./testdata/tumor_DNA_R2.fastq.gz,tumor_DNA,,NA
+test_sample,./testdata/normal_DNA_R1.fastq.gz,./testdata/normal_DNA_R2.fastq.gz,normal_DNA,,NA
+test_sample,./testdata/tumor_RNA_R1.fastq.gz,./testdata/tumor_RNA_R2.fastq.gz,tumor_RNA,,NA
