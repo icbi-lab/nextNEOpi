@@ -326,7 +326,9 @@ if (params.HLAHD_DIR != "") {
     if (checkToolAvailable(HLAHD, "exists", "warn")) {
         HLAHD_DIR  = file(params.HLAHD_DIR)
         HLAHD_PATH = HLAHD_DIR + "/bin"
-        have_HLAHD = true
+        if (checkToolAvailable("bowtie2", "inPath", "warn")) {
+            have_HLAHD = true
+        }
     }
 }
 if (! have_HLAHD && run_OptiType) {
