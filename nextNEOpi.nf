@@ -134,7 +134,6 @@ summary['TMP dir']                       = tmpDir
 summary['Current home']                  = "$HOME"
 summary['Current user']                  = "$USER"
 summary['Current path']                  = "$PWD"
-summary['JAVA_Xmx']                      = params.JAVA_Xmx
 summary['Picard maxRecordsInRam']        = params.maxRecordsInRam
 summary['Script dir']                    = workflow.projectDir
 summary['Config Profile']                = workflow.profile
@@ -288,6 +287,8 @@ custom_HLA_data = custom_HLA_data.each {
     record[0].have_RNA = (r_map[record[0].sampleName]) ? true : false
 }.unique()
 
+use_custom_hlas = (custom_HLA_data.size() > 0) ? true : false
+
 batch_raw_data_ch = Channel.fromList(raw_data)
 batch_custom_HLA_data_ch = Channel.fromList(custom_HLA_data)
 
@@ -326,8 +327,14 @@ if (params.HLAHD_DIR != "") {
     if (checkToolAvailable(HLAHD, "exists", "warn")) {
         HLAHD_DIR  = file(params.HLAHD_DIR)
         HLAHD_PATH = HLAHD_DIR + "/bin"
-        if (checkToolAvailable("bowtie2", "inPath", "warn")) {
-            have_HLAHD = true
+        if(params.HLAHD_module != "") {
+            if (checkToolAvailable("bowtie2", "inPath", "warn", module=params.HLAHD_module)) {
+                have_HLAHD = true
+            }
+        } else {
+            if (checkToolAvailable("bowtie2", "inPath", "warn")) {
+                have_HLAHD = true
+            }
         }
     }
 }
@@ -351,10 +358,10 @@ if (! workflow.profile.contains('conda') && ! workflow.profile.contains('singula
         checkToolAvailable(tool, "inPath", "error")
     }
 
-    VARSCAN = "java " + params.JAVA_Xmx + " -jar " + file(params.VARSCAN)
+    VARSCAN = "java -jar " + file(params.VARSCAN)
     have_vep = true
 } else {
-    VARSCAN = "varscan " + params.JAVA_Xmx
+    VARSCAN = "varscan "
 }
 
 // check if we have mutect1 installed
@@ -401,56 +408,8 @@ ________________________________________________________________________________
 */
 
 gatk4_chck_file = file(baseDir + "/assets/.gatk4_install_ok.chck")
-if (params.enable_conda && !gatk4_chck_file.exists()) {
-
-    process download_GATK4 {
-        tag "download GATK4"
-
-        output:
-        path("gatk-${params.gatk4version}.zip") into (
-             download_GATK4_ch0
-        )
-
-        script:
-        """
-        mkdir -p ${baseDir}/assets/gatk4 && \\
-        curl -L -o gatk-${params.gatk4version}.zip https://github.com/broadinstitute/gatk/releases/download/${params.gatk4version}/gatk-${params.gatk4version}.zip && \\
-        unzip -j gatk-${params.gatk4version}.zip gatk-${params.gatk4version}/gatkPythonPackageArchive.zip -d ${baseDir}/assets/
-        """
-    }
-
-    process setup_nextNEOpi_ENV {
-        label 'nextNEOpiENV'
-
-        tag "setup nextNEOpiENV"
-
-        input:
-        path(gatk4_archive) from download_GATK4_ch0
-
-        output:
-        val("OK") into nextNEOpiENV_setup_ch0
-
-        script:
-        if (params.enable_conda)
-            """
-            mkdir -p ${baseDir}/assets/gatk4 && \\
-            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk-package-${params.gatk4version}-local.jar -d ${baseDir}/assets/gatk4 && \\
-            unzip -j ${gatk4_archive} gatk-${params.gatk4version}/gatk -d ${baseDir}/assets/gatk4 && \\
-            chmod +x ${baseDir}/assets/gatk4/gatk && \\
-            ln -s ${baseDir}/assets/gatk4/gatk ${baseDir}/bin/gatk && \\
-            touch nextNEOpiENV_setup.ok
-            touch ${gatk4_chck_file}
-            """
-        else
-            """
-            touch nextNEOpiENV_setup.ok
-            touch ${gatk4_chck_file}
-            """
-    }
-} else {
-    gatk4_chck_file.append()
-    nextNEOpiENV_setup_ch0 = Channel.value("OK")
-}
+gatk4_chck_file.append()
+nextNEOpiENV_setup_ch0 = Channel.value("OK")
 
 /*
 *********************************************
@@ -518,11 +477,12 @@ if(bamInput) {
         )
 
         script:
+        def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 4) / task.cpus)), 1)
         prefix = meta.sampleName + "_" + meta.sampleType
         meta.libType = libType
         if (libType == "PE")
             """
-            samtools sort -@ ${task.cpus} -m ${params.STperThreadMem} -l 0 -n ${bam} | \\
+            samtools sort -@ ${task.cpus} -m ${STperThreadMem}G -l 0 -n ${bam} | \\
             samtools fastq \\
                 -@ ${task.cpus} \\
                 -c 5 \\
@@ -615,8 +575,9 @@ if (params.WES) {
         )
 
         script:
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
         """
-        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+        gatk --java-options ${JAVA_Xmx} BedToIntervalList \\
             -I ${RegionsBed} \\
             -O ${RegionsBed.baseName}.interval_list \\
             -SD $RefDict
@@ -649,8 +610,9 @@ if (params.WES) {
         ) into BaitsBedToIntervalList_out_ch0
 
         script:
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
         """
-        gatk --java-options ${params.JAVA_Xmx} BedToIntervalList \\
+        gatk --java-options ${JAVA_Xmx} BedToIntervalList \\
             -I ${BaitsBed} \\
             -O ${BaitsBed.baseName}.interval_list \\
             -SD $RefDict
@@ -702,6 +664,7 @@ process 'preprocessIntervalList' {
 
     script:
     outFileName = (params.WES) ? interval_list.baseName + "_merged_padded.interval_list" : "wgs_ScatterIntervalsByNs.interval_list"
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     if(params.WES)
         """
         gatk PreprocessIntervals \\
@@ -714,7 +677,7 @@ process 'preprocessIntervalList' {
         """
     else
         """
-        gatk --java-options ${params.JAVA_Xmx} ScatterIntervalsByNs \\
+        gatk --java-options ${JAVA_Xmx} ScatterIntervalsByNs \\
             --REFERENCE $RefFasta \\
             --OUTPUT_TYPE ACGT \\
             --OUTPUT ${outFileName}
@@ -806,8 +769,9 @@ process 'IntervalListToBed' {
     )
 
     script:
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
-    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
+    gatk --java-options ${JAVA_Xmx} IntervalListToBed \\
         -I ${paddedIntervalList} \\
         -O ${paddedIntervalList.baseName}.bed
 
@@ -848,8 +812,9 @@ process 'ScatteredIntervalListToBed' {
     )
 
     script:
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
-    gatk --java-options ${params.JAVA_Xmx} IntervalListToBed \\
+    gatk --java-options ${JAVA_Xmx} IntervalListToBed \\
         -I ${IntervalsList} \\
         -O ${IntervalsList.baseName}.bed
     """
@@ -1106,7 +1071,8 @@ process 'make_uBAM' {
     def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
     def reads_in = "-F1 " + reads[0]
     reads_in += (meta.libType == "PE") ? " -F2 " + reads[1] : ""
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
 
     """
     mkdir -p ${tmpDir}
@@ -1157,6 +1123,7 @@ process 'Bwa' {
     def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
 
     def sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
+    def SB_sort_mem =  Math.max((task.memory.toGiga() - 4), 1) + "G"
     """
     bwa mem \\
         -R "@RG\\tID:${read_group}\\tLB:${read_group}\\tSM:${read_group}\\tPL:ILLUMINA" \\
@@ -1168,7 +1135,7 @@ process 'Bwa' {
     sambamba sort \\
         --sort-picard \\
         --tmpdir=${tmpDir} \\
-        -m ${params.SB_sort_mem} \\
+        -m ${SB_sort_mem} \\
         -l 6 \\
         -t ${sort_threads} \\
         -o ${bam} \\
@@ -1209,7 +1176,8 @@ process 'merge_uBAM_BAM' {
     procSampleName = meta.sampleName + "_" + meta.sampleType
 
     def paired_run = (meta.libType == 'SE') ? 'false' : 'true'
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -1277,6 +1245,8 @@ process 'MarkDuplicates' {
 
     script:
     def procSampleName = meta.sampleName + "_" + meta.sampleType
+    def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 8) / task.cpus)), 1)
+    def JAVA_Xmx = '-Xmx4G'
     bam_out = [procSampleName + "_aligned_sort_mkdp.bam", procSampleName + "_aligned_sort_mkdp.bai"]
     """
     mkdir -p ${tmpDir}
@@ -1290,11 +1260,11 @@ process 'MarkDuplicates' {
         /dev/stdout | \\
     samtools sort \\
         -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
+        -m ${STperThreadMem}G \\
         -O BAM \\
         -l 0 \\
         /dev/stdin | \\
-    gatk --java-options ${params.JAVA_Xmx} SetNmMdAndUqTags \\
+    gatk --java-options ${JAVA_Xmx} SetNmMdAndUqTags \\
         --TMP_DIR ${tmpDir} \\
         -R ${RefFasta} \\
         -I /dev/stdin \\
@@ -1361,8 +1331,8 @@ if(params.WES) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
-
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+        def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
         mkdir -p ${tmpDir}
         gatk --java-options ${java_opts} CollectHsMetrics \\
@@ -1442,9 +1412,10 @@ process 'scatterBaseRecalGATK4' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
     mkdir -p ${tmpDir}
-    gatk  --java-options ${params.JAVA_Xmx} BaseRecalibrator \\
+    gatk  --java-options ${JAVA_Xmx} BaseRecalibrator \\
         --tmp-dir ${tmpDir} \\
         -I ${bam[0]} \\
         -R ${RefFasta} \\
@@ -1545,10 +1516,11 @@ process 'scatterGATK4applyBQSRS' {
     def procSampleName = meta.sampleName + "_" + meta.sampleType
     bam_out = [ procSampleName + "_" + intervals + "_recal4.bam",
                 procSampleName + "_" + intervals + "_recal4.bai"]
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
     mkdir -p ${tmpDir}
     gatk ApplyBQSR \\
-        --java-options ${params.JAVA_Xmx} \\
+        --java-options ${JAVA_Xmx} \\
         --tmp-dir ${tmpDir} \\
         -I ${bam[0]} \\
         -R ${RefFasta} \\
@@ -1592,7 +1564,9 @@ process 'GatherRecalBamFiles' {
 
     script:
     procSampleName = meta.sampleName + "_" + meta.sampleType
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 4) / task.cpus)), 1)
+    def JAVA_Xmx = "4G"
+    def java_opts = '"-Xmx' + JAVA_Xmx + ' -XX:ParallelGCThreads=2"'
     """
     mkdir -p ${tmpDir}
 
@@ -1606,7 +1580,7 @@ process 'GatherRecalBamFiles' {
         --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
     samtools sort \\
         -@${task.cpus} \\
-        -m ${params.STperThreadMem} \\
+        -m ${STperThreadMem}G \\
         -o ${procSampleName}_recalibrated.bam ${procSampleName}_gather.fifo
     samtools index -@${task.cpus} ${procSampleName}_recalibrated.bam
     rm -f ${procSampleName}_gather.fifo
@@ -1828,7 +1802,8 @@ process 'gatherMutect2VCFs' {
     ) into gatherMutect2VCFs_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -1992,10 +1967,11 @@ process 'HaploTypeCaller' {
 
 
     script:
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
     mkdir -p ${tmpDir}
 
-    gatk --java-options ${params.JAVA_Xmx} HaplotypeCaller \\
+    gatk --java-options ${JAVA_Xmx} HaplotypeCaller \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -I ${Normalbam[0]} \\
@@ -2094,7 +2070,8 @@ process 'MergeHaploTypeCallerGermlineVCF' {
     ) into MergeHaploTypeCallerGermlineVCF_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2226,11 +2203,12 @@ if (have_GATK3) {
         def procSampleName = meta.sampleName + "_" + meta.sampleType
         bam_out = [ procSampleName + "_recalibrated_realign_" + interval + ".bam",
                     procSampleName + "_recalibrated_realign_" + interval + ".bai"]
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
 
         """
         mkdir -p ${tmpDir}
 
-        $JAVA8 ${params.JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
+        $JAVA8 ${JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T RealignerTargetCreator \\
             --known ${MillsGold} \\
             --known ${KnownIndels} \\
@@ -2282,7 +2260,9 @@ if (have_GATK3) {
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 4) / task.cpus)), 1)
+        def JAVA_Xmx = "4G"
+        def java_opts = '"-Xmx' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
         mkdir -p ${tmpDir}
 
@@ -2296,7 +2276,7 @@ if (have_GATK3) {
             --MAX_RECORDS_IN_RAM ${params.maxRecordsInRam} &
         samtools sort \\
             -@${task.cpus} \\
-            -m ${params.STperThreadMem} \\
+            -m ${STperThreadMem}G \\
             -o ${procSampleName}_recalibrated_realign.bam ${procSampleName}_gather.fifo
         samtools index -@${task.cpus}  ${procSampleName}_recalibrated_realign.bam
         rm -f ${procSampleName}_gather.fifo
@@ -2399,6 +2379,7 @@ process 'VarscanSomaticScattered' {
     script:
     // awk filters at the end needed, found at least one occurence of "W" in Ref field of
     // varscan vcf (? wtf). Non ACGT seems to cause MergeVCF (picard) crashing
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
     rm -f ${meta.sampleName}_${intervals}_mpileup.fifo
     mkfifo ${meta.sampleName}_${intervals}_mpileup.fifo
@@ -2407,7 +2388,7 @@ process 'VarscanSomaticScattered' {
         -f ${RefFasta} \\
         -l ${intervals} \\
         ${Normalbam[0]} ${Tumorbam[0]} > ${meta.sampleName}_${intervals}_mpileup.fifo &
-    varscan ${params.JAVA_Xmx} somatic \\
+    varscan ${JAVA_Xmx} somatic \\
         ${meta.sampleName}_${intervals}_mpileup.fifo \\
         ${meta.sampleName}_${intervals}_varscan_tmp \\
         --output-vcf 1 \\
@@ -2474,7 +2455,8 @@ process 'gatherVarscanVCFs' {
     ) into gatherVarscanVCFs_out_ch0
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2534,13 +2516,14 @@ process 'ProcessVarscan' {
     ) into ProcessVarscanIndel_out_ch0
 
     script:
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
-    varscan ${params.JAVA_Xmx} processSomatic \\
+    varscan ${JAVA_Xmx} processSomatic \\
         ${snp} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
         --p-value ${params.processSomatic_pvalue} && \\
-    varscan ${params.JAVA_Xmx} processSomatic \\
+    varscan ${JAVA_Xmx} processSomatic \\
         ${indel} \\
         --min-tumor-freq ${params.min_tumor_freq} \\
         --max-normal-freq ${params.max_normal_freq} \\
@@ -2603,6 +2586,7 @@ process 'FilterVarscan' {
     ) into FilterVarscan_out_ch0
 
     script:
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
     """
     cat ${snpSomaticHc} | \\
     awk '{if (!/^#/) { x = length(\$5) - 1; print \$1,\$2,(\$2+x); }}' | \\
@@ -2613,7 +2597,7 @@ process 'FilterVarscan' {
         -l /dev/stdin \\
         -f ${RefFasta} \\
         ${bam[0]} | \\
-    varscan ${params.JAVA_Xmx} fpfilter \\
+    varscan ${JAVA_Xmx} fpfilter \\
         ${snpSomaticHc} \\
         /dev/stdin \\
         --output-file ${meta.sampleName}_varscan.snp.Somatic.hc.filtered.vcf && \\
@@ -2625,7 +2609,7 @@ process 'FilterVarscan' {
         -w1 \\
         -l /dev/stdin \\
         -f ${RefFasta} ${bam[0]} | \\
-    varscan ${params.JAVA_Xmx} fpfilter \\
+    varscan ${JAVA_Xmx} fpfilter \\
         ${indelSomaticHc} \\
         /dev/stdin \\
         --output-file ${meta.sampleName}_varscan.indel.Somatic.hc.filtered.vcf
@@ -2668,7 +2652,8 @@ process 'MergeAndRenameSamplesInVarscanVCF' {
     )
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
@@ -2757,10 +2742,11 @@ if(have_Mutect1) {
                        file(params.databases.CosmicIdx).exists()
                      ) ? "--cosmic " + file(params.databases.Cosmic)
                        : ""
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
         """
         mkdir -p ${tmpDir}
 
-        $JAVA7 ${params.JAVA_Xmx} -Djava.io.tmpdir=${tmpDir} -jar $MUTECT1 \\
+        $JAVA7 ${JAVA_Xmx} -Djava.io.tmpdir=${tmpDir} -jar $MUTECT1 \\
             --analysis_type MuTect \\
             --reference_sequence ${RefFasta} \\
             ${cosmic} \\
@@ -2831,7 +2817,8 @@ if(have_Mutect1) {
 
 
         script:
-        def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+        def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
         """
         mkdir -p ${tmpDir}
 
@@ -3077,7 +3064,8 @@ process 'finalizeStrelkaVCF' {
     path("${meta.sampleName}_strelka_combined_somatic.vcf.gz")
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
 
     gatk --java-options ${java_opts} MergeVcfs \\
@@ -3300,7 +3288,7 @@ if(!vep_plugins_chck_file.exists() || vep_plugins_chck_file.isEmpty()) {
 }
 
 // Variant Effect Prediction: using ensembl vep
-process 'VepTab' {
+process 'VEPtab' {
 
     label 'VEP'
 
@@ -3403,11 +3391,12 @@ process 'mkCombinedVCF' {
 
 
     script:
-    def java_opts = '"' + params.JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
     """
     mkdir -p ${tmpDir}
 
-    gatk --java-options ${params.JAVA_Xmx} SelectVariants \\
+    gatk --java-options ${JAVA_Xmx} SelectVariants \\
         --tmp-dir ${tmpDir} \\
         -R ${RefFasta} \\
         -V ${tumorVCF[0]} \\
@@ -3621,8 +3610,9 @@ if(have_GATK3) {
         )
 
         script:
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
         """
-        $JAVA8 -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
+        $JAVA8 ${JAVA_Xmx} -XX:ParallelGCThreads=${task.cpus} -Djava.io.tmpdir=${tmpDir} -jar $GATK3 \\
             -T ReadBackedPhasing \\
             -R ${RefFasta} \\
             -I ${tumorBAM[0]} \\
@@ -4023,7 +4013,7 @@ Channel
 
 process 'SequenzaUtils' {
 
-    label 'nextNEOpiENV'
+    label 'sequenzaUtils'
 
     tag "${meta.sampleName}"
 
@@ -4122,7 +4112,7 @@ process gatherSequenzaInput {
 
 process Sequenza {
 
-    label 'nextNEOpiENV'
+    label 'sequenzaR'
 
     tag "${meta.sampleName}"
 
@@ -4999,6 +4989,10 @@ if (have_HLAHD) {
             saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName() : null },
             mode: publishDirMode
 
+        if(params.HLAHD_module != "") {
+            module = params.HLAHD_module
+        }
+
         input:
         tuple(
             val(meta),
@@ -5049,6 +5043,10 @@ if (have_HLAHD && ! have_RNA_tag_seq && params.run_HLAHD_RNA) {
         publishDir "$params.outputDir/analyses/${meta.sampleName}/10_HLA_typing/HLA_HD/",
             saveAs: { fileName -> fileName.endsWith("_final.result.txt") ? file(fileName).getName().replace(".txt", ".RNA.txt") : null },
             mode: publishDirMode
+
+        if(params.HLAHD_module != "") {
+            module = params.HLAHD_module
+        }
 
         input:
         tuple(
@@ -5300,6 +5298,7 @@ process Neofuse {
     path("${meta.sampleName}/Arriba/*")
     path("${meta.sampleName}/Custom_HLAs/*"), optional: true
     path("${meta.sampleName}/LOGS/*")
+
 
     script:
     def reads = (meta_RNA_ori.libType == "SE") ? "-1 " + reads_RNA[0] : "-1 " + reads_RNA[0] + " -2 " + reads_RNA[1]
@@ -5688,6 +5687,8 @@ process concat_pVACseq_files {
 
     tag "${meta.sampleName}"
 
+    label 'pVACtools'
+
     publishDir "$params.outputDir/analyses/${meta.sampleName}/12_pVACseq/MHC_${mhc_class}/",
         mode: publishDirMode
 
@@ -5710,8 +5711,8 @@ process concat_pVACseq_files {
     out_files = [ meta.sampleName + "_MHC_" + mhc_class + "_filtered.tsv",
                   meta.sampleName + "_MHC_" + mhc_class + "_all_epitopes.tsv" ]
     """
-    sed -e '2,\${/^Chromosome/d' -e '}' *pVACseq_filtered_files > ${meta.sampleName}_MHC_${mhc_class}_filtered.tsv
-    sed -e '2,\${/^Chromosome/d' -e '}' *pVACseq_all_files > ${meta.sampleName}_MHC_${mhc_class}_all_epitopes.tsv
+    concat_pvacseq.py --pattern "pVACseq_filtered_files" --output ${meta.sampleName}_MHC_${mhc_class}_filtered.tsv
+    concat_pvacseq.py --pattern "pVACseq_all_files" --output ${meta.sampleName}_MHC_${mhc_class}_all_epitopes.tsv
     """
 }
 // pVACseq_out_concat.view()
@@ -6652,14 +6653,32 @@ def defineResources(resource_type, wes, hlahd) {
     return(resources_files)
 }
 
-def checkToolAvailable(tool, check, errMode) {
+def checkToolAvailable(tool, check, errMode, module=false) {
     def checkResult = false
     def res = ""
+    def chckCmd = ""
+    def envlist = [];
 
     if (check == "inPath") {
-        def chckCmd = "which " + tool
-        res = chckCmd.execute().text.trim()
+        if(module) {
+            chckCmd = 'module load ' + module + ' && which ' + tool + ' && module unload ' + module
+        } else {
+            chckCmd = "which " + tool
+        }
+        def processBuilder = new ProcessBuilder(['/bin/bash', '-c', chckCmd])
+        processBuilder.environment().putAll(System.getenv())
+
+        def process = processBuilder.start()
+        def out = new StringBuilder()
+
+        process.inputStream.eachLine { line ->
+            out.append(line).append('\n')
+        }
+
+        process.waitFor()
+        res = out.toString().trim()
     }
+
     if (check == "exists") {
         if (file(tool).exists()) {
             res = tool
