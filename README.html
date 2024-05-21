@@ -380,7 +380,7 @@ to predict neoepitopes.</p>
 <li>CNVkit</li>
 <li>OptiType</li>
 <li>HLA-HD</li>
-<li>pVACseq (netMHCpan, netMHCIIpan, mhcflurry)</li>
+<li>pVACseq (NetMHCpan NetMHCpanEL MHCflurry MHCflurryEL NetMHCIIpan NetMHCIIpanEL DeepImmuno)</li>
 <li>NeoFuse</li>
 <li>mixMHC2pred</li>
 <li>mixcr</li>
@@ -418,17 +418,19 @@ However, by tuning the memory and CPU parameters in <code>params.config</code> a
 </div></code></pre>
 <h3 id="12-analysis-tools-and-software-packages">1.2 Analysis tools and software packages</h3>
 <p>The pipeline will install almost all required tools via Singularity images or conda environments. If preferred one can also use local installations of all tools (not recommended, please see <code>Manual installation</code> at the end of this document)</p>
-<p>The software that needs to be present on the system is <strong>Java</strong> (minimum version 8), <strong>Nextflow</strong> (see above), <strong>Singularity</strong>, <strong>Conda</strong> (optional).</p>
+<p>The software that needs to be present on the system is <strong>Java</strong> (minimum version 8, if running conda java version 17 or higher is needed), <strong>Nextflow</strong> (see above), <strong>Singularity</strong>, <strong>Conda</strong> (optional).</p>
+<p>If you intend to run the pipeline with the <code>conda</code> profile instead of singularity, we recommend to install <code>mamba</code> (<a href="https://github.com/mamba-org/mamba">https://github.com/mamba-org/mamba</a>)
+to speed up the creation of conda environments. If you can not install <code>mamba</code> please set <code>conda.useMamba = false</code> for the <code>conda</code> profile in <code>conf/profiles.config</code></p>
 <p><strong>Optional but recommended:</strong>
 Due to license restrictions you may also need to download and install <strong>HLA-HD</strong> by your own, and set the installation path in <code>conf/params.config</code>. <em>If HLA-HD is not available Class II neoepitopes will NOT be predicted</em></p>
-<h3 id="12-references">1.2 References</h3>
+<h3 id="13-references">1.3 References</h3>
 <p>The pipeline requires different reference files, indexes and databases:</p>
 <p>please see <code>conf/resources.config</code></p>
 <p>For each nextNEOpi version we prepared a bundle with all needed references, indexes and databases which can be obtained from:</p>
-<p><code>https://apps-01.i-med.ac.at/resources/nextneopi/</code></p>
+<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/">https://apps-01.i-med.ac.at/resources/nextneopi/</a></p>
 <p>the bundle is named to match the release version <code>nextNEOpi_&lt;version&gt;_resources.tar.gz</code></p>
 <p>e.g.:</p>
-<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.3_resources.tar.gz</a></p>
+<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz</a></p>
 <p>download and extract the contents of the archive into the directory you specified for <code>resourcesBaseDir</code> in the <code>conf/params.config</code> file.</p>
 <p>The structure should look as shown blow:</p>
 <pre class="hljs"><code><div>├── {resourcesBaseDir}
@@ -457,6 +459,11 @@ Due to license restrictions you may also need to download and install <strong>HL
 <li><a href="https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files">https://gdc.cancer.gov/about-data/gdc-data-processing/gdc-reference-files</a></li>
 <li><a href="https://www.gencodegenes.org/human/">https://www.gencodegenes.org/human/</a></li>
 </ul>
+<h3 id="14-testdata">1.4 Testdata</h3>
+<p>If you want to test the pipeline using a working minimal test dataset you may download one from</p>
+<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_testdata.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_testdata.tar.gz</a></p>
+<p>Please note that due to the limited read coverage <code>CNVkit</code> will not run successfully using this test dataset. Please run the
+pipeline using the parameter <code>--CNVkit false</code> when testing with this dataset.</p>
 <h2 id="2-usage">2. Usage</h2>
 <p>Before running the pipeline, the config files in the <code>conf/</code> directory may need to be edited. In the
 <code>params.config</code> parameters default settings are defined. The <code>process.config</code>
@@ -464,14 +471,16 @@ is a template for the configuration of the single processes, you may check
 the number of CPUs assigned for each process and adjust according to your systems capabilities.</p>
 <p>Most pipeline parameters can be edited in the <code>params.config</code> file or changed on run time with command line options by using <code>--NameOfTheParameter</code> given in the <code>params.config</code>.
 References, databases should be edited in the <code>resources.config</code> file.</p>
-<pre class="hljs"><code><div>nextflow run nextNEOpi.nf --batchFile &lt;batchFile_FASTQ.csv | batchFile_BAM.csv&gt; -profile singularity|conda,[cluster] [-resume] -config conf/params.config
+<p><strong>Note</strong>: nextNEOpi is currently written in nextflow DSL 1, which is only supported up to nextflow version 22.10.8, this means you need to pin the nextflow
+version by setting the environment variable <code>NXF_VER=22.10.8</code>, in case you have installed a newer nextflow version.</p>
+<pre class="hljs"><code><div>NXF_VER=22.10.8 nextflow run nextNEOpi.nf --batchFile &lt;batchFile_FASTQ.csv | batchFile_BAM.csv&gt; -profile singularity|conda,[cluster] [-resume] -config conf/params.config
 </div></code></pre>
 <p><strong>Profiles:</strong> conda or singularity</p>
 <p>We highly recommend to use either the <code>singularity</code> or <code>conda</code> profile. You can specify one of the two profiles using the option <code>-profile singularity</code> or <code>-profile conda</code>. This way you do not have to care about installing all the required software including all
 its dependencies.</p>
 <p><strong>Profiles:</strong> cluster</p>
 <p>We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. <strong>cluster</strong> and the option <code>-profile singularity,cluster</code> or <code>-profile conda,cluster</code></p>
-<p>For an example SGE cluster profile, please see <code>profiles</code> in <code>conf/profiles.config</code>. You may uncomment and adjust the cluster profile to your scheduling system.</p>
+<p>For an example Slurm cluster profile, please see <code>profiles</code> in <code>conf/profiles.config</code>. You may uncomment and adjust the cluster profile to your scheduling system.</p>
 <p><strong>Sequencing data input:</strong></p>
 <p>Besides raw reads in <strong>FASTQ</strong> fromated files, input data may also be provided in <strong>BAM</strong> format.</p>
 <p><strong>Note</strong>: Per default DNA sequencing data will be treated as exome sequencing WES data. If whole genome sequencing is used, please specify <code>--WES false</code> on the command line or set <code>WES = false</code> in <code>params.config</code>.</p>
@@ -610,7 +619,7 @@ its dependencies.</p>
 <li>reads1: forward reads (can be fastq or gzipped fastq)</li>
 <li>reads2: reverse reads (if paired end sequencing was used, empty for single end)</li>
 <li>sampleType: one of <code>tumor_DNA, normal_DNA. tumor_RNA</code></li>
-<li>HLAfile: optional file with HLA types (default: empty)</li>
+<li>HLAfile: optional file with HLA types (default: empty, example see <code>nextNEOpi_testdata.tar.gz</code>)</li>
 <li>sex: gender of the sample if known (female, male, xx, xy) or NA if unknown</li>
 </ul>
 <p>A sample may have multiple read files for a single <code>sampleType</code>, nextNEOpi will merge them accordingly. As shown in the above example <code>sample4</code> has 2 fastq files for the <code>tumor_DNA</code>, in this cases <code>reads_1_1.fastq.gz</code> will be merged with <code>reads_2_1.fastq.gz</code>. The same applies to <code>reads2</code>.</p>
@@ -720,6 +729,7 @@ Default: false</p>
 Default: true</p>
 <p><code>--TCR</code>                   Run mixcr for TCR prediction
 Default: true</p>
+<p><code>--CNVkit</code>              Run CNVkit for detecting CNAs. Default: true</p>
 <p><code>--HLAHD_DIR</code> Specify the path to your HLA-HD installation. Needed if Class II neoantigens should be predicted.</p>
 <p><code>--HLA_force_RNA</code> Use only RNAseq for HLA typing. Default: false</p>
 <p><code>--HLA_force_DNA</code> Use only WES/WGS for HLA typing. Default: false</p>
@@ -784,15 +794,15 @@ on larger fastq files. Default: false</p>
 <li>FASTQC        (Version &gt;= 0.11.8)</li>
 <li>FASTP         (Version &gt;= v0.20.1)</li>
 <li>JAVA7   (Version 1.7)</li>
-<li>JAVA8   (Version 1.8)</li>
+<li>JAVA8   (Version =&gt; 1.17)</li>
 <li>BWA    (Version &gt;= 0.7.17)</li>
 <li>SAMTOOLS   (Version &gt;= 1.9)</li>
 <li>GATK3   (Version 3.8-0)</li>
-<li>GATK4   (Version &gt;= 4.2.5.0)</li>
-<li>VARSCAN   (Version 2.4.3)</li>
+<li>GATK4   (Version &gt;= 4.5.0.0)</li>
+<li>VARSCAN   (Version 2.4.6)</li>
 <li>MUTECT1   (Version 1.1.7) ---- optional</li>
 <li>BAMREADCOUNT  (Version 0.8.0)</li>
-<li>VEP    (Version v105)</li>
+<li>VEP    (Version v111)</li>
 <li>BGZIP</li>
 <li>TABIX</li>
 <li>BCFTOOLS</li>
@@ -806,7 +816,7 @@ on larger fastq files. Default: false</p>
 <li>YARA</li>
 <li>HLA-HD</li>
 <li>ALLELECOUNT</li>
-<li>RSCRIPT (R &gt; 3.6.1)</li>
+<li>RSCRIPT (R &gt; 3.6.2)</li>
 <li>SEQUENZA (3.0)</li>
 <li>CNVkit</li>
 </ul>

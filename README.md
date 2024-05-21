@@ -16,7 +16,7 @@ The pipeline uses the following tools:
 * CNVkit
 * OptiType
 * HLA-HD
-* pVACseq (netMHCpan, netMHCIIpan, mhcflurry)
+* pVACseq (NetMHCpan NetMHCpanEL MHCflurry MHCflurryEL NetMHCIIpan NetMHCIIpanEL DeepImmuno)
 * NeoFuse
 * mixMHC2pred
 * mixcr
@@ -155,7 +155,7 @@ its dependencies.
 
 We strongly recommend to run the pipeline on a HPC cluster. You can enable runs in cluster mode by using a profile named e.g. **cluster** and the option ```-profile singularity,cluster``` or ```-profile conda,cluster```
 
-For an example SGE cluster profile, please see ```profiles``` in ```conf/profiles.config```. You may uncomment and adjust the cluster profile to your scheduling system.
+For an example Slurm cluster profile, please see ```profiles``` in ```conf/profiles.config```. You may uncomment and adjust the cluster profile to your scheduling system.
 
 **Sequencing data input:**
 
@@ -203,7 +203,7 @@ Make sure that your batchFile CSV includes the column names as shown in the exam
 * reads1: forward reads (can be fastq or gzipped fastq)
 * reads2: reverse reads (if paired end sequencing was used, empty for single end)
 * sampleType: one of `tumor_DNA, normal_DNA. tumor_RNA`
-* HLAfile: optional file with HLA types (default: empty)
+* HLAfile: optional file with HLA types (default: empty, example see `nextNEOpi_testdata.tar.gz`)
 * sex: gender of the sample if known (female, male, xx, xy) or NA if unknown
 
 A sample may have multiple read files for a single `sampleType`, nextNEOpi will merge them accordingly. As shown in the above example `sample4` has 2 fastq files for the `tumor_DNA`, in this cases `reads_1_1.fastq.gz` will be merged with `reads_2_1.fastq.gz`. The same applies to `reads2`.
@@ -363,15 +363,15 @@ If you prefer local installation of the analysis tools please install the follow
 * FASTQC        (Version >= 0.11.8)
 * FASTP         (Version >= v0.20.1)
 * JAVA7   (Version 1.7)
-* JAVA8   (Version 1.8)
+* JAVA8   (Version => 1.17)
 * BWA    (Version >= 0.7.17)
 * SAMTOOLS   (Version >= 1.9)
 * GATK3   (Version 3.8-0)
-* GATK4   (Version >= 4.4.0.0)
+* GATK4   (Version >= 4.5.0.0)
 * VARSCAN   (Version 2.4.6)
 * MUTECT1   (Version 1.1.7) ---- optional
 * BAMREADCOUNT  (Version 0.8.0)
-* VEP    (Version v110)
+* VEP    (Version v111)
 * BGZIP
 * TABIX
 * BCFTOOLS

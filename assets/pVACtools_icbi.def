@@ -40,7 +40,8 @@
 #
 
 Bootstrap: docker
-From: continuumio/miniconda3:4.9.2
+#From: continuumio/miniconda3:4.11.0
+From: continuumio/miniconda3:22.11.1
 
 %files
     ./.mambarc /root/.mambarc
@@ -80,10 +81,13 @@ From: continuumio/miniconda3:4.9.2
     export MHCFLURRY_DATA_DIR=/opt/mhcflurry_data
 
     pip install --upgrade pip
-    pip install protobuf==3.20.1
-    pip install tensorflow>=2.2.2
+    pip install 'tensorflow<2.16.0'
 
-    pip install pvactools==4.0.1
+    pip install git+https://github.com/griffithlab/bigmhc.git#egg=bigmhc
+    pip install git+https://github.com/griffithlab/deepimmuno.git#egg=deepimmuno
+
+    pip install pvactools==4.1.1
+    pip install mhcflurry==2.1.1
 
     cd /opt
     mkdir tmp_src
@@ -92,7 +96,7 @@ From: continuumio/miniconda3:4.9.2
     ## work around current version 20210210 is not building (https://github.com/atks/vt/issues/113)
     conda install vt==0.57721
 
-    pip install cyvcf2==0.30.4
+    pip install cyvcf2
     pip install vatools
     wget -O /usr/local/bin/bam_readcount_helper.py https://raw.githubusercontent.com/genome/docker-bam_readcount_helper-cwl/master/bam_readcount_helper.py
     chmod 755 /usr/local/bin/bam_readcount_helper.py
