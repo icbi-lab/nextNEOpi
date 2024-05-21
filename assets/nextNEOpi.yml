@@ -15,11 +15,12 @@ dependencies:
   - yara
   - optitype
 
-  # core python dependencies for GATK4 (4.4.0.0)
+  # core python dependencies for GATK4 (4.5.0.0)
   - conda-forge::python=3.6.10 # do not update
-  - pip=20.0.2 # specifying channel may cause a warning to be emitted by conda
+  - pip=21.3.1 # specifying channel may cause a warning to be emitted by conda
   - conda-forge::mkl=2019.5 # MKL typically provides dramatic performance increases for theano, tensorflow, and other key dependencies
   - conda-forge::mkl-service=2.3.0
+  - conda-forge::joblib=1.1.1 # must pin joblib - versions after 1.1.1 no longer support python 3.6
   - conda-forge::numpy=1.17.5 # do not update, this will break scipy=1.0.0
     #   verify that numpy is compiled against MKL (e.g., by checking *_mkl_info using numpy.show_config())
     #   and that it is used in tensorflow, theano, and other key dependencies
@@ -40,11 +41,12 @@ dependencies:
   - conda-forge::pandas=1.0.3
   - conda-forge::typing_extensions=4.1.1   # see https://github.com/broadinstitute/gatk/issues/7800 and linked PRs
   - conda-forge::dill=0.3.4                # used for pickling lambdas in TrainVariantAnnotationsModel
-  - conda-forge::joblib=1.1.1
+  - conda-forge::libxcrypt
+  - conda-forge::absl-py=1.4.0
 
   # core R dependencies; these should only be used for plotting and do not take precedence over core python dependencies!
   - r-base>=3.6.2
-  - r-data.table
+  - r-data.table=1.12.8
   - r-dplyr=0.8.5
   - r-getopt=1.20.3
   - r-ggplot2=3.3.0
@@ -52,7 +54,6 @@ dependencies:
   - r-gsalib=2.1
   - r-optparse=1.6.4
   - r-backports=1.1.10
-  - r-sequenza
 
   # other python dependencies; these should be removed after functionality is moved into Java code
   - biopython=1.76
@@ -62,4 +63,3 @@ dependencies:
   # pip installs should be avoided, as pip may not respect the dependencies found by the conda solver
   - pip:
       - gatkPythonPackageArchive.zip
-      - sequenza-utils
