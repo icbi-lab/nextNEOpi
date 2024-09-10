@@ -380,6 +380,7 @@ if __name__ == "__main__":
 
     hlaI_array = []
     hlaII_array = []
+    custom_hla_array = []
     hla_array = []
 
     # Check if user defined only custom list
@@ -433,10 +434,10 @@ if __name__ == "__main__":
 
             # Include custom list to final results if available
             if args.custom:
-                read_custom_hla(args.custom, hla_array)
+                read_custom_hla(args.custom, custom_hla_array)
 
             # Merge HLA I and II arrays
-            hla_array = hlaI_array + hlaII_array
+            hla_array = hlaI_array + hlaII_array + custom_hla_array
 
     # Check for valid HLA types and return final result
     valid_hlas = check_hlas(reference_hlas, hla_array)

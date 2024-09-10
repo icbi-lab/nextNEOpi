@@ -1123,7 +1123,7 @@ process 'Bwa' {
     def read_group = meta.sampleName + "_" + meta.sampleType.replaceAll("_DNA", "")
 
     def sort_threads = (task.cpus.compareTo(8) == 1) ? 8 : task.cpus
-    def SB_sort_mem =  Math.max((task.memory.toGiga() - 4), 1) + "G"
+    def SB_sort_mem =  Math.max((task.memory.toGiga() - 8), 1) + "G"
     """
     bwa mem \\
         -R "@RG\\tID:${read_group}\\tLB:${read_group}\\tSM:${read_group}\\tPL:ILLUMINA" \\
@@ -1245,8 +1245,8 @@ process 'MarkDuplicates' {
 
     script:
     def procSampleName = meta.sampleName + "_" + meta.sampleType
-    def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 8) / task.cpus)), 1)
-    def JAVA_Xmx = '-Xmx4G'
+    def STperThreadMem = (int) Math.max(((int) Math.floor((task.memory.toGiga() - 18) / task.cpus)), 1)
+    def JAVA_Xmx = '-Xmx8G'
     bam_out = [procSampleName + "_aligned_sort_mkdp.bam", procSampleName + "_aligned_sort_mkdp.bai"]
     """
     mkdir -p ${tmpDir}
