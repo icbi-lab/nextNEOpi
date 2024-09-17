@@ -27,7 +27,7 @@ import os
 import sys
 
 import vcf
-from vcf.parser import _Info
+from vcf.parser import _Info, _Format
 from vcf.utils import walk_together
 
 
@@ -36,6 +36,7 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
     VCF if they are confirmed by one of the others."""
 
     var_count = 0
+    normal_sample_name = args.normal_sample_name
 
     primary_reader = vcf.Reader(f_primary)
 
@@ -46,6 +47,10 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
     primary_reader.infos["VariantCalledBy"] = _Info(
         "VariantCalledBy", ".", "String", "variant callers that called the variant", "caller ", "0.1"
     )
+
+    # add GT if primary is ST (strelka)
+    if primary_caller_name == "ST":
+        primary_reader.formats['GT'] = _Format('GT', 1, 'String', 'Genotype')
 
     # some sanity checks
     sorted_primary_contigs = sorted(primary_reader.contigs.keys())
@@ -69,6 +74,37 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
             if len(confirmed_idx) > 0:
                 confirming_caller_names = ",".join(confirming_caller_names_[i] for i in confirmed_idx)
                 primary_rec.add_info("VariantCalledBy", primary_caller_name + "," + confirming_caller_names)
+
+                # add genotype if primary_caller_name is ST (strelka)
+                if primary_caller_name == "ST":
+                    if 'GT' not in primary_rec.FORMAT.split(':'):
+                        primary_rec.FORMAT = 'GT:' + primary_rec.FORMAT 
+                    for call in primary_rec.samples:
+                        # genotype = "0/0" if call.sample == normal_sample_name else "0/1"
+                        if call.sample == normal_sample_name:
+                            genotype =  primary_rec.INFO.get('NT')
+                            if genotype == 'ref':
+                                genotype = '0/0'
+                            elif genotype == 'het':
+                                genotype = '1/0'
+                            elif genotype == 'hom':
+                                genotype = '1/1'
+                            else:
+                                genotype = './.'
+                        else:
+                            genotype = primary_rec.INFO.get('SGT')
+                            if genotype:
+                                genotype = '0/1'
+                            else:
+                                genotype = './.'
+                        if hasattr(call.data, 'GT'):
+                            call.data.GT = genotype
+                        else:
+                            new_fields = ['GT'] + list(call.data._fields)
+                            NewCallData = vcf.model.make_calldata_tuple(new_fields)
+                            new_call_data = NewCallData(genotype, *call.data)
+                            call.data = new_call_data
+
                 confirmed = True
             else:
                 primary_rec.add_info("VariantCalledBy", primary_caller_name)
@@ -128,6 +164,9 @@ if __name__ == "__main__":
         required=True,
         type=_file_write,
         help="VCF file for unconfirmed vars produced by " "this tool",
+    )
+    parser.add_argument(
+        "--normal_sample_name", required=True, type=str, help="Name of the normal sample",
     )
 
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
