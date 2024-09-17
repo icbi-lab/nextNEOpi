@@ -3176,6 +3176,7 @@ process 'mkHCsomaticVCF' {
         --confirming_names ${confirming_caller_names} \\
         --out_vcf ${meta.sampleName}_Somatic.hc.vcf \\
         --out_single_vcf ${meta.sampleName}_Somatic.single.vcf \\
+        --sample_name ${meta.sampleName} \\
     > var_count.txt
 
     VARCOUNT=\$(cut -f2 var_count.txt)
@@ -4503,6 +4504,19 @@ process 'Clonality' {
         log.warn "WARNING: neither ASCAT nor Sequenza did produce results"
     }
 
+    def variant_caller = "--variant_caller "
+    if (params.primaryCaller == "VS") {
+        variant_caller += "varscan"
+    } else if (params.primaryCaller == "M1") {
+        variant_caller += "mutect"
+    } else if (params.primaryCaller == "M2") {
+        variant_caller += "mutect2"
+    } else if (params.primaryCaller == "ST") {
+        variant_caller += "strelka2"
+    } else {
+        variant_caller = ""
+    }
+
     if (ascatOK || sequenzaOK)
         """
         mkCCF_input.py \\
@@ -4511,6 +4525,7 @@ process 'Clonality' {
             ${seg_opt} \\
             ${purity_opt} \\
             --min_vaf 0.01 \\
+            ${variant_caller} \\
             --result_table ${meta.sampleName}_segments_CCF_input.txt && \\
         Rscript \\
             ${baseDir}/bin/CCF.R \\
