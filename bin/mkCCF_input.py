@@ -49,6 +49,54 @@ def is_number(a):
     return bool_a
 
 
+def calculate_af_from_strelka2(record, sampleName):
+
+    # Extract basic variant information
+    chrom = record.CHROM
+    pos = record.POS
+    ref = record.REF
+    alts = record.ALT
+
+    sample = record.genotype(sampleName)
+
+    # Check if it's a SNP based on the presence of 'AU' in FORMAT fields
+    if 'AU' in record.FORMAT:
+        dp = sample['DP']  # Get total depth
+        au = sample['AU']  # Get counts for 'A' allele
+        cu = sample['CU']  # Get counts for 'C' allele
+        gu = sample['GU']  # Get counts for 'G' allele
+        tu = sample['TU']  # Get counts for 'T' allele
+
+        # Calculate AD and AF for the alternate allele
+        if alts[0] == 'A':
+            ad = au
+        elif alts[0] == 'C':
+            ad = cu
+        elif alts[0] == 'G':
+            ad = gu
+        elif alts[0] == 'T':
+            ad = tu
+        else:
+            ad = [0, 0]  # If the alternate allele is not A, C, G or T
+
+        af = ad[0] / dp if dp > 0 else 0
+
+        # Calculate reference allele depth (assuming diploid)
+        ref_ad = [dp - ad[0], dp - ad[1]] 
+
+    # Check if it's an indel based on the presence of 'TIR' in FORMAT fields
+    elif 'TIR' in record.FORMAT:
+        dp = sample['DP']
+        tir = sample['TIR']
+        ad = tir
+        af = ad[0] / dp if dp > 0 else 0
+
+        # Calculate reference allele depth (assuming diploid)
+        ref_ad = [dp - ad[0], dp - ad[1]] 
+
+    return [ad[0], ref_ad[0], af]
+
+
 def get_segments(seg_file):
     segments = {}
 
@@ -171,9 +219,18 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
     write_fh.write("\t".join(header_fields) + "\n")
 
     for rec in reader:
-        vaf = rec.genotype(sampleName)["AF"]
-        ad = rec.genotype(sampleName)["AD"]
-        norm_cnt, mut_cnt = ad
+        if args.variant_caller  in ["mutect", "mutect2"]:
+            vaf = rec.genotype(sampleName)["AF"]
+            ad = rec.genotype(sampleName)["AD"]
+            norm_cnt, mut_cnt = ad
+        elif args.variant_caller == "varscan":
+            freq = rec.genotype(sampleName)["FREQ"]
+            vaf = float(freq[:-1]) / 100
+            mut_cnt = rec.genotype(sampleName)["AD"]
+            norm_cnt = rec.genotype(sampleName)["RD"]
+        elif args.variant_caller == "strelka2":
+            mut_cnt, norm_cnt, vaf = calculate_af_from_strelka2(rec, sampleName)
+
 
         variant_type = rec.INFO["CSQ"][0].split("|")[1]
         coding = "T" if is_coding(variant_type) else "F"
@@ -257,6 +314,13 @@ if __name__ == "__main__":
         type=str,
         help="Output file for CCF calculations input",
     )
+    parser.add_argument(
+        '--variant_caller',
+        choices=['varscan', 'strelka2', 'mutect', 'mutect2'],
+        default='mutect2',
+        help='Choose the tool to use: varscan or other (default: other)'
+    )
+
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
 
     args = parser.parse_args()
