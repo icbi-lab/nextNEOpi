@@ -3176,7 +3176,7 @@ process 'mkHCsomaticVCF' {
         --confirming_names ${confirming_caller_names} \\
         --out_vcf ${meta.sampleName}_Somatic.hc.vcf \\
         --out_single_vcf ${meta.sampleName}_Somatic.single.vcf \\
-        --sample_name ${meta.sampleName} \\
+        --normal_sample_name ${meta.sampleName}_normal \\
     > var_count.txt
 
     VARCOUNT=\$(cut -f2 var_count.txt)
