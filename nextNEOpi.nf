@@ -6666,6 +6666,11 @@ def defineResources(resource_type, wes, hlahd) {
         resources_files[r] = check_resource(r, resource_type)
     }
 
+    if (wes == false && resource_type == "references") {
+        resources_files["BaitsBed"] = 'NO_FILE'
+        resources_files["RegionsBed"] = 'NO_FILE'
+    }
+
     return(resources_files)
 }
 
