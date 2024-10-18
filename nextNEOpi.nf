@@ -5659,6 +5659,7 @@ process 'pVACseq' {
                              "MHC_Class_II/" + meta.sampleName + "_tumor_" + hla_type + ".all_epitopes.tsv"]
 
     """
+    rm -f .iedb_install_ok.chck
     pvacseq run \\
         --iedb-install-directory /opt/iedb \\
         -t ${task.cpus} \\
