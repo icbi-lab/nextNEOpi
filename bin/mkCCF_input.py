@@ -49,7 +49,7 @@ def is_number(a):
     return bool_a
 
 
-def calculate_af_from_strelka2(record, sampleName):
+def get_ad_from_strelka2(record, sampleName):
 
     # Extract basic variant information
     chrom = record.CHROM
@@ -79,22 +79,19 @@ def calculate_af_from_strelka2(record, sampleName):
         else:
             ad = [0, 0]  # If the alternate allele is not A, C, G or T
 
-        af = ad[0] / dp if dp > 0 else 0
-
         # Calculate reference allele depth (assuming diploid)
-        ref_ad = [dp - ad[0], dp - ad[1]] 
+        ref_ad = [dp - ad[0], dp - ad[1]]
 
     # Check if it's an indel based on the presence of 'TIR' in FORMAT fields
     elif 'TIR' in record.FORMAT:
         dp = sample['DP']
         tir = sample['TIR']
         ad = tir
-        af = ad[0] / dp if dp > 0 else 0
 
         # Calculate reference allele depth (assuming diploid)
-        ref_ad = [dp - ad[0], dp - ad[1]] 
+        ref_ad = [dp - ad[0], dp - ad[1]]
 
-    return [ad[0], ref_ad[0], af]
+    return [ad[0], ref_ad[0]]
 
 
 def get_segments(seg_file):
@@ -103,7 +100,7 @@ def get_segments(seg_file):
     i = 0
     old_chrom = ""
 
-    # skip headr
+    # skip header
     seg_file.readline()
 
     for line in seg_file:
@@ -224,13 +221,12 @@ def make_ccf_calc_input(pat_id, sample_type, vcf_in, segments, purity, min_vaf, 
             ad = rec.genotype(sampleName)["AD"]
             norm_cnt, mut_cnt = ad
         elif args.variant_caller == "varscan":
-            freq = rec.genotype(sampleName)["FREQ"]
-            vaf = float(freq[:-1]) / 100
+            vaf = rec.genotype(sampleName)["AF"]
             mut_cnt = rec.genotype(sampleName)["AD"]
             norm_cnt = rec.genotype(sampleName)["RD"]
         elif args.variant_caller == "strelka2":
-            mut_cnt, norm_cnt, vaf = calculate_af_from_strelka2(rec, sampleName)
-
+            vaf = rec.genotype(sampleName)["AF"]
+            mut_cnt, norm_cnt = get_ad_from_strelka2(rec, sampleName)
 
         variant_type = rec.INFO["CSQ"][0].split("|")[1]
         coding = "T" if is_coding(variant_type) else "F"
