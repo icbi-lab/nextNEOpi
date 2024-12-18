@@ -51,6 +51,9 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
     # add GT if primary is ST (strelka)
     if primary_caller_name == "ST":
         primary_reader.formats['GT'] = _Format('GT', 1, 'String', 'Genotype')
+    if primary_caller_name in ["ST", "VS"]:
+        primary_reader.formats['AF'] = _Format('AF', 1, 'Float', 'Allele Frequency')
+
 
     # some sanity checks
     sorted_primary_contigs = sorted(primary_reader.contigs.keys())
@@ -75,11 +78,94 @@ def make_hc_somatic_vars(f_primary, primary_caller_name, f_confirming, confirmin
                 confirming_caller_names = ",".join(confirming_caller_names_[i] for i in confirmed_idx)
                 primary_rec.add_info("VariantCalledBy", primary_caller_name + "," + confirming_caller_names)
 
+                if primary_caller_name == "VS":  # Varscan case
+                    if 'FREQ' in primary_rec.FORMAT:  # Check if FREQ exists
+                        formats = primary_rec.FORMAT.split(":")  # Split FORMAT string into a list
+                        if "FREQ" in formats:
+                            freq_pos= formats.index("FREQ")
+                            formats.remove("FREQ")
+                        if "AF" not in formats:
+                            formats.insert(freq_pos, "AF")  # insert AF after GT
+
+                        primary_rec.FORMAT = ":".join(formats)  # Join the list back into a string
+
+                        for call in primary_rec.samples:
+                            if 'FREQ' in call.data._fields:
+                                freq_string = call['FREQ']
+
+                                try:
+                                    freq = round(float(freq_string[:-1]) / 100, 3)  # Convert percentage string to float
+                                    # Update call data
+                                    new_fields = list(call.data._fields)
+                                    if 'AF' not in call.data._fields:
+                                        new_fields.insert(freq_pos, 'AF') # Ensure the field exists before creating the tuple
+                                    if 'FREQ' in new_fields:
+                                        new_fields.remove('FREQ')
+
+                                    NewCallData = vcf.model.make_calldata_tuple(new_fields)
+
+                                    values = [getattr(call.data, field) for field in call.data._fields if field != 'FREQ']
+                                    values.insert(new_fields.index('AF'), freq)
+                                    new_call_data = NewCallData(*values)
+
+                                    call.data = new_call_data
+                                except (TypeError, ValueError):  # Handle potential errors in conversion
+                                    print(f"WARNING: Could not convert FREQ value '{freq_string}' "
+                                          f"for sample {call.sample} at {primary_rec.CHROM}:{primary_rec.POS}")
+                                    pass  # or handle differently if you don't want to ignore
+
+
                 # add genotype if primary_caller_name is ST (strelka)
                 if primary_caller_name == "ST":
-                    if 'GT' not in primary_rec.FORMAT.split(':'):
-                        primary_rec.FORMAT = 'GT:' + primary_rec.FORMAT 
+                    if 'GT' not in primary_rec.FORMAT or 'AF' not in primary_rec.FORMAT:
+                        parts = primary_rec.FORMAT.split(':')
+                        if 'GT' in parts:
+                            gt_index = parts.index('GT')
+                            parts.insert(gt_index + 1, 'AF')
+                            primary_rec.FORMAT = ':'.join(parts)
+                        else:  # Handle the case where GT might not exist.
+                            primary_rec.FORMAT = 'GT:AF:' + primary_rec.FORMAT
+
+                    # get REF and ALT count keys
+                    if not primary_rec.is_indel:
+                        ref_base = primary_rec.REF
+                        alt_base = primary_rec.ALT[0]  # Assuming only one ALT allele for simplicity
+                        ref_counts_key = f"{ref_base}U"
+                        alt_counts_key = f"{alt_base}U"
+                    else:
+                        ref_counts_key = "TAR"
+                        alt_counts_key = "TIR"
+
                     for call in primary_rec.samples:
+                        try:
+                            ref_counts = call[ref_counts_key]
+                            alt_counts = call[alt_counts_key]
+
+                            # Extract tier 1 counts (first comma-delimited value or first element if already a list)
+                            tier1_ref_counts = int(ref_counts.split(',')[0]) if isinstance(ref_counts, str) else int(ref_counts[0])
+                            tier1_alt_counts = int(alt_counts.split(',')[0]) if isinstance(alt_counts, str) else int(alt_counts[0])
+
+                            # Calculate allele frequency
+                            if tier1_ref_counts + tier1_alt_counts > 0:
+                                af = tier1_alt_counts / (tier1_ref_counts + tier1_alt_counts)
+                                af = round(af, 3)
+                            else:
+                                af = 0.0
+
+                            if hasattr(call.data, 'AF'):
+                                call.data.AF = af
+                            else:
+                                new_fields = ['AF'] + list(call.data._fields)
+                                NewCallData = vcf.model.make_calldata_tuple(new_fields)
+                                new_call_data = NewCallData(af, *call.data)
+                                call.data = new_call_data
+
+                        except KeyError:
+                            # Handle cases where the required FORMAT fields are missing
+                            print(f"WARNING: Missing {ref_counts_key} or {alt_counts_key} "
+                                f"for sample {call.sample} in record {primary_rec.CHROM}:{primary_rec.POS}")
+                            call.data.AF = None
+
                         # genotype = "0/0" if call.sample == normal_sample_name else "0/1"
                         if call.sample == normal_sample_name:
                             genotype =  primary_rec.INFO.get('NT')

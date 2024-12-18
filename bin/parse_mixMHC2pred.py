@@ -52,22 +52,28 @@ def parse_vcf(vep_vcf, sample_name, normal_name):
     vcf_reader = vcf.Reader(vep_vcf)
 
     for record in vcf_reader:
+        sample_call = record.genotype(sample_name)
+        sample_genotype_fields = sample_call.data._fields
+        normal_call = record.genotype(normal_name)
+        normal_genotype_fields = normal_call.data._fields
+
         chrom = record.CHROM
         pos = record.POS
         ref = "".join(map(str, record.REF))
         alt = "".join(map(str, record.ALT))
-        af = record.genotype(sample_name)["AF"] if "AF" in str(record.genotype(sample_name)) else "NA"
-        dp = record.genotype(sample_name)["DP"] if "DP" in str(record.genotype(sample_name)) else "NA"
 
-        raf = record.genotype(sample_name)["RAF"] if "RAF" in str(record.genotype(sample_name)) else "NA"
-        rdp = record.genotype(sample_name)["RDP"] if "RDP" in str(record.genotype(sample_name)) else "NA"
+        af = record.genotype(sample_name)["AF"] if "AF" in sample_genotype_fields else "NA"
+        dp = record.genotype(sample_name)["DP"] if "DP" in sample_genotype_fields else "NA"
 
-        gx = record.genotype(sample_name)["GX"] if "GX" in str(record.genotype(sample_name)) else "None"
+        raf = record.genotype(sample_name)["RAF"] if "RAF" in sample_genotype_fields else "NA"
+        rdp = record.genotype(sample_name)["RDP"] if "RDP" in sample_genotype_fields else "NA"
+
+        gx = record.genotype(sample_name)["GX"] if "GX" in sample_genotype_fields else "None"
         if str(gx).find("|") != -1:
             gx = str(gx).split("|")[1]
 
-        normal_af = record.genotype(normal_name)["AF"]
-        normal_dp = record.genotype(normal_name)["DP"]
+        normal_af = record.genotype(normal_name)["AF"] if "AF" in normal_genotype_fields else "NA"
+        normal_dp = record.genotype(normal_name)["DP"] if "DP" in normal_genotype_fields else "NA"
 
         CSQ = record.INFO["CSQ"][0].split("|")
         variant_type = CSQ[1]
