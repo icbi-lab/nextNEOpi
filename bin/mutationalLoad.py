@@ -166,7 +166,8 @@ def get_variants_from_vcf(vcf_file, var_type, ccf_data):
             print("File not found: " + vcf_file)
             raise
 
-    elif vcf_file.endswith(".gz") and not os.path.exists(vcf_file + ".gz.tbi"):
+#    elif vcf_file.endswith(".gz") and not os.path.exists(vcf_file + ".gz.tbi"):
+    elif vcf_file.endswith(".gz") and not os.path.exists(vcf_file + ".tbi"):
         try:
             bgz_vcf = pysam.tabix_index(
                 vcf_file, preset="vcf", force=True, keep_original=True
@@ -175,7 +176,8 @@ def get_variants_from_vcf(vcf_file, var_type, ccf_data):
             print("File not found: " + vcf_file)
             raise
     else:
-        bgz_vcf = vcf_file + ".gz"
+#        bgz_vcf = vcf_file + ".gz"
+        bgz_vcf = vcf_file
 
     vcf = pysam.TabixFile(bgz_vcf, parser=pysam.asVCF())
 

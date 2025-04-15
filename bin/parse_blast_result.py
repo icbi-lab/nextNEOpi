@@ -53,7 +53,7 @@ if __name__ == "__main__":
         "--epitope_file",
         required=True,
         type=str,
-        help="TSV file with neoepitopes from pVACseq or neoFUSE",
+        help="TSV file with neoepitopes from pVACseq, pVACsplice or neoFUSE",
     )
     parser.add_argument(
         "--blast_result",
@@ -65,8 +65,8 @@ if __name__ == "__main__":
         "--epitope_caller",
         required=True,
         type=str,
-        choices=["pVACseq", "NeoFuse"],
-        help="Epitope calling tool used: [pVACseq|NeoFuse]",
+        choices=["pVACseq", "pVACsplice", "NeoFuse"],
+        help="Epitope calling tool used: [pVACseq|pVACsplice|NeoFuse]",
     )
     parser.add_argument(
         "--version", action="version", version="%(prog)s " + __version__
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     epitope_caller = args.epitope_caller
 
     epitopes = pd.read_csv(epitope_file, sep="\t")
-    peptide_columnn = {"pVACseq": "MT Epitope Seq", "NeoFuse": "Fusion_Peptide"}
+    peptide_columnn = {"pVACseq": "MT Epitope Seq", "pVACsplice": "Epitope Seq", "NeoFuse": "Fusion_Peptide"}
 
     blast_hits = pd.read_csv(
         blast_result,
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     ]
 
     blast_hits = blast_hits.groupby("peptide_seq").agg(
-        {"ref_match_protein_id": lambda id: ";".join([i.split("|")[1] for i in id])}
+        {"ref_match_protein_id": lambda id: ";".join([i.split("|")[1] if "|" in i else i for i in id])}
     )
 
     result = pd.merge(

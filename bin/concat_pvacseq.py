@@ -26,7 +26,7 @@ def concat_files(directory, pattern):
 
     # Iterate over the files and read them into DataFrames
     for file in files_to_concat:
-        df = pd.read_csv(file, sep="\t")
+        df = pd.read_csv(file, sep="\t", dtype=str)
         dfs.append(df)
 
     # Concatenate the DataFrames
