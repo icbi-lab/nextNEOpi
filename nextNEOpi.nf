@@ -1637,7 +1637,7 @@ process 'GetPileup' {
     """
 }
 
-(BaseRecalNormal_out_ch0, BaseRecalGATK4_out) = BaseRecalGATK4_out_ch1.into(2)
+(BaseRecalNormal_out_ch0, BaseRecalGATK4_out, BaseRecalGATK4_out_Mosdepth_ch0) = BaseRecalGATK4_out_ch1.into(3)
 
 BaseRecalNormal_out_ch0.filter {
                                 it[0].sampleType == "normal_DNA"
@@ -1682,6 +1682,52 @@ if (have_GATK3) {
         BaseRecalGATK4_out
     ) = BaseRecalGATK4_out.into(6)
 }
+
+/*
+    Mosdepth
+    get genome/exome coverage
+*/
+process 'Mosdepth' {
+
+    label 'Mosdepth'
+
+    tag "$meta.sampleName"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/mosdepth",
+        mode: publishDirMode
+
+
+    input:
+    tuple(
+        val(meta),
+        path(bam)
+    ) from BaseRecalGATK4_out_Mosdepth_ch0
+    path(RegionsBed) from Channel.value(reference.RegionsBed)
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+
+    output:
+    tuple(
+        val(meta),
+        path("${meta.sampleName}_${meta.sampleType}.mosdepth.*.txt")
+    ) into Mosdepth_out_ch0
+    path("${meta.sampleName}_${meta.sampleType}.regions.bed.gz") optional true
+    path("${meta.sampleName}_${meta.sampleType}.per-base.bed.gz") optional true
+
+    script:
+    def interval = params.WES ? "--by ${RegionsBed}" : ""
+
+    """
+    mosdepth \\
+    --threads ${task.cpus} \\
+    $interval \\
+    ${meta.sampleName}_${meta.sampleType} \\
+    ${bam[0]}
+    """
+
+}
+
 
 /*
     MUTECT2
@@ -6889,6 +6935,12 @@ alignmentMetrics_ch = alignmentMetrics_ch.map{
         return [meta, out_file]
 }
 
+Mosdepth_out_ch0 = Mosdepth_out_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
 process multiQC {
 
@@ -6907,6 +6959,7 @@ process multiQC {
         .mix(ch_fastp)
         .mix(ch_fastqc_trimmed)
         .mix(alignmentMetrics_ch)
+        .mix(Mosdepth_out_ch0)
         .transpose()
         .groupTuple()
 
