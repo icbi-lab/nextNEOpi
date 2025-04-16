@@ -430,7 +430,7 @@ Due to license restrictions you may also need to download and install <strong>HL
 <p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/">https://apps-01.i-med.ac.at/resources/nextneopi/</a></p>
 <p>the bundle is named to match the release version <code>nextNEOpi_&lt;version&gt;_resources.tar.gz</code></p>
 <p>e.g.:</p>
-<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz</a></p>
+<p><a href="https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.5_resources.tar.gz">https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.5_resources.tar.gz</a></p>
 <p>download and extract the contents of the archive into the directory you specified for <code>resourcesBaseDir</code> in the <code>conf/params.config</code> file.</p>
 <p>The structure should look as shown blow:</p>
 <pre class="hljs"><code><div>├── {resourcesBaseDir}
@@ -738,6 +738,9 @@ on larger fastq files. Default: false</p>
 <p><code>--disable_OptiType</code> Disable OptiType for HLA typing. If set, <strong>HLA-HD</strong> or a user supplied <strong>custom HLA file</strong> must be available (see <code>--HLAHD_DIR</code> and/or <code>HLAfile</code> field in the batchFile)</p>
 <p><code>--pVACseq_filter_set</code>   Can be one of [standard, relaxed, custom]. The <code>standard</code> filter set is using the pVACseq default filters. The <code>relaxed</code> filter set is filtering only for ic50 &lt; 500 &amp; rank &lt; 2 &amp; expn-val &gt; 2. With filter set <code>custom</code> users can define a custom set of filters by providing the desired filters (space separated) using the <code>--pVACseq_custom_filters</code> option. E.g. <code>--pVACseq_filter_set custom --pVACseq_custom_filters &quot;--binding-threshold 250 --percentile-threshold 1&quot;</code>. For filter options please see also the pVACseq manual. Default: standard</p>
 <p><code>--pVACseq_custom_filters</code> See <code>--pVACseq_filter_set</code></p>
+<p><code>--pVACsplice_filter_set</code> Can be one of [standard, relaxed, custom]. The <code>standard</code> filter set is using the pVACsplice default filters. The <code>relaxed</code> filter set is filtering only for ic50 &lt; 500 &amp; rank &lt; 2 &amp; expn-val &gt; 2. With filter set
+<code>custom</code> users can define a custom set of filters by providing the desired filters (space separated) using the <code>--pVACsplice_custom_filters</code> option. E.g. <code>--pVACsplice_filter_set custom --pVACsplice_custom_filters &quot;--binding-threshold 250 --percentile-threshold 1&quot;</code>. For filter options please see also the pVACsplice manual. Default: standard</p>
+<p><code>--pVACsplice_custom_filters</code> See <code>--pVACsplice_filter_set</code></p>
 <p><strong>Further options:</strong>        There are many more options that can be set in the params.conf file or specified on the commandline
 (see <code>conf/params.config</code>)</p>
 <h2 id="3-output">3. Output</h2>
@@ -758,7 +761,9 @@ on larger fastq files. Default: false</p>
 │   │   ├── 09_CCF
 │   │   ├── 10_HLA_typing
 │   │   ├── 11_Fusions
+│   │   ├── 11_regtools
 │   │   ├── 12_pVACseq
+│   │   ├── 12_pVACsplice
 │   │   ├── 13_mixMHC2pred
 │   │   ├── 14_CSiN
 │   │   ├── 14_IGS
@@ -774,7 +779,13 @@ on larger fastq files. Default: false</p>
 ├── neoantigens
 │   ├── Subject_ID
 │   │   ├── Class_I
+│   │   │   ├── Canonical
+│   │   │   ├── Fusions
+│   │   │   └── Splicing
 │   │   ├── Class_II
+│   │   │   ├── Canonical
+│   │   │   ├── Fusions
+│   │   │   └── Splicing
 │   │   └── Final_HLAcalls
 │   ├── Subject_02
 │   │   ├── [...]
@@ -788,7 +799,7 @@ on larger fastq files. Default: false</p>
     ├── 00_prepare_Intervals
     └── 01_prepare_CNVkit
 </div></code></pre>
-<p><strong>4.</strong> <em><strong>[Manual installaton: Not recommended]:</strong></em></p>
+<p><strong>4.</strong> <em><strong>[Manual installaton: Not recommended, NO support]:</strong></em></p>
 <p>If you prefer local installation of the analysis tools please install the following software:</p>
 <ul>
 <li>FASTQC        (Version &gt;= 0.11.8)</li>
@@ -798,11 +809,11 @@ on larger fastq files. Default: false</p>
 <li>BWA    (Version &gt;= 0.7.17)</li>
 <li>SAMTOOLS   (Version &gt;= 1.9)</li>
 <li>GATK3   (Version 3.8-0)</li>
-<li>GATK4   (Version &gt;= 4.5.0.0)</li>
+<li>GATK4   (Version &gt;= 4.6.1.0)</li>
 <li>VARSCAN   (Version 2.4.6)</li>
 <li>MUTECT1   (Version 1.1.7) ---- optional</li>
 <li>BAMREADCOUNT  (Version 0.8.0)</li>
-<li>VEP    (Version v111)</li>
+<li>VEP    (Version v113)</li>
 <li>BGZIP</li>
 <li>TABIX</li>
 <li>BCFTOOLS</li>
@@ -816,6 +827,7 @@ on larger fastq files. Default: false</p>
 <li>YARA</li>
 <li>HLA-HD</li>
 <li>ALLELECOUNT</li>
+<li>regtools</li>
 <li>RSCRIPT (R &gt; 3.6.2)</li>
 <li>SEQUENZA (3.0)</li>
 <li>CNVkit</li>
