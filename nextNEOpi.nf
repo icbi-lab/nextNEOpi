@@ -726,6 +726,7 @@ process 'SplitIntervals' {
         SplitIntervals_out_ch4,
         SplitIntervals_out_ch5,
         SplitIntervals_out_ch6,
+        SplitIntervals_out_ch7,
     )
     val("${IntervalName}") into SplitIntervals_out_ch0_Name
 
@@ -3570,16 +3571,18 @@ if(have_GATK3) {
 
         tag "${meta.sampleName}"
 
-        publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
-            mode: publishDirMode
-
         input:
         tuple(
             val(meta),
             path(tumorBAM),
-            path(combinedVCF)
+            path(combinedVCF),
+            path(intervals)
         ) from GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
             .join(VEPvcf_out_ch0, by: [0])
+            .combine(
+                SplitIntervals_out_ch7.flatten()
+            )
+
 
         tuple(
             path(RefFasta),
@@ -3594,13 +3597,10 @@ if(have_GATK3) {
         output:
         tuple(
             val(meta),
-            path("${meta.sampleName}_vep_phased.{vcf.gz,vcf.gz.tbi}"),
-        ) into (
-            mkPhasedVCF_out_ch0,
-            mkPhasedVCF_out_regtools_ch0,
-            mkPhasedVCF_out_pVACseq_ch0,
-            generate_protein_fasta_phased_vcf_ch0
-        )
+            path("${meta.sampleName}_${intervals}_vep_phased.vcf.gz"),
+            path("${meta.sampleName}_${intervals}_vep_phased.vcf.gz.tbi"),
+        ) into GatherReadbackedPhasedVCF_ch0
+
 
         script:
         def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
@@ -3610,10 +3610,56 @@ if(have_GATK3) {
             -R ${RefFasta} \\
             -I ${tumorBAM[0]} \\
             -V ${combinedVCF[0]} \\
-            -L ${combinedVCF[0]} \\
-            -o ${meta.sampleName}_vep_phased.vcf.gz
+            -L ${intervals} \\
+            -o ${meta.sampleName}_${intervals}_vep_phased.vcf.gz
         """
     }
+
+    // Merge scattered readbackphased vcfs
+    process 'GatherReadbackedPhasedVCF' {
+
+        label 'nextNEOpiENV'
+
+        tag "$meta.sampleName"
+
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
+            mode: publishDirMode
+
+        input:
+        tuple(
+            val(meta),
+            path(phased_interval_vcf),
+            path(phased_interval_tbi)
+        ) from GatherReadbackedPhasedVCF_ch0
+            .groupTuple(by: [0])
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+        output:
+        tuple(
+            val(meta),
+            path("${meta.sampleName}_vep_phased.{vcf.gz,vcf.gz.tbi}")
+        ) into (
+            mkPhasedVCF_out_ch0,
+            mkPhasedVCF_out_regtools_ch0,
+            mkPhasedVCF_out_pVACseq_ch0,
+            generate_protein_fasta_phased_vcf_ch0
+        )
+
+        script:
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+        def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        """
+        mkdir -p ${tmpDir}
+
+        gatk --java-options ${java_opts} MergeVcfs \\
+            --TMP_DIR ${tmpDir} \\
+            -I ${phased_interval_vcf.join(" -I ")} \\
+            -O ${meta.sampleName}_vep_phased.vcf.gz
+        """
+    }
+
+
 } else {
 
     log.warn "WARNING: GATK3 not installed! Can not generate readbacked phased VCF:\n" +
