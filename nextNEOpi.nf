@@ -1300,9 +1300,11 @@ MarkDuplicates_out_ch4.branch {
 
 MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_ch4.tumor.join(MarkDuplicates_out_ch4.normal, by:[0])
 
+(AlignmentMetrics_in_ch0, AlignmentMetrics_in_ch1) = MarkDuplicates_out_ch0.into(2)
+
 if(params.WES) {
     // Generate HS metrics using picard
-    process 'alignmentMetrics' {
+    process 'CollectHsMetrics' {
 
         label 'nextNEOpiENV'
 
@@ -1312,7 +1314,7 @@ if(params.WES) {
             mode: publishDirMode
 
         input:
-        tuple val(meta), path(bam) from MarkDuplicates_out_ch0
+        tuple val(meta), path(bam) from AlignmentMetrics_in_ch0
 
         tuple(
             path(RefFasta),
@@ -1328,7 +1330,7 @@ if(params.WES) {
         val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
-        tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_ch // multiQC
+        tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_out_ch0 // multiQC
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
@@ -1343,20 +1345,56 @@ if(params.WES) {
             -R ${RefFasta} \\
             --BAIT_INTERVALS ${BaitIntervalsList} \\
             --TARGET_INTERVALS ${IntervalsList} \\
-            --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
-        gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
-            --TMP_DIR ${tmpDir} \\
-            --INPUT ${bam[0]} \\
-            --OUTPUT ${procSampleName}.AS.metrics.txt \\
-            -R ${RefFasta} &&
-        samtools flagstat -@${task.cpus} ${bam[0]} > ${procSampleName}.flagstat.txt
+            --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt
         """
     }
 } else {
     // bogus channel for multiqc
-    alignmentMetrics_ch = Channel.empty()
+    alignmentMetrics_out_ch0 = Channel.empty()
 }
 
+process 'CollectAlignmentSummaryMetrics' {
+
+    label 'nextNEOpiENV'
+
+    tag "$meta.sampleName : $meta.sampleType"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/alignments/",
+        mode: publishDirMode
+
+    input:
+    tuple val(meta), path(bam) from AlignmentMetrics_in_ch1
+
+    tuple(
+        path(RefFasta),
+        path(RefIdx)
+    ) from Channel.value(
+        [ reference.RefFasta,
+        reference.RefIdx ]
+    )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+    output:
+    tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_out_ch1 // multiQC
+
+    script:
+    procSampleName = meta.sampleName + "_" + meta.sampleType
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    """
+    mkdir -p ${tmpDir}
+    gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
+        --TMP_DIR ${tmpDir} \\
+        --INPUT ${bam[0]} \\
+        --OUTPUT ${procSampleName}.AS.metrics.txt \\
+        -R ${RefFasta} &&
+    samtools flagstat -@${task.cpus} ${bam[0]} > ${procSampleName}.flagstat.txt
+    """
+}
+
+// combine metrics ch
+alignmentMetrics_ch = alignmentMetrics_out_ch0.mix(alignmentMetrics_out_ch1)
 
 /*
  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
