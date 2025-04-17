@@ -1687,6 +1687,9 @@ if (have_GATK3) {
     Mosdepth
     get genome/exome coverage
 */
+
+mosdepth_regions = params.WES ? Channel.value(reference.RegionsBed) : Channel.value([])
+
 process 'Mosdepth' {
 
     label 'Mosdepth'
@@ -1702,7 +1705,7 @@ process 'Mosdepth' {
         val(meta),
         path(bam)
     ) from BaseRecalGATK4_out_Mosdepth_ch0
-    path(RegionsBed) from Channel.value(reference.RegionsBed)
+    path(RegionsBed) from mosdepth_regions
 
     val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
