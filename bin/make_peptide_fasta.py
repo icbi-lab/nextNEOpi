@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "--epitope_file",
         required=True,
         type=str,
-        help="TSV file with neoepitopes from pVACseq or neoFUSE",
+        help="TSV file with neoepitopes from pVACseq, pVACsplice or neoFUSE",
     )
     parser.add_argument(
         "--fasta",
@@ -63,8 +63,8 @@ if __name__ == "__main__":
         "--epitope_caller",
         required=True,
         type=str,
-        choices=["pVACseq", "NeoFuse"],
-        help="Epitope calling tool used: [pVACseq|NeoFuse]",
+        choices=["pVACseq", "pVACsplice", "NeoFuse"],
+        help="Epitope calling tool used: [pVACseq|pVACsplice|NeoFuse]",
     )
     parser.add_argument(
         "--version", action="version", version="%(prog)s " + __version__
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     epitopes = pd.read_csv(epitope_file, sep="\t")
 
-    peptide_columnn = {"pVACseq": "MT Epitope Seq", "NeoFuse": "Fusion_Peptide"}
+    peptide_columnn = {"pVACseq": "MT Epitope Seq", "pVACsplice": "Epitope Seq", "NeoFuse": "Fusion_Peptide"}
 
     idx = 0
     for pep_seq in epitopes[peptide_columnn[epitope_caller]].unique():

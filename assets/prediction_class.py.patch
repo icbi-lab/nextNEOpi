@@ -1,0 +1,11 @@
+--- prediction_class.py.ori	2025-03-12 10:25:15.307468422 +0100
++++ prediction_class.py.new	2025-03-12 10:17:49.879376587 +0100
+@@ -437,7 +437,7 @@
+                 tmp_input_file.write("{}\n".format(epitope))
+             tmp_input_file.close()
+             tmp_output_file = tempfile.NamedTemporaryFile('r', dir=tmp_dir, delete=False)
+-            arguments = ['bigmhc_predict', '-a', allele, '-i', tmp_input_file.name, '-p', '0', '-c', '0', '-o', tmp_output_file.name, '-m', bigmhc_type, '-d', 'cpu']
++            arguments = ['bigmhc_predict', '-a', allele, '-i', tmp_input_file.name, '-p', '0', '-c', '0', '-o', tmp_output_file.name, '-m', bigmhc_type, '-d', 'cpu', '-j', '1' ]
+             stderr_fh = tempfile.NamedTemporaryFile('w', dir=tmp_dir, delete=False)
+             try:
+                 response = run(arguments, check=True, stdout=DEVNULL, stderr=stderr_fh)

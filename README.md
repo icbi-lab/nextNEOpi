@@ -88,7 +88,7 @@ the bundle is named to match the release version `nextNEOpi_<version>_resources.
 
 e.g.:
 
-<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.4_resources.tar.gz>
+<https://apps-01.i-med.ac.at/resources/nextneopi/nextNEOpi_1.5_resources.tar.gz>
 
 download and extract the contents of the archive into the directory you specified for ```resourcesBaseDir``` in the ```conf/params.config``` file.
 
@@ -301,6 +301,12 @@ nextflow run nextNEOpi.nf \
 
 ```--pVACseq_custom_filters``` See ```--pVACseq_filter_set```
 
+```--pVACsplice_filter_set``` Can be one of [standard, relaxed, custom]. The ```standard``` filter set is using the pVACsplice default filters. The ```relaxed``` filter set is filtering only for ic50 < 500 & rank < 2 & expn-val > 2. With filter set
+```custom``` users can define a custom set of filters by providing the desired filters (space separated) using the ```--pVACsplice_custom_filters``` option. E.g. ```--pVACsplice_filter_set custom --pVACsplice_custom_filters "--binding-threshold 250 --percentile-threshold 1"```. For filter options please see also the pVACsplice manual. Default: standard
+
+```--pVACsplice_custom_filters``` See ```--pVACsplice_filter_set```
+
+
 **Further options:**        There are many more options that can be set in the params.conf file or specified on the commandline
                             (see ```conf/params.config```)
 
@@ -325,7 +331,9 @@ RESULTS
 │   │   ├── 09_CCF
 │   │   ├── 10_HLA_typing
 │   │   ├── 11_Fusions
+│   │   ├── 11_regtools
 │   │   ├── 12_pVACseq
+│   │   ├── 12_pVACsplice
 │   │   ├── 13_mixMHC2pred
 │   │   ├── 14_CSiN
 │   │   ├── 14_IGS
@@ -341,7 +349,13 @@ RESULTS
 ├── neoantigens
 │   ├── Subject_ID
 │   │   ├── Class_I
+│   │   │   ├── Canonical
+│   │   │   ├── Fusions
+│   │   │   └── Splicing
 │   │   ├── Class_II
+│   │   │   ├── Canonical
+│   │   │   ├── Fusions
+│   │   │   └── Splicing
 │   │   └── Final_HLAcalls
 │   ├── Subject_02
 │   │   ├── [...]
@@ -356,7 +370,7 @@ RESULTS
     └── 01_prepare_CNVkit
 ```
 
-**4.** _**[Manual installaton: Not recommended]:**_
+**4.** _**[Manual installaton: Not recommended, NO support]:**_
 
 If you prefer local installation of the analysis tools please install the following software:
 
@@ -367,11 +381,11 @@ If you prefer local installation of the analysis tools please install the follow
 * BWA    (Version >= 0.7.17)
 * SAMTOOLS   (Version >= 1.9)
 * GATK3   (Version 3.8-0)
-* GATK4   (Version >= 4.5.0.0)
+* GATK4   (Version >= 4.6.1.0)
 * VARSCAN   (Version 2.4.6)
 * MUTECT1   (Version 1.1.7) ---- optional
 * BAMREADCOUNT  (Version 0.8.0)
-* VEP    (Version v111)
+* VEP    (Version v113)
 * BGZIP
 * TABIX
 * BCFTOOLS
@@ -385,6 +399,7 @@ If you prefer local installation of the analysis tools please install the follow
 * YARA
 * HLA-HD
 * ALLELECOUNT
+* regtools
 * RSCRIPT (R > 3.6.2)
 * SEQUENZA (3.0)
 * CNVkit

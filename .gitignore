@@ -29,3 +29,5 @@ conf/params_icbi.config
 assets/hlahdenv.yml
 bin/make_release.sh
 test.nf
+nextNEOpi.nf.bak
+update.diff
