@@ -726,6 +726,7 @@ process 'SplitIntervals' {
         SplitIntervals_out_ch4,
         SplitIntervals_out_ch5,
         SplitIntervals_out_ch6,
+        SplitIntervals_out_ch7,
     )
     val("${IntervalName}") into SplitIntervals_out_ch0_Name
 
@@ -1299,9 +1300,11 @@ MarkDuplicates_out_ch4.branch {
 
 MarkDuplicates_out_CNVkit_ch0 = MarkDuplicates_out_ch4.tumor.join(MarkDuplicates_out_ch4.normal, by:[0])
 
+(AlignmentMetrics_in_ch0, AlignmentMetrics_in_ch1) = MarkDuplicates_out_ch0.into(2)
+
 if(params.WES) {
     // Generate HS metrics using picard
-    process 'alignmentMetrics' {
+    process 'CollectHsMetrics' {
 
         label 'nextNEOpiENV'
 
@@ -1311,7 +1314,7 @@ if(params.WES) {
             mode: publishDirMode
 
         input:
-        tuple val(meta), path(bam) from MarkDuplicates_out_ch0
+        tuple val(meta), path(bam) from AlignmentMetrics_in_ch0
 
         tuple(
             path(RefFasta),
@@ -1327,7 +1330,7 @@ if(params.WES) {
         val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
 
         output:
-        tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_ch // multiQC
+        tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_out_ch0 // multiQC
 
         script:
         procSampleName = meta.sampleName + "_" + meta.sampleType
@@ -1342,20 +1345,56 @@ if(params.WES) {
             -R ${RefFasta} \\
             --BAIT_INTERVALS ${BaitIntervalsList} \\
             --TARGET_INTERVALS ${IntervalsList} \\
-            --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt && \\
-        gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
-            --TMP_DIR ${tmpDir} \\
-            --INPUT ${bam[0]} \\
-            --OUTPUT ${procSampleName}.AS.metrics.txt \\
-            -R ${RefFasta} &&
-        samtools flagstat -@${task.cpus} ${bam[0]} > ${procSampleName}.flagstat.txt
+            --PER_TARGET_COVERAGE ${procSampleName}.perTarget.coverage.txt
         """
     }
 } else {
     // bogus channel for multiqc
-    alignmentMetrics_ch = Channel.empty()
+    alignmentMetrics_out_ch0 = Channel.empty()
 }
 
+process 'CollectAlignmentSummaryMetrics' {
+
+    label 'nextNEOpiENV'
+
+    tag "$meta.sampleName : $meta.sampleType"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/alignments/",
+        mode: publishDirMode
+
+    input:
+    tuple val(meta), path(bam) from AlignmentMetrics_in_ch1
+
+    tuple(
+        path(RefFasta),
+        path(RefIdx)
+    ) from Channel.value(
+        [ reference.RefFasta,
+        reference.RefIdx ]
+    )
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+    output:
+    tuple val(meta), path("${procSampleName}.*.txt") into alignmentMetrics_out_ch1 // multiQC
+
+    script:
+    procSampleName = meta.sampleName + "_" + meta.sampleType
+    def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+    def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+    """
+    mkdir -p ${tmpDir}
+    gatk --java-options ${java_opts} CollectAlignmentSummaryMetrics \\
+        --TMP_DIR ${tmpDir} \\
+        --INPUT ${bam[0]} \\
+        --OUTPUT ${procSampleName}.AS.metrics.txt \\
+        -R ${RefFasta} &&
+    samtools flagstat -@${task.cpus} ${bam[0]} > ${procSampleName}.flagstat.txt
+    """
+}
+
+// combine metrics ch
+alignmentMetrics_ch = alignmentMetrics_out_ch0.mix(alignmentMetrics_out_ch1)
 
 /*
  BaseRecalibrator (GATK4): generates recalibration table for Base Quality Score
@@ -1636,7 +1675,7 @@ process 'GetPileup' {
     """
 }
 
-(BaseRecalNormal_out_ch0, BaseRecalGATK4_out) = BaseRecalGATK4_out_ch1.into(2)
+(BaseRecalNormal_out_ch0, BaseRecalGATK4_out, BaseRecalGATK4_out_Mosdepth_ch0) = BaseRecalGATK4_out_ch1.into(3)
 
 BaseRecalNormal_out_ch0.filter {
                                 it[0].sampleType == "normal_DNA"
@@ -1681,6 +1720,55 @@ if (have_GATK3) {
         BaseRecalGATK4_out
     ) = BaseRecalGATK4_out.into(6)
 }
+
+/*
+    Mosdepth
+    get genome/exome coverage
+*/
+
+mosdepth_regions = params.WES ? Channel.value(reference.RegionsBed) : Channel.value([])
+
+process 'Mosdepth' {
+
+    label 'Mosdepth'
+
+    tag "$meta.sampleName"
+
+    publishDir "$params.outputDir/analyses/${meta.sampleName}/QC/mosdepth",
+        mode: publishDirMode
+
+
+    input:
+    tuple(
+        val(meta),
+        path(bam)
+    ) from BaseRecalGATK4_out_Mosdepth_ch0
+    path(RegionsBed) from mosdepth_regions
+
+    val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+
+    output:
+    tuple(
+        val(meta),
+        path("${meta.sampleName}_${meta.sampleType}.mosdepth.*.txt")
+    ) into Mosdepth_out_ch0
+    path("${meta.sampleName}_${meta.sampleType}.regions.bed.gz") optional true
+    path("${meta.sampleName}_${meta.sampleType}.per-base.bed.gz") optional true
+
+    script:
+    def interval = params.WES ? "--by ${RegionsBed}" : ""
+
+    """
+    mosdepth \\
+    --threads ${task.cpus} \\
+    $interval \\
+    ${meta.sampleName}_${meta.sampleType} \\
+    ${bam[0]}
+    """
+
+}
+
 
 /*
     MUTECT2
@@ -3570,16 +3658,18 @@ if(have_GATK3) {
 
         tag "${meta.sampleName}"
 
-        publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
-            mode: publishDirMode
-
         input:
         tuple(
             val(meta),
             path(tumorBAM),
-            path(combinedVCF)
+            path(combinedVCF),
+            path(intervals)
         ) from GatherRealignedBamFilesTumor_out_mkPhasedVCF_ch0
             .join(VEPvcf_out_ch0, by: [0])
+            .combine(
+                SplitIntervals_out_ch7.flatten()
+            )
+
 
         tuple(
             path(RefFasta),
@@ -3594,13 +3684,10 @@ if(have_GATK3) {
         output:
         tuple(
             val(meta),
-            path("${meta.sampleName}_vep_phased.{vcf.gz,vcf.gz.tbi}"),
-        ) into (
-            mkPhasedVCF_out_ch0,
-            mkPhasedVCF_out_regtools_ch0,
-            mkPhasedVCF_out_pVACseq_ch0,
-            generate_protein_fasta_phased_vcf_ch0
-        )
+            path("${meta.sampleName}_${intervals}_vep_phased.vcf.gz"),
+            path("${meta.sampleName}_${intervals}_vep_phased.vcf.gz.tbi"),
+        ) into GatherReadbackedPhasedVCF_ch0
+
 
         script:
         def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
@@ -3610,10 +3697,56 @@ if(have_GATK3) {
             -R ${RefFasta} \\
             -I ${tumorBAM[0]} \\
             -V ${combinedVCF[0]} \\
-            -L ${combinedVCF[0]} \\
-            -o ${meta.sampleName}_vep_phased.vcf.gz
+            -L ${intervals} \\
+            -o ${meta.sampleName}_${intervals}_vep_phased.vcf.gz
         """
     }
+
+    // Merge scattered readbackphased vcfs
+    process 'GatherReadbackedPhasedVCF' {
+
+        label 'nextNEOpiENV'
+
+        tag "$meta.sampleName"
+
+        publishDir "$params.outputDir/analyses/${meta.sampleName}/04_variations/high_confidence_readbacked_phased/",
+            mode: publishDirMode
+
+        input:
+        tuple(
+            val(meta),
+            path(phased_interval_vcf),
+            path(phased_interval_tbi)
+        ) from GatherReadbackedPhasedVCF_ch0
+            .groupTuple(by: [0])
+
+        val (nextNEOpiENV_setup) from nextNEOpiENV_setup_ch0
+
+        output:
+        tuple(
+            val(meta),
+            path("${meta.sampleName}_vep_phased.{vcf.gz,vcf.gz.tbi}")
+        ) into (
+            mkPhasedVCF_out_ch0,
+            mkPhasedVCF_out_regtools_ch0,
+            mkPhasedVCF_out_pVACseq_ch0,
+            generate_protein_fasta_phased_vcf_ch0
+        )
+
+        script:
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
+        def java_opts = '"' + JAVA_Xmx + ' -XX:ParallelGCThreads=' + task.cpus + '"'
+        """
+        mkdir -p ${tmpDir}
+
+        gatk --java-options ${java_opts} MergeVcfs \\
+            --TMP_DIR ${tmpDir} \\
+            -I ${phased_interval_vcf.join(" -I ")} \\
+            -O ${meta.sampleName}_vep_phased.vcf.gz
+        """
+    }
+
+
 } else {
 
     log.warn "WARNING: GATK3 not installed! Can not generate readbacked phased VCF:\n" +
@@ -6843,6 +6976,12 @@ alignmentMetrics_ch = alignmentMetrics_ch.map{
         return [meta, out_file]
 }
 
+Mosdepth_out_ch0 = Mosdepth_out_ch0.map{
+    meta_ori, out_file ->
+        def meta = meta_ori.clone()
+        meta.keySet().removeAll(['sampleType', 'libType'])
+        return [meta, out_file]
+}
 
 process multiQC {
 
@@ -6861,6 +7000,7 @@ process multiQC {
         .mix(ch_fastp)
         .mix(ch_fastqc_trimmed)
         .mix(alignmentMetrics_ch)
+        .mix(Mosdepth_out_ch0)
         .transpose()
         .groupTuple()
 
