@@ -680,7 +680,8 @@ process 'preprocessIntervalList' {
         gatk --java-options ${JAVA_Xmx} ScatterIntervalsByNs \\
             --REFERENCE $RefFasta \\
             --OUTPUT_TYPE ACGT \\
-            --OUTPUT ${outFileName}
+            --OUTPUT ${outFileName}_tmp && \\
+        awk 'BEGIN{OFS="\t"} /^@/ || \$1 ~ /^chr([1-9]|1[0-9]|2[0-2]|X|Y)\$/' ${outFileName}_tmp > ${outFileName}
         """
 }
 
@@ -740,7 +741,7 @@ process 'SplitIntervals' {
         -R ${RefFasta}  \\
         -scatter ${x} \\
         --interval-merging-rule OVERLAPPING_ONLY \\
-        --subdivision-mode INTERVAL_SUBDIVISION \\
+        --subdivision-mode BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW \\
         -L ${IntervalsList} \\
         -O ${IntervalName}
 
@@ -2113,7 +2114,15 @@ process 'NVScoreVariants' {
 
 
     script:
+    def tf_ops = getTFthreads(task.cpus)
+
     """
+    export OMP_NUM_THREADS=${task.cpus}
+    export MKL_NUM_THREADS=${task.cpus}
+    export OPENBLAS_NUM_THREADS=${task.cpus}
+    export TF_NUM_INTRAOP_THREADS=${tf_ops.intra}
+    export TF_NUM_INTEROP_THREADS=${tf_ops.inter}
+
     gatk NVScoreVariants \\
         -R ${RefFasta} \\
         -I ${Normalbam[0]} \\
@@ -6880,6 +6889,7 @@ if(params.TCR) {
         script:
         def starting_material = (meta.sampleType == "tumor_RNA") ? "rna" : "dna"
         def libtype = (meta.sampleType == "tumor_RNA") ? "rna-seq" : "exome-seq"
+        def JAVA_Xmx = '-Xmx' + task.memory.toGiga() + "G"
         procSampleName = meta.sampleName + "_" + meta.sampleType + "_mixcr"
         """
         ${baseDir}/bin/mixcr analyze ${libtype} \\
@@ -7330,6 +7340,25 @@ def get_publishMode(d, mode) {
 
     return mode
  }
+
+Map getTFthreads(int totalCpus) {
+    int intraThreads = 1
+    int interThreads = 1
+
+    if (totalCpus == 2) {
+        intraThreads = 2
+        interThreads = 1
+    }
+    else if (totalCpus % 2 == 0) {
+        intraThreads = (int)(totalCpus / 2)
+        interThreads = 2
+    }
+    else {
+        intraThreads = totalCpus
+        interThreads = 1
+    }
+    return [intra: intraThreads, inter: interThreads]
+}
 
 def helpMessage() {
     log.info ""
