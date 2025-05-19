@@ -4112,6 +4112,7 @@ process 'SequenzaUtils' {
     )  into SequenzaUtils_out_ch0
 
     script:
+    def window_size = params.WES ? 50 : 100
     """
     sequenza-utils \\
         bam2seqz \\
@@ -4123,7 +4124,7 @@ process 'SequenzaUtils' {
         | \\
     sequenza-utils \\
         seqz_binning \\
-        -w 50 \\
+        -w ${window_size} \\
         -s - \\
         | \\
     bgzip \\
@@ -4206,13 +4207,17 @@ process Sequenza {
     script:
     def sex = (meta.sex == "None") ? "XY" : meta.sex
     """
+    export VROOM_CONNECTION_SIZE=10000000
+    zcat ${seqz_file} > ${seqz_file.getBaseName()}
     Rscript \\
         ${baseDir}/bin/SequenzaScript.R \\
-        ${seqz_file} \\
+        ${seqz_file.getBaseName()} \\
         ${meta.sampleName} \\
         ${sex} || \\
         touch ${meta.sampleName}_segments.txt && \\
         touch ${meta.sampleName}_confints_CP.txt
+
+        rm -f ${seqz_file.getBaseName()}
     """
 }
 
